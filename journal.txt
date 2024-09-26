@@ -1,0 +1,35 @@
+Idées: screen de YK en mode analyse rapide
+Cross coins (trouver les wallets qui hold X et X coin)
+
+
+
+Check les wallets qui étaient early et on buy X amount of coins (entrain de bosser sur ça avec earlybuyers.js)
+Le programme réussi a récupérer toutes les transactions jusqu'au mint avec succés mais cela est couteux en crédits
+Nécessite de décoder les transactions pumpfun etc
+
+
+
+Idée: modifier le command hanlder avec des state?
+
+
+
+Version pro: 
+faire des options free et pro de chaque tool avec des version free qui utilisent le moins possible de requetes helius (exemple: pas de détails des wallets recherchés)
+teamsupply analyzer: Rajouter une fonction pour calculer combien la team a sell de tokens et combien de fric ils se sont fait et ajouter une option pour tracker les team wallets (en checkant avec les wallets qui ont fund si ils ont fund des wallets qui ont sell etc)
+
+
+A modifier plus tard:
+Rebosser sur le supply tracker
+Pour les early buyers, pirb bot le fait donc a voir si y'a quelque chose de mieux a faire ou pas vraiment
+La partie qui vérifie si un wallet est une pool de liquidité ou un bot dans walletvaluecalculator ne fonctionne pas bien
+La partie qui décide quels wallets appartiennent a la team avec le funding amène des erreurs (vu que par exemple il y a les addresses de binance etc)
+Cnetraliser tout les calls helius et solweb3j dans solanaApi et garder les dernier calls en mémoire (cache ou autre) pour éviter de faire plusieurs fois les même actions
+
+A faire: Rebosser sur tout/ voir si tout marche bien, ajouter le truc pour dyor wallet avec juste quelques lettres du wallet et un coin / clean tout + optimiser et gg
+
+
+Ata checker peut etre utile pour inactivity:
+    // Check if ATA is being created
+    const isCreatingATA = transaction.transaction.message.instructions.some(
+        instr => instr.programId === 'ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL'
+    ); 
