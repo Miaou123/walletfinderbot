@@ -2,4 +2,8 @@
 node_modules/
 .env
 src/utils/config.js
-src/tests/
+mess/
+ApiCallRepôrts.txt
+architecturewBd.txtbeta_handle.txt
+journal.txt
+OpAdressList.txt

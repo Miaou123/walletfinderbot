@@ -25,11 +25,21 @@ La partie qui vérifie si un wallet est une pool de liquidité ou un bot dans wa
 La partie qui décide quels wallets appartiennent a la team avec le funding amène des erreurs (vu que par exemple il y a les addresses de binance etc)
 Cnetraliser tout les calls helius et solweb3j dans solanaApi et garder les dernier calls en mémoire (cache ou autre) pour éviter de faire plusieurs fois les même actions
 
-A faire: Rebosser sur tout/ voir si tout marche bien, ajouter le truc pour dyor wallet avec juste quelques lettres du wallet et un coin / clean tout + optimiser et gg
+A faire: Rebosser sur tout/ voir si tout marche bien/ clean tout + optimiser / le tracker de call api ne foncionne pas et rajouter un timer peut etre?
 
 
-Ata checker peut etre utile pour inactivity:
-    // Check if ATA is being created
-    const isCreatingATA = transaction.transaction.message.instructions.some(
-        instr => instr.programId === 'ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL'
-    ); 
+Api calls:
+--- Results for scan analysis ---
+
+Total API calls for scan: 174
+Breakdown by step:
+getTokenLargestAccounts: 1 calls
+callHeliusApi: 87 calls
+getAccountInfo: 20 calls
+getBalance: 39 calls
+getAssetsByOwner: 19 calls
+getSignaturesForAddress: 8 calls
+
+2947835
+2948036
+201 (affiché 174)

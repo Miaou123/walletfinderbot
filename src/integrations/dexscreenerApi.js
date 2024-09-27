@@ -1,14 +1,13 @@
 const { rateLimitedDexScreenerAxios } = require('../utils/dsrateLimiter');
-const { Connection, PublicKey } = require('@solana/web3.js');
-const { rateLimitedAxios } = require('../utils/rateLimiter');
-const config = require('../utils/config');
+const { getSolanaApi } = require('../integrations/solanaApi');
 const BigNumber = require('bignumber.js');
 
 const getDexScreenerApi = () => {
   return {
     getTokenInfo: async (tokenAddress) => {
       try {
-        const [tokenResponse, solResponse, totalSupply] = await Promise.all([
+        const solanaApi = getSolanaApi();
+        const [tokenResponse, solResponse, tokenSupplyResponse] = await Promise.all([
           rateLimitedDexScreenerAxios({
             method: 'get',
             url: `https://api.dexscreener.com/latest/dex/tokens/${tokenAddress}`
@@ -17,11 +16,22 @@ const getDexScreenerApi = () => {
             method: 'get',
             url: 'https://api.dexscreener.com/latest/dex/tokens/So11111111111111111111111111111111111111112'  
           }),
-          getTotalSupply(tokenAddress)
+          solanaApi.getTokenSupply(tokenAddress)
         ]);
+
+        let totalSupply = null;
+        let decimals = null;
+
+        if (tokenSupplyResponse && tokenSupplyResponse.value) {
+          decimals = tokenSupplyResponse.value.decimals;
+          totalSupply = new BigNumber(tokenSupplyResponse.value.amount)
+            .dividedBy(new BigNumber(10).pow(decimals));
+        } else {
+          console.error('Invalid token supply response:', tokenSupplyResponse);
+        }
         
         if (tokenResponse.data.pairs && tokenResponse.data.pairs.length > 0) {
-          const pair = tokenResponse.data.pairs[0]; // We'll use the first pair's data
+          const pair = tokenResponse.data.pairs[0];
           
           let solPrice = 0;
           if (solResponse.data.pairs && solResponse.data.pairs.length > 0) {
@@ -31,8 +41,8 @@ const getDexScreenerApi = () => {
           return {
             name: pair.baseToken.name,
             symbol: pair.baseToken.symbol,
-            totalSupply: totalSupply.totalSupply.toNumber(),
-            decimals: totalSupply.decimals,
+            totalSupply: totalSupply ? totalSupply.toFixed() : null,
+            decimals: decimals,
             priceUsd: parseFloat(pair.priceUsd),
             volume24h: parseFloat(pair.volume.h24),
             liquidityUsd: parseFloat(pair.liquidity.usd),
@@ -54,40 +64,5 @@ const getDexScreenerApi = () => {
     }
   };
 };
-
-async function getTotalSupply(tokenAddress) {
-  try {
-    const connection = new Connection(config.HELIUS_RPC_URL);
-    const tokenPublicKey = new PublicKey(tokenAddress);
-    const tokenAccountInfo = await connection.getAccountInfo(tokenPublicKey);
-
-    if (!tokenAccountInfo) {
-      throw new Error('Token account not found');
-    }
-
-    const response = await rateLimitedAxios({
-      method: 'post',
-      url: config.HELIUS_RPC_URL,
-      data: {
-        jsonrpc: '2.0',
-        id: 'token-info',
-        method: 'getTokenSupply',
-        params: [tokenAddress]
-      }
-    }, true);
-
-    if (response.data.error) {
-      throw new Error(`API error: ${response.data.error.message}`);
-    }
-
-    const tokenSupply = response.data.result.value;
-    const totalSupply = new BigNumber(tokenSupply.amount).dividedBy(Math.pow(10, tokenSupply.decimals));
-
-    return { totalSupply, decimals: tokenSupply.decimals };
-  } catch (error) {
-    console.error('Error getting total supply:', error);
-    throw error;
-  }
-}
 
 module.exports = { getDexScreenerApi };

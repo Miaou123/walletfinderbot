@@ -9,16 +9,31 @@ const formatEarlyBuyersMessage = (earlyBuyers, tokenInfo, hours, coinAddress) =>
 
   let message = `<b>Early Buyers Analysis for ${tokenInfo.symbol}</b>\n\n`;
 
+  // Fonction pour obtenir la valeur numérique du portefeuille
+  const getPortValue = (buyer) => {
+    const portSize = buyer.walletInfo && buyer.walletInfo.totalValue;
+    if (typeof portSize === 'number') {
+      return portSize;
+    }
+    if (typeof portSize === 'object' && portSize !== null && typeof portSize.toNumber === 'function') {
+      return portSize.toNumber();
+    }
+    if (typeof portSize === 'string') {
+      return parseFloat(portSize);
+    }
+    return 0; // Valeur par défaut si aucune des conditions n'est remplie
+  };
+
   // Filtrer et trier les early buyers par taille de portefeuille
   const filteredBuyers = earlyBuyers
       .filter(buyer => {
-          const portSize = buyer.walletInfo && buyer.walletInfo.totalValue;
-          return portSize && (typeof portSize === 'number' ? portSize : portSize.toNumber()) >= MINIMUM_PORT_SIZE;
+          const portValue = getPortValue(buyer);
+          return portValue >= MINIMUM_PORT_SIZE;
       })
       .sort((a, b) => {
-          const portSizeA = typeof a.walletInfo.totalValue === 'number' ? a.walletInfo.totalValue : a.walletInfo.totalValue.toNumber();
-          const portSizeB = typeof b.walletInfo.totalValue === 'number' ? b.walletInfo.totalValue : b.walletInfo.totalValue.toNumber();
-          return portSizeB - portSizeA;
+          const portValueA = getPortValue(a);
+          const portValueB = getPortValue(b);
+          return portValueB - portValueA;
       });
 
   message += `${filteredBuyers.length} early buyers found\n\n`;
@@ -38,15 +53,6 @@ const formatSingleWallet = (buyer, index, tokenInfo, coinAddress) => {
   let result = `${rank} - <a href="https://solscan.io/account/${buyer.buyer}">${shortAddress}</a>\n`;
   result += `├ 🪙 Total Amount: ${amountFormatted} ${tokenInfo.symbol}\n`;
 
-  // // Ajout de l'historique des transactions
-  // if (buyer.transactions && buyer.transactions.length > 0) {
-  //     result += `├ 📊 Transaction History:\n`;
-  //     buyer.transactions.forEach((tx, i) => {
-  //         const txAmount = formatNumber(Number(tx.amount) / Math.pow(10, tokenInfo.decimals));
-  //         result += `│  ${i + 1}. ${txAmount} ${tokenInfo.symbol} at ${tx.timestamp}\n`;
-  //     });
-  // }
-
   if (buyer.walletInfo) {
       const walletData = buyer.walletInfo;
       
@@ -63,7 +69,10 @@ const formatSingleWallet = (buyer, index, tokenInfo, coinAddress) => {
       }
 
       if (walletData.totalValue) {
-          result += `└ 💲 Port: $${formatNumber(typeof walletData.totalValue === 'number' ? walletData.totalValue : walletData.totalValue.toNumber())}`;
+          const totalValue = typeof walletData.totalValue === 'number' 
+              ? walletData.totalValue 
+              : (typeof walletData.totalValue.toNumber === 'function' ? walletData.totalValue.toNumber() : parseFloat(walletData.totalValue));
+          result += `└ 💲 Port: $${formatNumber(totalValue)}`;
       }
 
       // Display top tokens, including the analyzed token if it is held

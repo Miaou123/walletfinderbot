@@ -1,14 +1,14 @@
 const BigNumber = require('bignumber.js');
-const { rateLimitedAxios } = require('../utils/rateLimiter');
 const { rateLimitedDexScreenerAxios } = require('../utils/dsrateLimiter');
 const { EXCLUDED_ADDRESSES, isExcludedAddress, addExcludedAddress } = require('../utils/excludedAddresses');
-const config = require('../utils/config');
 const { getSolanaApi } = require('../integrations/solanaApi');
 const NodeCache = require('node-cache');
 
 const DEXSCREENER_URL = 'https://api.dexscreener.com/latest/dex/tokens';
+const TIMEOUT = 2 * 60 * 1000;
 
 const solPriceCache = new NodeCache({ stdTTL: 900 });
+const solanaApi = getSolanaApi();
 
 const getSolPrice = async () => {
   try {
@@ -45,107 +45,83 @@ const getSolPrice = async () => {
   }
 };
 
-async function getAccountInfo(address) {
-    try {
-      const response = await rateLimitedAxios({
-        method: 'post',
-        url: config.HELIUS_RPC_URL,
-        data: {
-          jsonrpc: '2.0',
-          id: 'my-id',
-          method: 'getAccountInfo',
-          params: [
-            address,
-            {
-              encoding: 'jsonParsed'
-            }
-          ]
-        }
-      }, true);
-  
-      const accountInfo = response.data.result.value;
-  
-      if (!accountInfo) {
-        return null;
-      }
-  
-      return {
-        lamports: accountInfo.lamports,
-        owner: accountInfo.owner,
-        executable: accountInfo.executable,
-        rentEpoch: accountInfo.rentEpoch,
-        data: accountInfo.data,
-        size: accountInfo.data.length
-      };
-    } catch (error) {
-      console.error(`Error getting account info for ${address}:`, error);
-      throw error;
-    }
-  }
-  
-  async function isLiquidityPool(address) {
-    try {
-      const accountInfo = await getAccountInfo(address);
-      
-      if (!accountInfo) {
-        return { isPool: false };
-      }
-  
-      const knownPoolPrograms = [
-        'CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK',
-        '5quBtoiQqxF9Jv6KYKctB59NT3gtJD2Y65kdnB1Uev3h',
-      ];
-  
-      if (knownPoolPrograms.includes(accountInfo.owner)) {
-        return { isPool: true, poolName: 'Liquidity Pool' };
-      }
-  
-      return { isPool: false };
-    } catch (error) {
-      console.error(`Error checking if ${address} is a liquidity pool:`, error);
+
+async function isLiquidityPool(address, mainContext, subContext) {
+  try {
+    const accountInfo = await solanaApi.getAccountInfo(address, { encoding: 'jsonParsed' }, mainContext, subContext);
+    
+    if (!accountInfo) {
       return { isPool: false };
     }
+
+    const knownPoolPrograms = [
+      'CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK',
+      '5quBtoiQqxF9Jv6KYKctB59NT3gtJD2Y65kdnB1Uev3h',
+    ];
+
+    if (knownPoolPrograms.includes(accountInfo.owner)) {
+      return { isPool: true, poolName: 'Liquidity Pool' };
+    }
+
+    return { isPool: false };
+  } catch (error) {
+    console.error(`Error checking if ${address} is a liquidity pool:`, error);
+    return { isPool: false };
   }
+}
   
 const MAX_UNIQUE_TOKENS = 1000;
 const ITEMS_PER_PAGE = 1000;
 
-const getAssetsForMultipleWallets = async (walletAddresses) => {
-  const solanaApi = getSolanaApi();
+const getAssetsForMultipleWallets = async (walletAddresses, mainContext = 'default', subContext = 'getAssets') => {
   const results = {};
   const solPrice = await getSolPrice();
   const filteredAddresses = walletAddresses.filter(address => !isExcludedAddress(address));
+  console.log(`Processing ${filteredAddresses.length} wallets`);
   const uniqueTokensWithoutPrice = new Set();
 
-  await Promise.all(filteredAddresses.map(async (address) => {
+  const processWalletBatch = async (addresses) => {
+    await Promise.all(addresses.map(address => 
+      Promise.race([
+        processWallet(address),
+        new Promise((_, reject) => 
+          setTimeout(() => reject(new Error(`Timeout processing wallet ${address}`)), TIMEOUT)
+        )
+      ])
+    ));
+  };
+
+  const processWallet = async (address) => {
     try {
+      console.log(`Processing wallet: ${address}`);
       let allItems = [];
       let page = 1;
       let hasMore = true;
 
       const poolCheck = await isLiquidityPool(address);
-
       if (poolCheck.isPool) {
+        console.log(`${address} is a liquidity pool`);
         await addExcludedAddress(address, 'liquidityPool');
         results[address] = { isPool: true, poolName: poolCheck.poolName };
         return;
       }
 
       while (hasMore && allItems.length <= MAX_UNIQUE_TOKENS) {
-        const assetsResponse = await solanaApi.getAssetsByOwner(address, page, ITEMS_PER_PAGE);
+        const assetsResponse = await solanaApi.getAssetsByOwner(address, page, ITEMS_PER_PAGE, true, mainContext, subContext);
         
         if (assetsResponse && assetsResponse.items && Array.isArray(assetsResponse.items)) {
           allItems = allItems.concat(assetsResponse.items);
           hasMore = assetsResponse.items.length === ITEMS_PER_PAGE;
           page++;
+          console.log(`Retrieved ${assetsResponse.items.length} items, total: ${allItems.length}`);
         } else {
           hasMore = false;
+          console.log(`No more items for ${address}`);
         }
       }
 
-      const solBalanceResponse = await solanaApi.getBalance(address);
-
       if (allItems.length > MAX_UNIQUE_TOKENS) {
+        console.log(`${address} exceeded MAX_UNIQUE_TOKENS, marking as bot`);
         await addExcludedAddress(address, 'bot');
         results[address] = { isBot: true };
         return;
@@ -153,11 +129,19 @@ const getAssetsForMultipleWallets = async (walletAddresses) => {
 
       let totalValue = new BigNumber(0);
       let tokenInfos = [];
+      let solBalance = new BigNumber(0);
+      let solValue = new BigNumber(0);
 
-      const solBalanceLamports = new BigNumber(solBalanceResponse);
-      const solBalance = solBalanceLamports.dividedBy(1e9);
-      const solValue = solBalance.multipliedBy(solPrice);
-      totalValue = totalValue.plus(solValue);
+      const solBalanceResponse = await solanaApi.getBalance(address, mainContext, subContext);
+      
+      if (solBalanceResponse && solBalanceResponse.value !== undefined) {
+        const solBalanceLamports = new BigNumber(solBalanceResponse.value);
+        solBalance = solBalanceLamports.dividedBy(1e9);
+        solValue = solBalance.multipliedBy(solPrice);
+        totalValue = totalValue.plus(solValue);
+      } else {
+        console.error(`Invalid SOL balance response for ${address}:`, solBalanceResponse);
+      }
 
       tokenInfos.push({
         symbol: 'SOL',
@@ -168,7 +152,7 @@ const getAssetsForMultipleWallets = async (walletAddresses) => {
         mint: 'SOL'
       });
 
-
+      console.log(`Processing ${allItems.length} items for ${address}`);
       allItems.forEach(asset => {
         if (asset.interface === 'FungibleToken' && asset.token_info) {
           let tokenInfo = {
@@ -204,29 +188,42 @@ const getAssetsForMultipleWallets = async (walletAddresses) => {
         }
       });
 
+      console.log(`Processed ${tokenInfos.length} tokens for ${address}`);
       results[address] = {
         tokenInfos: tokenInfos,
-        totalValue: totalValue,
+        totalValue: totalValue.toString(),
         solBalance: solBalance.toFixed(2),
         solValue: solValue.toFixed(2),
         totalAssets: tokenInfos.length
       };
-
     } catch (error) {
-      console.error(`Error fetching assets for ${address}:`, error);
+      console.error(`Error processing wallet ${address}:`, error);
       results[address] = {
         tokenInfos: [],
-        totalValue: new BigNumber(0),
+        totalValue: '0',
         solBalance: '0.00',
         solValue: '0.00',
         totalAssets: 0,
         error: error.message
       };
     }
-  }));
+  };
 
+  const BATCH_SIZE = 10;
+  for (let i = 0; i < filteredAddresses.length; i += BATCH_SIZE) {
+    const batch = filteredAddresses.slice(i, i + BATCH_SIZE);
+    console.log(`Processing batch ${i / BATCH_SIZE + 1} of ${Math.ceil(filteredAddresses.length / BATCH_SIZE)}`);
+    await processWalletBatch(batch);
+    if (i + BATCH_SIZE < filteredAddresses.length) {
+      await new Promise(resolve => setTimeout(resolve, 1000)); 
+    }
+  }
+
+  console.log(`Unique tokens without price: ${uniqueTokensWithoutPrice.size}`);
   if (uniqueTokensWithoutPrice.size > 0) {
+    console.log('Fetching prices from DexScreener');
     const dexScreenerPrices = await fetchDexScreenerPrices(Array.from(uniqueTokensWithoutPrice));
+    console.log(`Retrieved prices for ${Object.keys(dexScreenerPrices).length} tokens`);
     
     for (const address of filteredAddresses) {
       const wallet = results[address];
@@ -237,16 +234,18 @@ const getAssetsForMultipleWallets = async (walletAddresses) => {
             const newValue = new BigNumber(token.balance).multipliedBy(dexScreenerInfo.priceUsd);
             token.value = newValue.toFixed(2);
             token.valueNumber = newValue.toNumber();
-            wallet.totalValue = wallet.totalValue.plus(newValue);
+            wallet.totalValue = new BigNumber(wallet.totalValue).plus(newValue).toString();
+
           }
         });
         
         wallet.tokenInfos.sort((a, b) => b.valueNumber - a.valueNumber);
-        wallet.totalValue = wallet.tokenInfos.reduce((sum, token) => sum.plus(new BigNumber(token.value)), new BigNumber(0));
+        wallet.totalValue = wallet.tokenInfos.reduce((sum, token) => sum.plus(new BigNumber(token.value)), new BigNumber(0)).toString();
       }
     }
   }
 
+  console.log('getAssetsForMultipleWallets completed');
   return results;
 };
 

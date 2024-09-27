@@ -1,0 +1,115 @@
+--- API Call Report for scan analysis ---
+Detailed API Call Report:
+Context: scan
+Total calls: 174
+Total Helius API calls: 87
+scan direct calls:
+  getTokenLargestAccounts: 1 calls
+  getAccountInfo: 20 calls
+  getBalance: 39 calls
+  getAssetsByOwner: 19 calls
+  getSignaturesForAddress: 8 calls
+Sub-context: getTopHolders
+  Total calls: 82
+  getTokenLargestAccounts: 1 calls
+  callHeliusApi: 41 calls
+  getAccountInfo: 20 calls
+  getBalance: 20 calls
+Sub-context: getAssets
+  Total calls: 76
+  getAssetsByOwner: 19 calls
+  callHeliusApi: 38 calls
+  getBalance: 19 calls
+Sub-context: getSignatures
+  Total calls: 16
+  getSignaturesForAddress: 8 calls
+  callHeliusApi: 8 calls
+
+2947835
+2948036
+201 (affiché 174)
+
+
+--- API Call Report for teamSupply analysis ---
+Detailed API Call Report:
+Context: teamSupply
+Total API calls: 1213
+Total credits used: 12130
+teamSupply direct calls:
+Sub-context: getHolders
+  Total calls: 3
+  Total credits: 30
+  getTokenAccounts: 3 calls, 30 credits
+Sub-context: isFreshWallet
+  Total calls: 215
+  Total credits: 2150
+  getSignaturesForAddress: 215 calls, 2150 credits
+Sub-context: getAssetCount
+  Total calls: 196
+  Total credits: 1960
+  getAssetsByOwner: 196 calls, 1960 credits
+Sub-context: analyzeFunding
+  Total calls: 799
+  Total credits: 7990
+  getSignaturesForAddress: 189 calls, 1890 credits
+  getTransaction: 610 calls, 6100 credits
+
+-----------------------------------
+Helius: 12000
+
+--- API Call Report for scan analysis ---
+Detailed API Call Report:
+Context: scan
+Total API calls: 184
+Total credits used: 1165
+scan direct calls:
+  getSignaturesForAddress: 19 calls, 190 credits
+Sub-context: getTopHolders
+  Total calls: 41
+  Total credits: 41
+  getTokenLargestAccounts: 1 calls, 1 credits
+  getAccountInfo: 20 calls, 20 credits
+  getBalance: 20 calls, 20 credits
+Sub-context: getAssets
+  Total calls: 38
+  Total credits: 209
+  getAssetsByOwner: 19 calls, 190 credits
+  getBalance: 19 calls, 19 credits
+Sub-context: checkInactivity
+  Total calls: 86
+  Total credits: 725
+  getTokenAccountsByOwner: 15 calls, 15 credits
+  getSignaturesForAddress: 30 calls, 300 credits
+  getTransaction: 41 calls, 410 credits
+
+Helius: 1266
+
+--- API Call Report for Analyze analysis ---
+Detailed API Call Report:
+Context: Analyze
+Total API calls: 179
+Total credits used: 1124
+Analyze direct calls:
+Sub-context: getTopHolders
+  Total calls: 41
+  Total credits: 41
+  getTokenLargestAccounts: 1 calls, 1 credits
+  getAccountInfo: 20 calls, 20 credits
+  getBalance: 20 calls, 20 credits
+Sub-context: getAssets
+  Total calls: 38
+  Total credits: 209
+  getAssetsByOwner: 19 calls, 190 credits
+  getBalance: 19 calls, 19 credits
+Sub-context: getSignatures
+  Total calls: 18
+  Total credits: 180
+  getSignaturesForAddress: 18 calls, 180 credits
+Sub-context: checkInactivity
+  Total calls: 82
+  Total credits: 694
+  getTokenAccountsByOwner: 14 calls, 14 credits
+  getSignaturesForAddress: 28 calls, 280 credits
+  getTransaction: 40 calls, 400 credits
+
+Helius: 1183

@@ -1,16 +1,16 @@
 const { getAssetsForMultipleWallets } = require('../tools/walletValueCalculator');
 const { getHolders, getTopHolders } = require('../tools/getHolders');
 
-const MIN_TOKEN_THRESHOLD = 1000;
+const MIN_TOKEN_THRESHOLD = 10000;
 
-async function crossAnalyze(contractAddresses, minCombinedValue = DEFAULT_MIN_COMBINED_VALUE) {
-    console.log(`Starting cross-analysis for ${contractAddresses.length} contracts with min combined value of $${minCombinedValue}`);
+async function crossAnalyze(contractAddresses, minCombinedValue = DEFAULT_MIN_COMBINED_VALUE, mainContext = 'default') {
+    console.log(`Starting cross-analysis for ${contractAddresses.length} contracts with min combined value of $${minCombinedValue} context: ${mainContext}`);
 
     try {
         const holdersLists = await Promise.all(
             contractAddresses.map(async (address) => {
                 console.log(`Fetching holders for contract ${address}`);
-                const holders = await getHolders(address);
+                const holders = await getHolders(address, mainContext, 'getHolders');
                 console.log(`Retrieved ${holders.length} holders for contract ${address}`);
                 return holders;
             })
@@ -38,13 +38,11 @@ async function crossAnalyze(contractAddresses, minCombinedValue = DEFAULT_MIN_CO
 
         const commonHolderAddresses = commonHolders.map(holder => holder.address);
         console.log(`Fetching assets for ${commonHolderAddresses.length} common holders`);
-        const walletAssets = await getAssetsForMultipleWallets(commonHolderAddresses);
+        const walletAssets = await getAssetsForMultipleWallets(commonHolderAddresses, mainContext, 'getAssets');
         
-        console.log('Wallet assets fetched. Sample of first wallet:', JSON.stringify(Object.entries(walletAssets)[0], null, 2));
 
         const filteredHolders = Object.entries(walletAssets)
         .map(([address, assets]) => {
-            console.log(`Processing wallet: ${address}`);
 
             if (!assets || !assets.tokenInfos) {
                 console.log(`Warning: No valid asset data for wallet ${address}`);

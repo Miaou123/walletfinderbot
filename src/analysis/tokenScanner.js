@@ -2,36 +2,44 @@ const { getSolanaApi } = require('../integrations/solanaApi');
 const { getDexScreenerApi } = require('../integrations/dexscreenerApi');
 const { getAssetsForMultipleWallets } = require('../tools/walletValueCalculator');
 const { checkInactivityPeriod } = require('../tools/inactivityPeriod');
-const { rateLimitedAxios } = require('../utils/rateLimiter');
 const { getHolders, getTopHolders } = require('../tools/getHolders');
 const config = require('../utils/config');
 const BigNumber = require('bignumber.js');
 
-async function scanToken(tokenAddress, requestedHolders = 10, trackSupply = false) {
-  console.log(`Scanning token: ${tokenAddress}, requested holders: ${requestedHolders}`);
+async function scanToken(tokenAddress, requestedHolders = 10, trackSupply = false, mainContext = 'default') {
+  console.log(`Scanning token: ${tokenAddress}, requested holders: ${requestedHolders}, context: ${mainContext}`);
 
   const dexScreenerApi = getDexScreenerApi();
 
   // 1. Récupérer les informations du token
-  const tokenInfo = await dexScreenerApi.getTokenInfo(tokenAddress);
+  const tokenInfo = await dexScreenerApi.getTokenInfo(tokenAddress, mainContext);
+
+  // Afficher les informations du token de manière structurée
+  console.log('Token Information:');
+  console.log(JSON.stringify(tokenInfo, null, 2));
+  
 
   // 2. Récupérer les détenteurs (au moins 20 ou le nombre demandé si supérieur)
   const holdersToFetch = Math.max(20, requestedHolders);
   console.log(`Fetching top ${holdersToFetch} holders`);
-  const topHolders = await getTopHolders(tokenAddress, holdersToFetch);
+  const topHolders = await getTopHolders(tokenAddress, holdersToFetch, mainContext, 'getTopHolders');
   console.log(`Received ${topHolders.length} top holders`);
 
   // 3. Analyser les portefeuilles
   const walletAddresses = topHolders.map(holder => holder.address);
-  const assetsData = await getAssetsForMultipleWallets(walletAddresses);
+  const assetsData = await getAssetsForMultipleWallets(walletAddresses, mainContext, 'getAssets');
 
   // 4. Analyser chaque portefeuille
   const analyzedWallets = await Promise.all(topHolders.map(async (holder, index) => {
     try {
       const walletData = assetsData[holder.address] || {};
-      const tokenBalance = new BigNumber(holder.tokenBalance || 0);
-      const supplyPercentage = tokenInfo.totalSupply ? 
-        tokenBalance.dividedBy(tokenInfo.totalSupply).multipliedBy(100).toFixed(2) : '0';
+      const decimals = tokenInfo.decimals;
+      const totalSupply = new BigNumber(tokenInfo.totalSupply || 0);
+      const tokenBalanceRaw = new BigNumber(holder.tokenBalance || 0);
+      const tokenBalance = tokenBalanceRaw.dividedBy(new BigNumber(10).pow(decimals));
+      const supplyPercentage = totalSupply.isGreaterThan(0) ? 
+        tokenBalance.dividedBy(totalSupply).multipliedBy(100).toFixed(2) : '0';
+    
 
       // Trouver le token analysé dans les données du portefeuille
       const analyzedTokenInfo = walletData.tokenInfos && walletData.tokenInfos.find(t => t.mint === tokenAddress) || {};
@@ -50,7 +58,7 @@ async function scanToken(tokenAddress, requestedHolders = 10, trackSupply = fals
       } else {
         // Check if it's a fresh wallet
         const solanaApi = getSolanaApi();
-        const transactions = await solanaApi.getSignaturesForAddress(holder.address, { limit: config.LOW_TRANSACTION_THRESHOLD + 1 });
+        const transactions = await solanaApi.getSignaturesForAddress(holder.address, { limit: config.LOW_TRANSACTION_THRESHOLD + 1 }, mainContext);
         const transactionCount = transactions.length;
 
         if (transactionCount < config.LOW_TRANSACTION_THRESHOLD) {
@@ -58,7 +66,7 @@ async function scanToken(tokenAddress, requestedHolders = 10, trackSupply = fals
           category = 'Fresh Address';
         } else {
             // Check inactivity period
-          const inactivityCheck = await checkInactivityPeriod(holder.address, tokenAddress);
+            const inactivityCheck = await checkInactivityPeriod(holder.address, tokenAddress, mainContext, 'checkInactivity');
           if (inactivityCheck.isInactive) {
             isInteresting = true;
             category = 'Inactive';

@@ -1,6 +1,9 @@
 const { rateLimitedAxios } = require('../utils/rateLimiter');
 const BigNumber = require('bignumber.js');
 const config = require('../utils/config');
+const { getSolanaApi } = require('../integrations/solanaApi');
+
+const solanaApi = getSolanaApi();
 
 const CHECK_INTERVAL = 1 * 60 * 1000; // 5 minutes
 
@@ -124,7 +127,7 @@ class SupplyTracker {
         }
     }
 
-    async getTokenBalance(walletAddress, tokenAddress) {
+    async getTokenBalance(walletAddress, tokenAddress, mainContext, subContext) {
         return retryWithBackoff(async () => {
             try {
                 if (!walletAddress || !tokenAddress) {
@@ -134,22 +137,8 @@ class SupplyTracker {
     
                 console.log(`Fetching token balance for wallet: ${walletAddress}, token: ${tokenAddress}`);
                 
-                const response = await rateLimitedAxios({
-                    method: 'post',
-                    url: config.HELIUS_RPC_URL,
-                    data: {
-                        jsonrpc: '2.0',
-                        id: 'my-id',
-                        method: 'getTokenAccountsByOwner',
-                        params: [
-                            walletAddress,
-                            { mint: tokenAddress },
-                            { encoding: 'jsonParsed' }
-                        ]
-                    }
-                }, true);
+                const tokenAccounts = await solanaApi.getTokenAccountsByOwner(walletAddress, { mint: tokenAddress }, { encoding: 'jsonParsed' }, mainContext, subContext);
                 
-                const tokenAccounts = response.data.result?.value;
                 if (tokenAccounts && tokenAccounts.length > 0 && tokenAccounts[0].account?.data?.parsed?.info?.tokenAmount?.amount) {
                     const balance = new BigNumber(tokenAccounts[0].account.data.parsed.info.tokenAmount.amount);
                     console.log(`Balance for wallet ${walletAddress}: ${balance.toString()}`);
@@ -165,7 +154,7 @@ class SupplyTracker {
         });
     }
 
-    async getControlledSupply(controllingWallets, tokenAddress, totalSupply, decimals) {
+    async getControlledSupply(controllingWallets, tokenAddress, totalSupply, decimals, mainContext, subContext) {
         if (!controllingWallets || controllingWallets.length === 0) {
             console.warn(`No controlling wallets found for ${tokenAddress}. Returning 0.`);
             return new BigNumber(0);
@@ -173,7 +162,8 @@ class SupplyTracker {
     
         console.log(`Calculating controlled supply for token: ${tokenAddress}, Total supply: ${totalSupply.toString()}, Wallets:`, controllingWallets);
     
-        const balances = await Promise.all(controllingWallets.map(wallet => this.getTokenBalance(wallet.address, tokenAddress)));
+        const balances = await Promise.all(controllingWallets.map(wallet => this.getTokenBalance(wallet.address, tokenAddress, mainContext, subContext)));
+        
         balances.forEach((balance, index) => {
             console.log(`Wallet: ${controllingWallets[index].address}, Balance: ${balance.toString()}`);
         });
@@ -185,7 +175,7 @@ class SupplyTracker {
         return supplyPercentage;
     }
     
-    async getTeamSupply(teamWallets, tokenAddress, totalSupply, decimals) {
+    async getTeamSupply(teamWallets, tokenAddress, totalSupply, decimals, mainContext, subContext) {
         if (!teamWallets || teamWallets.length === 0) {
             console.warn(`No team wallets found for ${tokenAddress}. Returning 0.`);
             return new BigNumber(0);
@@ -193,7 +183,7 @@ class SupplyTracker {
     
         console.log(`Calculating team supply for token: ${tokenAddress}, Total supply: ${totalSupply.toString()}, Wallets:`, teamWallets);
     
-        const balances = await Promise.all(teamWallets.map(wallet => this.getTokenBalance(wallet, tokenAddress)));
+        const balances = await Promise.all(teamWallets.map(wallet => this.getTokenBalance(wallet, tokenAddress, mainContext, subContext)));
         balances.forEach((balance, index) => {
             console.log(`Wallet: ${teamWallets[index]}, Balance: ${balance.toString()}`);
         });

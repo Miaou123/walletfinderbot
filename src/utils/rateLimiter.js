@@ -98,6 +98,11 @@ const rateLimitedAxios = async (config, isRPC = true, retries = 3, initialDelay 
     } catch (error) {
       if ((error.code === 'ECONNABORTED' || error.response?.status === 429 || error.code === 'ETIMEDOUT') && i < retries - 1) {
         console.log(`Request failed (${error.code || error.response?.status}). Retrying in ${delay}ms...`);
+        console.log(`Error details: ${error.message}`);
+        if (error.response) {
+          console.log(`Response data: ${JSON.stringify(error.response.data)}`);
+          console.log(`Response headers: ${JSON.stringify(error.response.headers)}`);
+        }
         await new Promise(resolve => setTimeout(resolve, delay));
         delay *= 2; // Exponential backoff
       } else {

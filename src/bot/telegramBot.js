@@ -17,68 +17,70 @@ const {
 function splitMessage(message) {
     const MAX_MESSAGE_LENGTH = 4096;
     const messages = [];
-    let currentMessage = '';
-    let walletBuffer = '';
 
-    // If the message is empty or only whitespace, return an empty array
-    if (!message || message.trim().length === 0) {
-        return [];
+    // Vérifier si message est une chaîne
+    if (typeof message !== 'string') {
+        console.error('Invalid message type:', typeof message);
+        return [String(message)]; // Convertir en chaîne si possible
     }
 
+    let currentMessage = '';
     const lines = message.split('\n');
 
     for (const line of lines) {
         if (currentMessage.length + line.length + 1 <= MAX_MESSAGE_LENGTH) {
             currentMessage += line + '\n';
-            if (line.startsWith('└')) {
-                walletBuffer += currentMessage;
-                currentMessage = '';
-            }
         } else {
-            if (walletBuffer) {
-                messages.push(walletBuffer.trim());
-                walletBuffer = '';
-            }
             if (currentMessage) {
                 messages.push(currentMessage.trim());
-                currentMessage = '';
             }
             currentMessage = line + '\n';
         }
     }
 
-    if (walletBuffer) {
-        messages.push(walletBuffer.trim());
-    }
     if (currentMessage) {
         messages.push(currentMessage.trim());
     }
 
-    // Filter out any empty messages
     return messages.filter(msg => msg.trim().length > 0);
 }
 
 async function sendLongMessage(bot, chatId, message, options = {}) {
-    const messages = splitMessage(message);
-    
-    if (messages.length === 0) {
-        console.warn("Attempted to send an empty message. Skipping.");
+    // Vérifier si message est défini et le convertir en chaîne si nécessaire
+    if (message === undefined || message === null) {
+        console.error('Message is undefined or null');
         return;
     }
 
+    const messageString = String(message);
+    const messages = splitMessage(messageString);
+    
     for (const msg of messages) {
         if (msg.trim().length > 0) {
-            await bot.sendMessage(chatId, msg, {
-                ...options,
-                parse_mode: 'HTML',
-                disable_web_page_preview: true
-            });
+            try {
+                await bot.sendMessage(chatId, msg, {
+                    ...options,
+                    parse_mode: 'HTML',
+                    disable_web_page_preview: true
+                });
+            } catch (error) {
+                console.error('Error sending message:', error);
+                if (error.response && error.response.statusCode === 400 && error.response.body.description.includes('message is too long')) {
+                    const subMessages = splitMessage(msg);
+                    for (const subMsg of subMessages) {
+                        await bot.sendMessage(chatId, subMsg, {
+                            ...options,
+                            parse_mode: 'HTML',
+                            disable_web_page_preview: true
+                        });
+                    }
+                } else {
+                    throw error;
+                }
+            }
         }
     }
 }
-
-
-
 
 
 // Create a new bot instance
@@ -100,9 +102,9 @@ bot.onText(/\/help/, (msg) => {
 handleHelpCommand(bot, msg);
 });
 
-// Handle /analyze command
-// Gérer la commande /analyze
-bot.onText(/\/analyze (.+)/, (msg, match) => {
+// Handle /th command
+// Gérer la commande /th
+bot.onText(/\/th (.+)/, (msg, match) => {
     handleAnalyzeCommand(bot, msg, match);
   });
 

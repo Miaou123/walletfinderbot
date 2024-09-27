@@ -2,12 +2,14 @@ const { getDexScreenerApi } = require('../integrations/dexscreenerApi');
 const { formatEarlyBuyersMessage } = require('./formatters/earlyBuyersFormatter');
 const { analyzeEarlyBuyers } = require('../analysis/earlyBuyers');
 const { crossAnalyze } = require('../analysis/crossAnalyzer');
-const { formatCrossAnalysisMessage } = require('./formatters/crossAnalysisFormatter');
+const { sendFormattedCrossAnalysisMessage } = require('./formatters/crossAnalysisFormatter');
 const { scanToken } = require('../analysis/tokenScanner');
 const { analyzeTeamSupply, sendWalletDetails } = require('../analysis/teamSupplyAnalyzer');
 const { formatAnalysisMessage, getHoldingEmoji} = require('./formatters/walletAnalyzerFormatter');
 const { analyzeToken } = require('../analysis/walletAnalyzer');
 const { searchWallets } = require('../analysis/walletSearcher');
+
+const ApiCallCounter = require('../utils/ApiCallCounter');
 
 const SupplyTracker = require('../tools/SupplyTracker');
 
@@ -19,7 +21,7 @@ function initializeSupplyTracker(bot) {
   supplyTrackerInstance = new SupplyTracker(bot); // Create an instance
 }
 const handleStartCommand = (bot, msg) => {
-  const startMessage = `
+  const newLocal = `
   Welcome to the Solana Coin Analysis Bot!
   
   This bot helps you analyze Solana coins and hunt for new wallets to track.
@@ -28,14 +30,15 @@ const handleStartCommand = (bot, msg) => {
   Here are the available commands:
   
   /ping to check if the bot is online
-  /scan [coin_address] - Scan a token for a top 20 holders breakdown
-  /analyze [coin_address] [number_of_holders] - Analyze the top holders of a specific coin (default number is 20 but you can analyze up to 100 top holders).
-  /cross [coin_address1] [coin_address2] ... - Search for wallets that holds multiple coins (you can go up to 5 coins)
-  /team [token_address] - Analyze team and insider supply for a token
-  /help - Show this help message
+  /scan [coin_address] - Scan a token for a top 10 holders breakdown (can then be extended to 20 if necessary)
+  /th [coin_address] [number_of_holders] - Analyze the top holders of a specific coin (default number is 20 but you can analyze up to 100 top holders).
+  /cross [coin_address1] [coin_address2] ... [Combined_value_min] - Search for wallets that holds multiple coins (you can go up to 5 coins) with a minimum combined value (default is $1000)
+  /team [coin_address] - Analyze team and insider supply for a token with an homemade algorithm
+  /search [token_address] [partial_address1] [partial_address2] - Search for wallets that hold a specific token and match the partial addresses provided (you can had multiple parts to one partial address by separating them with one or multiple dots.)
+  /help - Show command list
   
   To get started, use one of the commands above. For example:
-  /analyze 7GCihgDB8fe6KNjn2MYtkzZcRjQy3t9GHdC8uHYmW2hr 50
+  /th 7GCihgDB8fe6KNjn2MYtkzZcRjQy3t9GHdC8uHYmW2hr 50
   
   If you have any questions, want to report a bug or have any suggestion on new features feel free to dm @Rengon0x on telegram or twitter!
   
@@ -43,6 +46,7 @@ const handleStartCommand = (bot, msg) => {
   
   If you need any help, just type /help.
   `;
+  const startMessage = newLocal;
   
   bot.sendLongMessage(msg.chat.id, startMessage);
   };
@@ -52,9 +56,11 @@ const handleStartCommand = (bot, msg) => {
   Here's a list of available commands and their descriptions:
   
   /ping to check if the bot is online
-  /analyze [coin_address] [number_of_holders] - Analyze the top holders of a specific coin (default number is 20 but you can analyze up to 100 top holders).
+  /scan [coin_address] - Scan a token for a top 10 holders breakdown (can then bne extended to 20 if necessary)
+  /th [coin_address] [number_of_holders] - Analyze the top holders of a specific coin (default number is 20 but you can analyze up to 100 top holders).
   /cross [coin_address1] [coin_address2] ... - Search for wallets that holds multiple coins (you can go up to 5 coins)
-  /team [token_address] - Analyze team and insider supply for a token
+  /team [coin_address] - Analyze team and insider supply for a token with an homemade algorithm
+  /search [token_address] [partial_address1] [partial_address2] - Search for wallets that hold a specific token and match the partial addresses provided (you can had multiple parts to one partial address by separating them with one or multiple dots.)
   /help - Show this help message
   
   If you have any questions, want to report a bug or have any suggestion on new features feel free to dm @Rengon0x on telegram or twitter!
@@ -78,9 +84,9 @@ const handleScanCommand = async (bot, msg, match) => {
     const holdersToAnalyze = parseInt(numberOfHolders) || 20; // Analyze 20 by default
     const holdersToDisplay = Math.min(10, holdersToAnalyze); // Display 10 by default
 
-    await bot.sendMessage(msg.chat.id, `Starting scan for token: ${tokenAddress}\nAnalyzing top ${holdersToAnalyze} holders. This may take a while...`);
+    await bot.sendMessage(msg.chat.id, `Starting scan for token: ${tokenAddress}\nAnalyzing top ${holdersToAnalyze} holders. This may take a few minutes...`);
 
-    const scanResult = await scanToken(tokenAddress, holdersToAnalyze, true);
+    const scanResult = await scanToken(tokenAddress, holdersToAnalyze, true, 'scan');
 
     // Envoyer le résultat formaté
     await bot.sendMessage(msg.chat.id, scanResult.formattedResult, { 
@@ -113,12 +119,13 @@ const handleScanCommand = async (bot, msg, match) => {
       analysisType: 'tokenScanner'
     };
 
-    console.log('Updated lastAnalysisResults:', JSON.stringify(lastAnalysisResults[msg.chat.id], null, 2));
-
   } catch (error) {
     console.error('Error in handleScanCommand:', error);
     await bot.sendMessage(msg.chat.id, `An error occurred during the token scan: ${error.message}`);
+  } finally {
+    ApiCallCounter.logApiCalls('scan');
   }
+
 };
   
 const handleShowMoreWallets = async (bot, chatId, tokenAddress) => {
@@ -190,20 +197,19 @@ const handleAnalyzeCommand = async (bot, msg, match) => {
   try {
     const input = match[1];
     if (!input) {
-      await bot.sendLongMessage(msg.chat.id, "Please provide a coin address. Usage: /analyze <coin_address> [number_of_holders]");
+      await bot.sendLongMessage(msg.chat.id, "Please provide a coin address. Usage: /th <coin_address> [number_of_holders]");
       return;
     }
     const [coinAddress, topHoldersCount] = input.split(' ');
     const count = parseInt(topHoldersCount) || 20;
 
-    await bot.sendLongMessage(msg.chat.id, `Starting analysis for coin: ${coinAddress}\nThis may take a while...`);
+    console.log(`User requested ${count} top holders`);
+
+    await bot.sendLongMessage(msg.chat.id, `Starting top holders analysis for coin: ${coinAddress}\nThis may take a few minutes...`);
     
     // Effectuer l'analyse
-    const { tokenInfo, analyzedWallets } = await analyzeToken(coinAddress, count);
+    const { tokenInfo, analyzedWallets } = await analyzeToken(coinAddress, count, 'Analyze');
     
-    //console.log('Token info:', JSON.stringify(tokenInfo, null, 2));
-    console.log('Analyzed wallets:', JSON.stringify(analyzedWallets, null, 2));
-
     // Vérifiez que analyzedWallets n'est pas vide
     if (analyzedWallets.length === 0) {
       await bot.sendMessage(msg.chat.id, "No wallets found for analysis.");
@@ -213,12 +219,12 @@ const handleAnalyzeCommand = async (bot, msg, match) => {
     const { messages, errors } = formatAnalysisMessage(analyzedWallets, tokenInfo);
 
     for (const message of messages) {
-      if (typeof message === 'string' && message.trim() !== '') {
-        await bot.sendLongMessage(msg.chat.id, message, {
-          parse_mode: 'HTML',
-          disable_web_page_preview: true
-        });
-      }
+        if (typeof message === 'string' && message.trim() !== '') {
+            await bot.sendLongMessage(msg.chat.id, message, {
+                parse_mode: 'HTML',
+                disable_web_page_preview: true
+            });
+        }
     }
 
     if (errors.length > 0) {
@@ -230,7 +236,10 @@ const handleAnalyzeCommand = async (bot, msg, match) => {
   } catch (error) {
     console.error(`Error in handleAnalyzeCommand:`, error);
     await bot.sendMessage(msg.chat.id, `An error occurred during analysis: ${error.message}`);
+  } finally {
+    ApiCallCounter.logApiCalls('Analyze');
   }
+
 };
 
 const handleEarlyBuyersCommand = async (bot, msg, match) => {
@@ -273,8 +282,7 @@ const handleEarlyBuyersCommand = async (bot, msg, match) => {
     );      
 
     console.log(`Starting early buyers analysis for ${coinAddress}`);
-    const result = await analyzeEarlyBuyers(coinAddress, minPercentage, hours, tokenInfo);
-    console.log("Early buyers analysis complete. Result:", JSON.stringify(result, null, 2));
+    const result = await analyzeEarlyBuyers(coinAddress, minPercentage, hours, tokenInfo, 'earlyBuyers');
 
     if (!result || !result.earlyBuyers) {
       throw new Error("Invalid result from analyzeEarlyBuyers");
@@ -297,7 +305,10 @@ const handleEarlyBuyersCommand = async (bot, msg, match) => {
       console.error("Error stack:", error.stack);
     }
     await bot.sendMessage(msg.chat.id, errorMessage);
+  } finally {
+    ApiCallCounter.logApiCalls('earlyBuyers');
   }
+
 };
 
 const validateAndParseTimeFrame = (timeFrame) => {
@@ -339,98 +350,88 @@ const validateAndParseTimeFrame = (timeFrame) => {
     return { minAmount, minPercentage };
   };
 
+  const handleCrossCommand = async (bot, msg, match) => {
+    console.log('Entering handleCrossCommand');
+    const DEFAULT_MIN_COMBINED_VALUE = 10000; 
+    try {
+        console.log('Cross command input:', match[1]);
+        const input = match[1].trim().split(' ');
+        if (input.length < 2) {
+            console.log('Insufficient input provided');
+            await bot.sendLongMessage(msg.chat.id, "Please provide at least two coin addresses and optionally a minimum combined value. Usage: /cross <coin_address1> <coin_address2> [coin_address3...] [min_value]");
+            return;
+        }
 
-const handleCrossCommand = async (bot, msg, match) => {
-  console.log('Entering handleCrossCommand');
-  const DEFAULT_MIN_COMBINED_VALUE = 1000; 
-  try {
-      console.log('Cross command input:', match[1]);
-      const input = match[1].trim().split(' ');
-      if (input.length < 2) {
-          console.log('Insufficient input provided');
-          await bot.sendLongMessage(msg.chat.id, "Please provide at least two coin addresses and optionally a minimum combined value. Usage: /cross <coin_address1> <coin_address2> [coin_address3...] [min_value]");
-          return;
-      }
+        let minCombinedValue = DEFAULT_MIN_COMBINED_VALUE;
+        let contractAddresses = [];
 
-      let minCombinedValue = DEFAULT_MIN_COMBINED_VALUE;
-      let contractAddresses = [];
+        // Parse input to separate addresses and minimum value
+        for (const item of input) {
+            if (!isNaN(item) && contractAddresses.length >= 2) {
+                minCombinedValue = parseFloat(item);
+            } else {
+                contractAddresses.push(item);
+            }
+        }
 
-      // Parcourir l'input pour séparer les adresses du montant minimum
-      for (const item of input) {
-          if (!isNaN(item) && contractAddresses.length >= 2) {
-              minCombinedValue = parseFloat(item);
-          } else {
-              contractAddresses.push(item);
-          }
-      }
+        console.log('Contract addresses:', contractAddresses);
+        console.log('Minimum combined value:', minCombinedValue);
 
-      console.log('Contract addresses:', contractAddresses);
-      console.log('Minimum combined value:', minCombinedValue);
+        if (contractAddresses.length < 2) {
+            await bot.sendLongMessage(msg.chat.id, "Please provide at least two coin addresses.");
+            return;
+        }
 
-      if (contractAddresses.length < 2) {
-          await bot.sendLongMessage(msg.chat.id, "Please provide at least two coin addresses.");
-          return;
-      }
+        await bot.sendLongMessage(msg.chat.id, `Starting cross-analysis for ${contractAddresses.length} coins with minimum combined value of $${minCombinedValue}...`);
 
-      await bot.sendLongMessage(msg.chat.id, `Starting cross-analysis for ${contractAddresses.length} coins with minimum combined value of $${minCombinedValue}...`);
+        console.log('Calling crossAnalyze function with params:', JSON.stringify({ contractAddresses, minCombinedValue }));
+        const filteredHolders = await crossAnalyze(contractAddresses, minCombinedValue, 'crossWallet');
+        console.log(`Cross-analysis complete. Found ${filteredHolders.length} common holders.`);  
 
-      console.log('Calling crossAnalyze function with params:', JSON.stringify({ contractAddresses, minCombinedValue }));
-      const filteredHolders = await crossAnalyze(contractAddresses, minCombinedValue);
-      console.log(`Cross-analysis complete. Found ${filteredHolders.length} common holders.`);  
+        if (!Array.isArray(filteredHolders) || filteredHolders.length === 0) {
+            await bot.sendLongMessage(msg.chat.id, "No common holders found matching the criteria.");
+            return;
+        }
 
-      if (!Array.isArray(filteredHolders) || filteredHolders.length === 0) {
-          await bot.sendLongMessage(msg.chat.id, "No common holders found matching the criteria.");
-          return;
-      }
+        const dexScreenerApi = getDexScreenerApi();
+        const tokenInfos = await Promise.all(contractAddresses.map(async (address) => {
+            try {
+                const tokenInfo = await dexScreenerApi.getTokenInfo(address);
+                return {
+                    address: address,
+                    symbol: tokenInfo.symbol,
+                    name: tokenInfo.name
+                };
+            } catch (error) {
+                console.error(`Error fetching token info for ${address}:`, error);
+                return {
+                    address: address,
+                    symbol: 'Unknown',
+                    name: 'Unknown'
+                };
+            }
+        }));
 
-      console.log(`Cross-analysis complete. Found ${filteredHolders.length} common holders.`);
+        console.log('Formatting and sending cross-analysis message');
 
-      // Récupérer les informations des tokens
-      const dexScreenerApi = getDexScreenerApi();
-      const tokenInfos = await Promise.all(contractAddresses.map(async (address) => {
-          try {
-              const tokenInfo = await dexScreenerApi.getTokenInfo(address);
-              return {
-                  address: address,
-                  symbol: tokenInfo.symbol,
-                  name: tokenInfo.name
-              };
-          } catch (error) {
-              console.error(`Error fetching token info for ${address}:`, error);
-              return {
-                  address: address,
-                  symbol: 'Unknown',
-                  name: 'Unknown'
-              };
-          }
-      }));
+        // Call the function to format and send the message
+        await sendFormattedCrossAnalysisMessage(bot, msg.chat.id, filteredHolders, contractAddresses, tokenInfos);
 
-      console.log('Filtered Holders:', JSON.stringify(filteredHolders, null, 2));
-      console.log('Contract Addresses:', JSON.stringify(contractAddresses, null, 2));
-      console.log('Token Infos:', JSON.stringify(tokenInfos, null, 2));
-  
-      console.log('Formatting cross-analysis message');
+        console.log('Results sent to user');
 
-      if (!filteredHolders || filteredHolders.length === 0) {
-          await bot.sendLongMessage(msg.chat.id, "No holders found matching the criteria. This might be due to the minimum combined value being too high or lack of common holders.");
-          return;
-      }
+    } catch (error) {
+        console.error('Error in handleCrossCommand:', error);
 
-      const formattedMessages = await formatCrossAnalysisMessage(filteredHolders, contractAddresses, tokenInfos);
-
-      console.log('Sending results to user');
-      for (const message of formattedMessages) {
-          await bot.sendLongMessage(msg.chat.id, message, { parse_mode: 'HTML', disable_web_page_preview: true });
-      }
-      console.log('Results sent to user');
-
-  } catch (error) {
-      console.error('Error in handleCrossCommand:', error);
-      await bot.sendLongMessage(msg.chat.id, `An error occurred during cross-analysis: ${error.message}`);
-  }
-  console.log('Exiting handleCrossCommand');
+        if (error.response && error.response.statusCode === 400 && error.response.body && error.response.body.description.includes('message is too long')) {
+            await bot.sendLongMessage(msg.chat.id, "An error occurred during cross-analysis: The resulting message is too long to send via Telegram.\n\nPlease try with a higher minimum combined value or reduce the number of coins. Usage: /cross [coin_address1] [coin_address2] ... [Combined_value_min]");
+        } else {
+            await bot.sendLongMessage(msg.chat.id, `An error occurred during cross-analysis: ${error.message}`);
+        }
+    } finally {
+      ApiCallCounter.logApiCalls('crossWallet');
+    }  
 };
-  
+
 const handleTeamSupplyCommand = async (bot, msg, match) => {
   try {
       const tokenAddress = match[1];
@@ -439,9 +440,9 @@ const handleTeamSupplyCommand = async (bot, msg, match) => {
           return;
       }
 
-      await bot.sendMessage(msg.chat.id, `Analyzing team supply for token: ${tokenAddress}\nThis may take a while...`);
+      await bot.sendMessage(msg.chat.id, `Analyzing team supply for token: ${tokenAddress}\nThis may take a few minutes...`);
 
-      const { formattedResults, allWalletsDetails, allTeamWallets, tokenInfo } = await analyzeTeamSupply(tokenAddress);
+      const { formattedResults, allWalletsDetails, allTeamWallets, tokenInfo } = await analyzeTeamSupply(tokenAddress, 'teamSupply');
 
       if (!formattedResults || formattedResults.trim() === '') {
           throw new Error('Analysis result is empty');
@@ -478,6 +479,8 @@ const handleTeamSupplyCommand = async (bot, msg, match) => {
   } catch (error) {
       console.error('Error in handleTeamSupplyCommand:', error);
       await bot.sendMessage(msg.chat.id, `An error occurred during team supply analysis: ${error.message}`);
+  } finally {
+    ApiCallCounter.logApiCalls('teamSupply');
   }
 };
 
@@ -702,7 +705,7 @@ const handleSearchCommand = async (bot, msg, match) => {
 
     await bot.sendMessage(msg.chat.id, `Searching wallets for coin: ${coinAddress}`);
 
-    const results = await searchWallets(coinAddress, searchCriteria);
+    const results = await searchWallets(coinAddress, searchCriteria, 'searchWallet');
 
     if (results.length === 0) {
       await bot.sendMessage(msg.chat.id, "No matching wallets found.");
@@ -717,7 +720,10 @@ const handleSearchCommand = async (bot, msg, match) => {
   } catch (error) {
     console.error(`Error in handleSearchCommand:`, error);
     await bot.sendMessage(msg.chat.id, `An error occurred during the search: ${error.message}`);
+  } finally {
+    ApiCallCounter.logApiCalls('searchWallet');
   }
+
 };
 
 module.exports = {

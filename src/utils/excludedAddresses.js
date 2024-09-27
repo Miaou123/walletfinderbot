@@ -17,9 +17,8 @@ const EXCLUDED_ADDRESSES = [
     '2AQdpHJ2JpcEgPiATUXjQxA8QmafFegfQwSLWSprPicm', //coinbase 2 
     '5tzFkiKscXHK5ZXCGbXZxdw7gTjjD1mBwuoFbhUvuAi9', //Binance 2
     '5VCwKtCXgCJ6kit5FybXjvriW3xELsFDhYrPSqtJNmcD', //OKX
-    'H8sMJSCQxfKiFTCfDR3DUMLPwcRbM61LGFJ8N4dK3WjS', //Coinbase
-    '5tzFkiKscXHK5ZXCGbXZxdw7gTjjD1mBwuoFbhUvuAi9', //binance 2
-    '5Q544fKrFoe6tsEbD7S8EmxGTJYAKtTVhAW5Q5pge4j1, '
+    '5Q544fKrFoe6tsEbD7S8EmxGTJYAKtTVhAW5Q5pge4j1', //Raydium v4
+    'G2YxRa6wt1qePMwfJzdXZG62ej4qaTC7YURzuh2Lwd3t', //Bridge/CEX?
 ];
 
 function isExcludedAddress(address) {
@@ -32,6 +31,7 @@ async function addExcludedAddress(address, reason = 'bot') {
 
 module.exports = {
     EXCLUDED_ADDRESSES,
+  
     isExcludedAddress,
     addExcludedAddress
 };

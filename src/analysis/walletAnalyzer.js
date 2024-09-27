@@ -1,24 +1,23 @@
 const { getSolanaApi } = require('../integrations/solanaApi');
 const { getDexScreenerApi } = require('../integrations/dexscreenerApi');
 const { checkInactivityPeriod } = require('../tools/inactivityPeriod');
-const { rateLimitedAxios } = require('../utils/rateLimiter');
 const { getAssetsForMultipleWallets } = require('../tools/walletValueCalculator');
 const { getHolders, getTopHolders } = require('../tools/getHolders');
 const config = require('../utils/config');
 const BigNumber = require('bignumber.js');
 
-async function analyzeToken(coinAddress, count) {
+async function analyzeToken(coinAddress, count, mainContext = 'default') {
   const dexScreenerApi = getDexScreenerApi();
 
   // Fetch token info
-  const tokenInfo = await dexScreenerApi.getTokenInfo(coinAddress);
+  const tokenInfo = await dexScreenerApi.getTokenInfo(coinAddress, mainContext);
   if (!tokenInfo) {
     throw new Error("Failed to fetch token information");
   }
-  console.log('Token Info:', JSON.stringify(tokenInfo, null, 2));
 
   // Get top holders
-  const topHolders = await getTopHolders(coinAddress, count);
+  console.log(`Calling getTopHolders with count: ${count}`);
+  const topHolders = await getTopHolders(coinAddress, count, mainContext, 'getTopHolders');
   console.log('Top holders:', JSON.stringify(topHolders, null, 2));
   
   const walletInfos = topHolders.map(holder => ({
@@ -28,7 +27,7 @@ async function analyzeToken(coinAddress, count) {
 
   console.log('Wallet infos before analysis:', JSON.stringify(walletInfos, null, 2));
   // Analyze wallets
-  const analyzedWallets = await analyzeAndFormatMultipleWallets(walletInfos, coinAddress, tokenInfo);
+  const analyzedWallets = await analyzeAndFormatMultipleWallets(walletInfos, coinAddress, tokenInfo, mainContext);
 
   return {
     tokenInfo,
@@ -36,11 +35,11 @@ async function analyzeToken(coinAddress, count) {
   };
 }
 
-const analyzeAndFormatMultipleWallets = async (walletInfos, coinAddress, tokenInfo) => {
+const analyzeAndFormatMultipleWallets = async (walletInfos, coinAddress, tokenInfo, mainContext) => {
   try {
     console.log(`Analyzing ${walletInfos.length} wallets`);
     const walletAddresses = walletInfos.map(info => info.address);
-    const assetsData = await getAssetsForMultipleWallets(walletAddresses);
+    const assetsData = await getAssetsForMultipleWallets(walletAddresses, mainContext, 'getAssets');
 
     const analyzedWallets = await Promise.all(walletInfos.map(async (walletInfo) => {
       try {
@@ -57,26 +56,27 @@ const analyzeAndFormatMultipleWallets = async (walletInfos, coinAddress, tokenIn
 
         // Find the specific token in tokenInfos
         const specificTokenInfo = stats.tokenInfos.find(t => t.mint === coinAddress);
-        //console.log('Specific token info:', JSON.stringify(specificTokenInfo, null, 2));
 
         let isInteresting = false;
         let category = '';
 
-        // 1. Check SOL Balance
-        if (parseFloat(stats.solBalance) >= config.MIN_SOL_BALANCE_FOR_ANALYSIS) {
-          console.log(`Wallet ${walletInfo.address} SOL balance: ${stats.solBalance} SOL`);
-          console.log(`Wallet ${walletInfo.address} total value: $${stats.totalValue}`);
+        // Calculate wallet value excluding the analyzed token
+        const analyzedTokenValue = specificTokenInfo ? parseFloat(specificTokenInfo.value) : 0;
+        const walletValueExcludingAnalyzedToken = parseFloat(stats.totalValue) - analyzedTokenValue;
 
-          if (parseFloat(stats.totalValue) > config.HIGH_WALLET_VALUE_THRESHOLD) {
-            console.log(`Wallet ${walletInfo.address} has high total value: $${stats.totalValue}`);
-            isInteresting = true;
-            category = 'High Value';
-          }
+        console.log(`Wallet ${walletInfo.address} total value: $${stats.totalValue}`);
+        console.log(`Wallet ${walletInfo.address} value excluding analyzed token: $${walletValueExcludingAnalyzedToken}`);
+
+        // Check if the wallet is high value based on the adjusted value
+        if (walletValueExcludingAnalyzedToken > config.HIGH_WALLET_VALUE_THRESHOLD) {
+          console.log(`Wallet ${walletInfo.address} has high adjusted value: $${walletValueExcludingAnalyzedToken}`);
+          isInteresting = true;
+          category = 'High Value';
         }
         // 2. Check Low Transactions only if not already interesting
         if (!isInteresting) {
           const solanaApi = getSolanaApi();
-          const transactions = await solanaApi.getSignaturesForAddress(walletInfo.address, { limit: config.LOW_TRANSACTION_THRESHOLD + 1 });
+          const transactions = await solanaApi.getSignaturesForAddress(walletInfo.address, { limit: config.LOW_TRANSACTION_THRESHOLD + 1 }, mainContext, 'getSignatures');
           const transactionCount = transactions.length;
           stats.transactionCount = transactionCount;
           console.log(`Wallet ${walletInfo.address} transaction count: ${transactionCount}`);
@@ -89,7 +89,7 @@ const analyzeAndFormatMultipleWallets = async (walletInfos, coinAddress, tokenIn
 
         // 3. Check Inactivity only if not already interesting
         if (!isInteresting) {
-          const inactivityCheck = await checkInactivityPeriod(walletInfo.address, coinAddress);
+          const inactivityCheck = await checkInactivityPeriod(walletInfo.address, coinAddress, mainContext, 'checkInactivity');
           stats.daysSinceLastRelevantSwap = inactivityCheck.daysSinceLastActivity;
 
           if (inactivityCheck.isInactive) {

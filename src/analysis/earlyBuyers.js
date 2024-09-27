@@ -1,14 +1,13 @@
-const { rateLimitedAxios } = require('../utils/rateLimiter');
 const config = require('../utils/config');
 const { getAssetsForMultipleWallets } = require('../tools/walletValueCalculator');
 const { getSolanaApi } = require('../integrations/solanaApi');
 
-const analyzeEarlyBuyers = async (tokenAddress, minPercentage = 1, timeFrameHours = 1, tokenInfo) => {
+const analyzeEarlyBuyers = async (tokenAddress, minPercentage = 1, timeFrameHours = 1, tokenInfo, mainContext = 'default') => {
   console.log(`Starting analysis for early buyers of ${tokenAddress}...`);
   console.log(`Minimum percentage: ${minPercentage}%`);
   console.log(`Time frame: ${timeFrameHours} hours`);
 
-  const { signatures, apiCalls, totalTransactions } = await getTokenSignatures(tokenAddress);
+  const { signatures, apiCalls, totalTransactions } = await getTokenSignatures(tokenAddress, mainContext);
   console.log(`Retrieved ${signatures.length} signatures in ${apiCalls} API calls.`);
 
   if (signatures.length === 0) {
@@ -37,7 +36,7 @@ const analyzeEarlyBuyers = async (tokenAddress, minPercentage = 1, timeFrameHour
 
     try {
       const solanaApi = getSolanaApi();
-      const txDetails = await solanaApi.getTransaction(sig.signature);
+      const txDetails = await solanaApi.getTransaction(sig.signature, { encoding: 'jsonParsed', maxSupportedTransactionVersion: 0 }, mainContext, 'getTransaction');
       const tokenChange = calculateTokenChange(txDetails, tokenAddress);
 
       if (tokenChange > 0) {  // Only consider positive changes (buys)
@@ -76,7 +75,7 @@ const analyzeEarlyBuyers = async (tokenAddress, minPercentage = 1, timeFrameHour
   // Analyse des wallets en parallèle
   const earlyBuyersArray = Array.from(qualifiedEarlyBuyers, ([buyer, data]) => ({ buyer, ...data }));
   const walletAddresses = earlyBuyersArray.map(buyer => buyer.buyer);
-  const walletAnalysis = await getAssetsForMultipleWallets(walletAddresses);
+  const walletAnalysis = await getAssetsForMultipleWallets(walletAddresses, mainContext, 'getAssets');
 
   // Combiner les informations des early buyers avec l'analyse des wallets
   const combinedResults = earlyBuyersArray.map(buyer => ({
@@ -90,7 +89,7 @@ const analyzeEarlyBuyers = async (tokenAddress, minPercentage = 1, timeFrameHour
   };
 };
 
-async function getTokenSignatures(tokenAddress) {
+async function getTokenSignatures(tokenAddress, mainContext) {
   const solanaApi = getSolanaApi();
   let signatures = [];
   let lastSignature = null;
@@ -104,7 +103,7 @@ async function getTokenSignatures(tokenAddress) {
         limit: 1000,
         before: lastSignature
       };
-      const newSignatures = await solanaApi.getSignaturesForAddress(tokenAddress, options);
+      const newSignatures = await solanaApi.getSignaturesForAddress(tokenAddress, options, mainContext, 'getSignatures');
       
       if (!newSignatures || newSignatures.length === 0) {
         console.log("No more signatures available. Reached the oldest transaction.");

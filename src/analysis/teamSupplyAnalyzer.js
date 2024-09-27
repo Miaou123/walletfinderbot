@@ -1,26 +1,16 @@
 const { getSolanaApi } = require('../integrations/solanaApi');
 const { getDexScreenerApi } = require('../integrations/dexscreenerApi');
-const { rateLimitedAxios } = require('../utils/rateLimiter');
 const { checkInactivityPeriod } = require('../tools/inactivityPeriod');
 const { formatNumber } = require('../bot/formatters/generalFormatters');
 const { analyzeFunding } = require('../tools/fundingAnalyzer');
 const { getHolders, getTopHolders } = require('../tools/getHolders');
-const apiCallCounter = require('../utils/ApiCallCounter');
-const executionTimer = require('../utils/executionTimer');
 
-const config = require('../utils/config');
 const BigNumber = require('bignumber.js');
 
 const MAX_ASSETS = 2;
-const ITEMS_PER_PAGE = 1000;
 const FRESH_WALLET_THRESHOLD = 100;
 
 BigNumber.config({ DECIMAL_PLACES: 18, ROUNDING_MODE: BigNumber.ROUND_DOWN });
-
-function rateLimitedAxiosWithCounter(config, isRPC, step) {
-    apiCallCounter.incrementCall(step,'main');
-    return rateLimitedAxios(config, isRPC);
-}
 
 function filterSignificantHolders(allHolders, totalSupply) {
     const SUPPLY_THRESHOLD = new BigNumber('0.001'); // 0.1%
@@ -33,28 +23,23 @@ function filterSignificantHolders(allHolders, totalSupply) {
     return significantHolders;
 }
 
-async function analyzeTeamSupply(tokenAddress) {
-    executionTimer.start('teamsupply');
-    executionTimer.start('main')
-    apiCallCounter.resetCounter('main');
+async function analyzeTeamSupply(tokenAddress, mainContext = 'default') {
     const dexScreenerApi = getDexScreenerApi();
 
     try {
-        const tokenInfo = await dexScreenerApi.getTokenInfo(tokenAddress);
-        apiCallCounter.incrementCall("Get Token Info", 'main');
+        const tokenInfo = await dexScreenerApi.getTokenInfo(tokenAddress, mainContext);
         const totalSupply = new BigNumber(tokenInfo.totalSupply);
 
-        const allHolders = await getHolders(tokenAddress);
-        apiCallCounter.incrementCall("Get Holders", 'main');
+        const allHolders = await getHolders(tokenAddress, mainContext, 'getHolders');
 
-        const significantHolders = filterSignificantHolders(allHolders, totalSupply);
-        const analyzedWallets = await analyzeWallets(significantHolders, tokenAddress);
+        const significantHolders = filterSignificantHolders(allHolders, totalSupply, tokenInfo);
+        const analyzedWallets = await analyzeWallets(significantHolders, tokenAddress, mainContext);
+        console.log(`Analyzed wallets: ${analyzedWallets.length}`);
 
-        executionTimer.stop('main')
 
         // Analyse de funding sur les wallets non détectés comme "team"
         const nonTeamWallets = analyzedWallets.filter(w => w.category === 'Unknown');
-        const { groupedWallets: fundingGroups, apiCallReport: fundingApiReport, executionTime: fundingExecutionTime } = await analyzeFunding(nonTeamWallets);
+        const { groupedWallets: fundingGroups } = await analyzeFunding(nonTeamWallets, mainContext, 'analyzeFunding')
 
         const { message, allWalletsDetails } = formatResults(analyzedWallets, fundingGroups, tokenInfo);
 
@@ -62,28 +47,12 @@ async function analyzeTeamSupply(tokenAddress) {
             .filter(w => w.category !== 'Unknown')
             .map(w => w.address);
 
-        const mainApiReport = apiCallCounter.getReport('main');
-        executionTimer.stop('teamsupply');
-        
-        const totalExecutionTime = executionTimer.getExecutionTime('teamsupply');
-        
-        const timeReport = `Total execution time: ${executionTimer.formatExecutionTime('teamsupply')}\n` +
-                           `Main analysis time: ${executionTimer.formatExecutionTime('main')}\n` +
-                           `Funding analysis time: ${executionTimer.formatExecutionTime('funding')}`;
-        
-        console.log("Main Analysis API Calls:");
-        console.log(mainApiReport);
-        console.log("\nFunding Analysis API Calls:");
-        console.log(fundingApiReport);
-        console.log(timeReport);
-
         return { 
             formattedResults: message,
             allWalletsDetails, 
             allTeamWallets,
             tokenInfo, 
             tokenAddress,
-            executionTime: totalExecutionTime
         };
     } catch (error) {
         console.error('Error in analyzeTeamSupply:', error);
@@ -91,28 +60,34 @@ async function analyzeTeamSupply(tokenAddress) {
     }
 }
 
-async function analyzeWallets(wallets, tokenAddress) {
+async function analyzeWallets(wallets, tokenAddress, mainContext) {
+    console.log(`Analyzing ${wallets.length} wallets...`);
     const analyzeWallet = async (wallet) => {
         let category = 'Unknown';
         let assetCount = null;
         let daysSinceLastActivity = null;
 
-        const isFresh = await isFreshWallet(wallet.address);
+        const isFresh = await isFreshWallet(wallet.address, mainContext, 'isFreshWallet');
         if (isFresh) {
             category = 'Fresh';
         } else {
-            assetCount = await getAssetCount(wallet.address);
+            assetCount = await getAssetCount(wallet.address, mainContext, 'getAssetCount');
             if (assetCount <= MAX_ASSETS) {
                 category = 'Few Assets';
             } else {
-                const inactivityCheck = await checkInactivityPeriod(wallet.address, tokenAddress);
-                if (inactivityCheck.isInactive) {
+                const inactivityCheck = await checkInactivityPeriod(wallet.address, tokenAddress, mainContext, 'checkInactivity');
+                if (inactivityCheck.category === 'No Token') {
+                    category = 'No Token';
+                } else if (inactivityCheck.category === 'No ATA Transaction') {
+                    category = 'No ATA Transaction';
+                } else if (inactivityCheck.isInactive) {
                     category = 'Inactive';
                     daysSinceLastActivity = inactivityCheck.daysSinceLastActivity;
                 }
             }
         }
 
+        console.log(`Wallet ${wallet.address.slice(0, 6)}... category: ${category}`);
         return {
             ...wallet,
             category,
@@ -120,9 +95,8 @@ async function analyzeWallets(wallets, tokenAddress) {
             daysSinceLastActivity
         };
     };
-
     // Analyze wallets in batches to avoid overwhelming the system
-    const batchSize = 30;
+    const batchSize = 5;
     const analyzedWallets = [];
     for (let i = 0; i < wallets.length; i += batchSize) {
         const batch = wallets.slice(i, i + batchSize);
@@ -133,46 +107,44 @@ async function analyzeWallets(wallets, tokenAddress) {
     return analyzedWallets;
 }
 
-async function isFreshWallet(address) {
+// Ajoutez cette nouvelle fonction
+async function getAssetCount(address, mainContext, subContext) {
     try {
         const solanaApi = getSolanaApi();
-        const signatures = await solanaApi.getSignaturesForAddress(address, { limit: FRESH_WALLET_THRESHOLD + 1 });
+        let page = 1;
+        let totalAssets = 0;
+        let hasMore = true;
+
+        while (hasMore) {
+            const result = await solanaApi.getAssetsByOwner(address, page, 1000, true, mainContext, subContext);
+            if (result && result.items) {
+                totalAssets += result.items.length;
+                hasMore = result.items.length === 1000;
+                page++;
+            } else {
+                hasMore = false;
+            }
+
+            if (totalAssets > MAX_ASSETS) {
+                break;
+            }
+        }
+
+        return totalAssets;
+    } catch (error) {
+        console.error(`Error getting asset count for ${address}:`, error.message);
+        return 0;
+    }
+}
+
+async function isFreshWallet(address, mainContext, subContext) {
+    try {
+        const solanaApi = getSolanaApi();
+        const signatures = await solanaApi.getSignaturesForAddress(address, { limit: FRESH_WALLET_THRESHOLD + 1 }, mainContext, subContext);
         return signatures.length <= FRESH_WALLET_THRESHOLD;
     } catch (error) {
         console.error(`Error checking if ${address} is a fresh wallet:`, error);
         return false;
-    }
-}
-
-async function getAssetCount(address) {
-    try {
-        const assetsResponse = await rateLimitedAxiosWithCounter({
-            method: 'post',
-            url: config.HELIUS_RPC_URL,
-            data: {
-                jsonrpc: '2.0',
-                id: 'my-id',
-                method: 'getAssetsByOwner',
-                params: {
-                    ownerAddress: address,
-                    page: 1,
-                    limit: ITEMS_PER_PAGE,
-                    displayOptions: { showFungible: true }
-                },
-            }
-        }, true, "Get Asset Count");
-
-        const { result } = assetsResponse.data;
-        
-        if (result && result.items && Array.isArray(result.items)) {
-            return result.items.length;
-        } else {
-            console.warn(`Unexpected response structure for ${address}`);
-            return 0;
-        }
-    } catch (error) {
-        console.error(`Error getting asset count for ${address}:`, error.message);
-        return 0;
     }
 }
 
@@ -261,22 +233,28 @@ function formatResults(analyzedWallets, fundingGroups, tokenInfo) {
 }
 
 const sendWalletDetails = async (bot, chatId, allWalletsDetails, tokenInfo) => {
-    const totalWallets = allWalletsDetails.length;
-
-    let message = `<b><a href="https://dexscreener.com/solana/${tokenInfo.address}">${tokenInfo.symbol}</a></b>\n\n`;
-    message += `<strong>${totalWallets} potential team addresses:</strong>\n\n`;
-
-    const formatAddress = (address) => `<a href="https://solscan.io/account/${address}">${address.slice(0, 6)}...${address.slice(-4)}</a>`;
-
     const freshWallets = allWalletsDetails.filter(w => w.category === 'Fresh');
     const fewAssetsWallets = allWalletsDetails.filter(w => w.category === 'Few Assets');
     const inactiveWallets = allWalletsDetails.filter(w => w.category === 'Inactive');
     const suspiciousFundingWallets = allWalletsDetails.filter(w => w.category === 'Suspicious Funding');
 
+    const totalTeamWallets = freshWallets.length + fewAssetsWallets.length + 
+    inactiveWallets.length + suspiciousFundingWallets.length;
+
+    let message = `<b><a href="https://dexscreener.com/solana/${tokenInfo.address}">${tokenInfo.symbol}</a></b>\n\n`;
+    message += `<strong>${totalTeamWallets} potential team addresses:</strong>\n\n`;
+
+    const formatAddress = (address) => `<a href="https://solscan.io/account/${address}">${address.slice(0, 6)}...${address.slice(-4)}</a>`;
+
+    const calculateSupplyPercentage = (balance) => {
+        return new BigNumber(balance).dividedBy(tokenInfo.totalSupply).multipliedBy(100).toFixed(2);
+    };
+
     if (freshWallets.length > 0) {
         message += `<b>🆕 Fresh wallets: ${freshWallets.length}</b>\n`;
         freshWallets.forEach(wallet => {
-            message += `${formatAddress(wallet.address)}\n`;
+            const supplyPercentage = calculateSupplyPercentage(wallet.balance);
+            message += `${formatAddress(wallet.address)} (${supplyPercentage}% of supply)\n`;
         });
         message += '\n';
     }
@@ -284,7 +262,8 @@ const sendWalletDetails = async (bot, chatId, allWalletsDetails, tokenInfo) => {
     if (fewAssetsWallets.length > 0) {
         message += `<b>💼 Few Assets wallets: ${fewAssetsWallets.length}</b>\n`;
         fewAssetsWallets.forEach(wallet => {
-            message += `${formatAddress(wallet.address)} (${wallet.assetCount} assets)\n`;
+            const supplyPercentage = calculateSupplyPercentage(wallet.balance);
+            message += `${formatAddress(wallet.address)} (${wallet.assetCount} assets, ${supplyPercentage}% of supply)\n`;
         });
         message += '\n';
     }
@@ -292,7 +271,8 @@ const sendWalletDetails = async (bot, chatId, allWalletsDetails, tokenInfo) => {
     if (inactiveWallets.length > 0) {
         message += `<b>💤 Inactive wallets: ${inactiveWallets.length}</b>\n`;
         inactiveWallets.forEach(wallet => {
-            message += `${formatAddress(wallet.address)} (${wallet.daysSinceLastActivity.toFixed(2)} days)\n`;
+            const supplyPercentage = calculateSupplyPercentage(wallet.balance);
+            message += `${formatAddress(wallet.address)} (${wallet.daysSinceLastActivity.toFixed(2)} days, ${supplyPercentage}% of supply)\n`;
         });
         message += '\n';
     }
@@ -313,7 +293,8 @@ const sendWalletDetails = async (bot, chatId, allWalletsDetails, tokenInfo) => {
         Object.entries(funderGroups).forEach(([funder, wallets]) => {
             message += `\nFunded by ${formatAddress(funder)}:\n`;
             wallets.forEach(wallet => {
-                message += `  ${formatAddress(wallet.address)}\n`;
+                const supplyPercentage = calculateSupplyPercentage(wallet.balance);
+                message += `  ${formatAddress(wallet.address)} (${supplyPercentage}% of supply)\n`;
             });
         });
         message += '\n';
