@@ -26,60 +26,59 @@ class ApiCallCounter {
             getTokenAccounts: 10,
             getNFTEditions: 10,
             getValidityProofs: 100,
-            sendTransaction: 500 // Only for dedicated stake endpoint
+            sendTransaction: 500
         };
     }
 
-    incrementCall(step, mainContext = 'default', subContext = null) {
-        if (!this.contexts[mainContext]) {
-            this.contexts[mainContext] = { totalCalls: 0, totalCredits: 0, callsByStep: {}, subContexts: {} };
+    incrementCall(api, method, mainContext = 'default', subContext = null) {
+        if (!this.contexts[api]) {
+            this.contexts[api] = {};
+        }
+        if (!this.contexts[api][mainContext]) {
+            this.contexts[api][mainContext] = { totalCalls: 0, totalCredits: 0, callsByStep: {}, subContexts: {} };
         }
 
-        const credits = this.creditCosts[step] || this.creditCosts.default;
+        const credits = this.creditCosts[method] || this.creditCosts.default;
 
-        this.contexts[mainContext].totalCalls++;
-        this.contexts[mainContext].totalCredits += credits;
+        this.contexts[api][mainContext].totalCalls++;
+        this.contexts[api][mainContext].totalCredits += credits;
 
         if (subContext) {
-            if (!this.contexts[mainContext].subContexts[subContext]) {
-                this.contexts[mainContext].subContexts[subContext] = { totalCalls: 0, totalCredits: 0, callsByStep: {} };
+            if (!this.contexts[api][mainContext].subContexts[subContext]) {
+                this.contexts[api][mainContext].subContexts[subContext] = { totalCalls: 0, totalCredits: 0, callsByStep: {} };
             }
-            this.contexts[mainContext].subContexts[subContext].totalCalls++;
-            this.contexts[mainContext].subContexts[subContext].totalCredits += credits;
-            if (!this.contexts[mainContext].subContexts[subContext].callsByStep[step]) {
-                this.contexts[mainContext].subContexts[subContext].callsByStep[step] = { calls: 0, credits: 0 };
+            this.contexts[api][mainContext].subContexts[subContext].totalCalls++;
+            this.contexts[api][mainContext].subContexts[subContext].totalCredits += credits;
+            if (!this.contexts[api][mainContext].subContexts[subContext].callsByStep[method]) {
+                this.contexts[api][mainContext].subContexts[subContext].callsByStep[method] = { calls: 0, credits: 0 };
             }
-            this.contexts[mainContext].subContexts[subContext].callsByStep[step].calls++;
-            this.contexts[mainContext].subContexts[subContext].callsByStep[step].credits += credits;
+            this.contexts[api][mainContext].subContexts[subContext].callsByStep[method].calls++;
+            this.contexts[api][mainContext].subContexts[subContext].callsByStep[method].credits += credits;
         } else {
-            if (!this.contexts[mainContext].callsByStep[step]) {
-                this.contexts[mainContext].callsByStep[step] = { calls: 0, credits: 0 };
+            if (!this.contexts[api][mainContext].callsByStep[method]) {
+                this.contexts[api][mainContext].callsByStep[method] = { calls: 0, credits: 0 };
             }
-            this.contexts[mainContext].callsByStep[step].calls++;
-            this.contexts[mainContext].callsByStep[step].credits += credits;
+            this.contexts[api][mainContext].callsByStep[method].calls++;
+            this.contexts[api][mainContext].callsByStep[method].credits += credits;
         }
     }
 
-    resetCounter(mainContext = 'default') {
-        this.contexts[mainContext] = { totalCalls: 0, totalCredits: 0, callsByStep: {}, subContexts: {} };
-    }
-
-    getReport(mainContext = 'default') {
-        if (!this.contexts[mainContext]) {
-            return "No calls recorded for this context.";
+    getReport(api, mainContext = 'default') {
+        if (!this.contexts[api] || !this.contexts[api][mainContext]) {
+            return `No calls recorded for ${api} API in context ${mainContext}.`;
         }
 
-        let report = `Detailed API Call Report:\n`;
+        let report = `Detailed ${api} API Call Report:\n`;
         report += `Context: ${mainContext}\n`;
-        report += `Total API calls: ${this.contexts[mainContext].totalCalls}\n`;
-        report += `Total credits used: ${this.contexts[mainContext].totalCredits}\n`;
+        report += `Total API calls: ${this.contexts[api][mainContext].totalCalls}\n`;
+        report += `Total credits used: ${this.contexts[api][mainContext].totalCredits}\n`;
         report += `${mainContext} direct calls:\n`;
 
-        for (const [step, data] of Object.entries(this.contexts[mainContext].callsByStep)) {
+        for (const [step, data] of Object.entries(this.contexts[api][mainContext].callsByStep)) {
             report += `  ${step}: ${data.calls} calls, ${data.credits} credits\n`;
         }
 
-        for (const [subContext, data] of Object.entries(this.contexts[mainContext].subContexts)) {
+        for (const [subContext, data] of Object.entries(this.contexts[api][mainContext].subContexts)) {
             report += `Sub-context: ${subContext}\n`;
             report += `  Total calls: ${data.totalCalls}\n`;
             report += `  Total credits: ${data.totalCredits}\n`;
@@ -91,13 +90,53 @@ class ApiCallCounter {
         return report;
     }
 
+    resetCounter(api, mainContext = 'default') {
+        if (this.contexts[api]) {
+            this.contexts[api][mainContext] = { totalCalls: 0, totalCredits: 0, callsByStep: {}, subContexts: {} };
+        }
+    }
+
     logApiCalls(analysisType) {
-        console.log(`\n--- API Call Report for ${analysisType} analysis ---`);
-        console.log(this.getReport(analysisType));
-        console.log('-----------------------------------\n');
+        console.log(`\n--- API Call Reports for ${analysisType} analysis ---`);
+        for (const api of ['Helius', 'GMGN', 'DexScreener']) {
+            if (this.contexts[api] && this.contexts[api][analysisType]) {
+                console.log(this.getDetailedReport(api, analysisType));
+                console.log('-----------------------------------\n');
+                this.resetCounter(api, analysisType);
+            }
+        }
+    }
+
+    getDetailedReport(api, mainContext) {
+        if (!this.contexts[api] || !this.contexts[api][mainContext]) {
+            return `No calls recorded for ${api} API in context ${mainContext}.`;
+        }
+
+        let report = `Detailed ${api} API Call Report:\n`;
+        report += `Context: ${mainContext}\n`;
+        report += `Total API calls: ${this.contexts[api][mainContext].totalCalls}\n`;
+        report += `Total credits used: ${this.contexts[api][mainContext].totalCredits}\n`;
         
-        // Reset the counter for this context after logging
-        this.resetCounter(analysisType);
+        if (Object.keys(this.contexts[api][mainContext].callsByStep).length > 0) {
+            report += `${mainContext} direct calls:\n`;
+            for (const [step, data] of Object.entries(this.contexts[api][mainContext].callsByStep)) {
+                report += `  ${step}: ${data.calls} calls, ${data.credits} credits\n`;
+            }
+        }
+
+        if (Object.keys(this.contexts[api][mainContext].subContexts).length > 0) {
+            report += `Sub-context calls:\n`;
+            for (const [subContext, data] of Object.entries(this.contexts[api][mainContext].subContexts)) {
+                report += `  ${subContext}:\n`;
+                report += `    Total calls: ${data.totalCalls}\n`;
+                report += `    Total credits: ${data.totalCredits}\n`;
+                for (const [step, stepData] of Object.entries(data.callsByStep)) {
+                    report += `    ${step}: ${stepData.calls} calls, ${stepData.credits} credits\n`;
+                }
+            }
+        }
+
+        return report;
     }
 }
 

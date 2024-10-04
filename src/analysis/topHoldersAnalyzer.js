@@ -3,7 +3,8 @@ const { getDexScreenerApi } = require('../integrations/dexscreenerApi');
 const { checkInactivityPeriod } = require('../tools/inactivityPeriod');
 const { getAssetsForMultipleWallets } = require('../tools/walletValueCalculator');
 const { getHolders, getTopHolders } = require('../tools/getHolders');
-const config = require('../utils/config');
+const { fetchMultipleWallets } = require('../tools/walletChecker');
+const config = require('../config/config');
 const BigNumber = require('bignumber.js');
 
 async function analyzeToken(coinAddress, count, mainContext = 'default') {
@@ -18,14 +19,12 @@ async function analyzeToken(coinAddress, count, mainContext = 'default') {
   // Get top holders
   console.log(`Calling getTopHolders with count: ${count}`);
   const topHolders = await getTopHolders(coinAddress, count, mainContext, 'getTopHolders');
-  console.log('Top holders:', JSON.stringify(topHolders, null, 2));
   
   const walletInfos = topHolders.map(holder => ({
     address: holder.address,
     tokenBalance: holder.amount
   }));
 
-  console.log('Wallet infos before analysis:', JSON.stringify(walletInfos, null, 2));
   // Analyze wallets
   const analyzedWallets = await analyzeAndFormatMultipleWallets(walletInfos, coinAddress, tokenInfo, mainContext);
 
@@ -117,6 +116,29 @@ const analyzeAndFormatMultipleWallets = async (walletInfos, coinAddress, tokenIn
                            `${supplyPercentage}% of supply, $${tokenValueUsd} - ` +
                            `${stats.solBalance} SOL - ` +
                            `${stats.daysSinceLastRelevantSwap || 'N/A'} days since last relevant swap`;
+
+      if (isInteresting && category === 'High Value') {
+        const walletCheckerData = await fetchMultipleWallets([walletInfo.address], 1, mainContext, 'walletChecker');
+        if (walletCheckerData && walletCheckerData[0]) {
+          const { winrate, realized_profit_30d, unrealized_profit } = walletCheckerData[0].data.data;
+          return {
+            address: walletInfo.address,
+            isInteresting,
+            category,
+            stats,
+            formattedInfo,
+            supplyPercentage,
+            tokenValueUsd,
+            tokenBalance: tokenBalance.toFormat(0),
+            tokenSymbol: tokenInfo.symbol,
+            solBalance: stats.solBalance,
+            daysSinceLastRelevantSwap: stats.daysSinceLastRelevantSwap || 'N/A',
+            winrate: winrate * 100,
+            pnl30d: realized_profit_30d,
+            unrealizedPnl: unrealized_profit
+          };
+        }
+      }
 
      return {
        address: walletInfo.address,

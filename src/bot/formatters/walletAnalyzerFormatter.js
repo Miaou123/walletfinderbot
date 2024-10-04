@@ -49,6 +49,13 @@ const formatSingleWallet = (wallet, index, tokenInfo) => {
     let result = `${rank} - <a href="https://solscan.io/account/${wallet.address}">${shortAddress}</a> → (${wallet.supplyPercentage}%)\n`;
     
     result += `├ 💳 Sol: ${wallet.solBalance}\n`;
+
+    // Ajouter les informations du wallet checker si elles sont disponibles
+    if (wallet.winrate !== undefined && wallet.pnl30d !== undefined && wallet.unrealizedPnl !== undefined) {
+      result += `├ 💰 P/L (30d): $${formatNumber(wallet.pnl30d)} 📈 uP/L: $${formatNumber(wallet.unrealizedPnl)}\n`;
+      result += `├ 📊 Winrate (30d): ${wallet.winrate.toFixed(2)}%\n`;
+    }
+
     result += `└ 💲 Port: $${formatNumber(parseFloat(wallet.stats.totalValue))}`;
   
     if (wallet.stats.tokenInfos && wallet.stats.tokenInfos.length > 0) {
@@ -70,6 +77,8 @@ const formatSingleWallet = (wallet, index, tokenInfo) => {
     return '';
   }
 };
+
+
 const formatSimpleWallet = (wallet, index) => {
   try {
     const rank = index + 1;

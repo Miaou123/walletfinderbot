@@ -68,12 +68,10 @@ async function getTopHolders(coinAddress, count = 20, mainContext, subContext) {
           
           if (!tokenAccountInfo || !tokenAccountInfo.value || !tokenAccountInfo.value.data || !tokenAccountInfo.value.data.parsed) {
             console.error(`Invalid account info for address: ${account.address}`);
-            //console.log('Token account info:', JSON.stringify(tokenAccountInfo, null, 2));
             return null;
           }
   
           const ownerAddress = tokenAccountInfo.value.data.parsed.info.owner;
-          //console.log(`Owner address for ${account.address}: ${ownerAddress}`);
           const solBalanceResponse = await solanaApi.getBalance(ownerAddress, mainContext, subContext);
           let solBalance = '0';
           
@@ -92,6 +90,9 @@ async function getTopHolders(coinAddress, count = 20, mainContext, subContext) {
         }));
   
         topHolders = topHolders.filter(holder => holder !== null);
+
+        topHolders = topHolders.slice(0, count);
+
       } else {
         console.log(`Fetching all holders for token: ${coinAddress}`);
         const allHolders = await getHolders(coinAddress, mainContext, subContext);

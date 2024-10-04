@@ -1,13 +1,10 @@
-const { rateLimitedAxios } = require('../utils/rateLimiter');
 const BigNumber = require('bignumber.js');
-const config = require('../utils/config');
 const { getSolanaApi } = require('../integrations/solanaApi');
 
 const solanaApi = getSolanaApi();
 
-const CHECK_INTERVAL = 1 * 60 * 1000; // 5 minutes
+const CHECK_INTERVAL = 1 * 60 * 1000; 
 
-// Utility function for exponential backoff
 const wait = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
 async function retryWithBackoff(operation, maxRetries = 5, initialDelay = 1000) {
@@ -27,38 +24,64 @@ async function retryWithBackoff(operation, maxRetries = 5, initialDelay = 1000) 
 }
 
 class SupplyTracker {
-    constructor(bot) {
-        this.trackers = new Map();
+    constructor(bot, accessControl) {
+        this.userTrackers = new Map();
         this.bot = bot;
+        this.accessControl = accessControl;
     }
 
-    startTracking(tokenAddress, chatId, wallets, initialSupplyPercentage, totalSupply, significantChangeThreshold, ticker, decimals, trackType) {
+    startTracking(tokenAddress, chatId, wallets, initialSupplyPercentage, totalSupply, significantChangeThreshold, ticker, decimals, trackType, username) {
+        console.log('SupplyTracker.startTracking called with params:');
+        console.log('Token Address:', tokenAddress);
+        console.log('ChatId:', chatId);
+        console.log('Wallets:', JSON.stringify(wallets, null, 2));
+        console.log('Initial Supply Percentage:', initialSupplyPercentage);
+        console.log('Total Supply:', totalSupply);
+        console.log('Significant Change Threshold:', significantChangeThreshold);
+        console.log('Ticker:', ticker);
+        console.log('Decimals:', decimals);
+        console.log('Track Type:', trackType);
+        console.log('Username:', username);
         console.log(`Starting tracking with parameters:`, {
-            tokenAddress,
-            chatId,
-            wallets,
-            initialSupplyPercentage,
-            totalSupply,
-            significantChangeThreshold,
-            ticker,
-            decimals,
-            trackType
+            tokenAddress, chatId, wallets, initialSupplyPercentage, totalSupply,
+            significantChangeThreshold, ticker, decimals, trackType, username
         });
-    
-        if (!this.trackers.has(tokenAddress)) {
-            this.trackers.set(tokenAddress, new Map());
+        if (!this.userTrackers.has(username)) {
+            this.userTrackers.set(username, new Map());
         }
-    
-        const tokenTrackers = this.trackers.get(tokenAddress);
-        const trackerId = `${trackType}_${chatId}`;
         
-        if (!wallets || !Array.isArray(wallets) || wallets.length === 0) {
-            console.warn(`No wallets provided for ${trackType} tracking of ${tokenAddress}. This may cause issues.`);
+        const userTrackers = this.userTrackers.get(username);
+
+        // Obtenir le rôle de l'utilisateur
+        const userRole = this.accessControl.getUserRole(username);
+
+        let maxTrackers;
+        if (userRole === 'admin') {
+            maxTrackers = Infinity; // Pas de limite pour les admins
+        } else if (userRole === 'vip') {
+            maxTrackers = 10;
+        } else {
+            maxTrackers = 2; // Limite par défaut pour les utilisateurs normaux
         }
-    
+
+        if (userTrackers.size >= maxTrackers) {
+            throw new Error(`You've reached your maximum number of simultaneous trackings (${maxTrackers}). Please stop an existing tracking with /tracker before starting a new one.`);
+        }
+
+        const trackerId = `${tokenAddress}_${trackType}`;
+        
+        if (userTrackers.has(trackerId)) {
+            throw new Error(`Already tracking ${trackType} for ${tokenAddress}`);
+        }
+
+        // Vérifier si wallets est un tableau et non vide
+        if (!Array.isArray(wallets) || wallets.length === 0) {
+            console.warn(`No ${trackType} wallets provided for ${tokenAddress}. This may cause issues with tracking.`);
+        }
+
         const tracker = {
             chatId,
-            wallets: wallets || [],
+            wallets: wallets,
             initialSupplyPercentage: new BigNumber(initialSupplyPercentage),
             currentSupplyPercentage: new BigNumber(initialSupplyPercentage),
             totalSupply: new BigNumber(totalSupply),
@@ -66,34 +89,54 @@ class SupplyTracker {
             ticker,
             decimals,
             trackType,
-            intervalId: setInterval(() => this.checkSupply(tokenAddress, trackerId), CHECK_INTERVAL)
+            tokenAddress,
+            intervalId: setInterval(() => this.checkSupply(username, trackerId), CHECK_INTERVAL)
         };
-    
-        tokenTrackers.set(trackerId, tracker);
-        console.log(`Started ${trackType} tracking for ${tokenAddress}. Initial supply: ${initialSupplyPercentage}%, Threshold: ${significantChangeThreshold}%, Wallets count: ${tracker.wallets.length}`);
+
+        userTrackers.set(trackerId, tracker);
+        console.log(`Started ${trackType} tracking for ${tokenAddress} by user ${username}. Initial supply: ${initialSupplyPercentage}%, Threshold: ${significantChangeThreshold}%, Wallets count: ${tracker.wallets.length}`);
     }
-    
 
-
-    stopTracking(tokenAddress) {
-        const tracker = this.trackers.get(tokenAddress);
-        if (tracker) {
+    stopTracking(username, trackerId) {
+        const userTrackers = this.userTrackers.get(username);
+        if (userTrackers && userTrackers.has(trackerId)) {
+            const tracker = userTrackers.get(trackerId);
             clearInterval(tracker.intervalId);
-            this.trackers.delete(tokenAddress);
-            console.log(`Stopped tracking for ${tokenAddress}`);
+            userTrackers.delete(trackerId);
+            console.log(`Stopped tracking for ${tracker.tokenAddress}, tracker ID: ${trackerId}`);
+        } else {
+            console.warn(`No tracker found for user ${username} with ID ${trackerId}`);
         }
     }
 
-    async checkSupply(tokenAddress, trackerId) {
-        const tokenTrackers = this.trackers.get(tokenAddress);
-        if (!tokenTrackers) {
-            console.warn(`No trackers found for token ${tokenAddress}`);
+    getTrackedSuppliesByUser(username) {
+        const userTrackers = [];
+        for (const [tokenAddress, tokenTrackers] of this.trackers) {
+            for (const [trackerId, tracker] of tokenTrackers) {
+                if (tracker.username === username) {
+                    userTrackers.push({
+                        trackerId,
+                        tokenAddress,
+                        ticker: tracker.ticker,
+                        currentSupplyPercentage: tracker.currentSupplyPercentage.toFixed(2),
+                        trackType: tracker.trackType
+                    });
+                }
+            }
+        }
+        return userTrackers;
+    }
+
+    async checkSupply(username, trackerId) {
+        const userTrackers = this.userTrackers.get(username);
+        if (!userTrackers) {
+            console.warn(`No trackers found for user ${username}`);
             return;
         }
         
-        const tracker = tokenTrackers.get(trackerId);
+        const tracker = userTrackers.get(trackerId);
         if (!tracker) {
-            console.warn(`No tracker found for ID ${trackerId} of token ${tokenAddress}`);
+            console.warn(`No tracker found for ID ${trackerId} of user ${username}`);
             return;
         }
     
@@ -101,18 +144,18 @@ class SupplyTracker {
             await retryWithBackoff(async () => {
                 let newSupplyPercentage;
                 if (tracker.trackType === 'team') {
-                    newSupplyPercentage = await this.getTeamSupply(tracker.wallets, tokenAddress, tracker.totalSupply, tracker.decimals);
+                    newSupplyPercentage = await this.getTeamSupply(tracker.wallets, tracker.tokenAddress, tracker.totalSupply, tracker.decimals);
                 } else {
-                    newSupplyPercentage = await this.getControlledSupply(tracker.wallets, tokenAddress, tracker.totalSupply, tracker.decimals);
+                    newSupplyPercentage = await this.getControlledSupply(tracker.wallets, tracker.tokenAddress, tracker.totalSupply, tracker.decimals);
                 }            
     
                 if (newSupplyPercentage.isNaN()) {
-                    throw new Error(`Invalid supply percentage calculated for ${tokenAddress} (${tracker.trackType})`);
+                    throw new Error(`Invalid supply percentage calculated for ${tracker.tokenAddress} (${tracker.trackType})`);
                 }
     
                 const change = newSupplyPercentage.minus(tracker.initialSupplyPercentage);
     
-                console.log(`Check for ${tokenAddress} (${tracker.trackType}): Current supply: ${newSupplyPercentage.toFixed(2)}%, Initial: ${tracker.initialSupplyPercentage.toFixed(2)}%, Change: ${change.toFixed(2)}%`);
+                console.log(`Check for ${tracker.tokenAddress} (${tracker.trackType}): Current supply: ${newSupplyPercentage.toFixed(2)}%, Initial: ${tracker.initialSupplyPercentage.toFixed(2)}%, Change: ${change.toFixed(2)}%`);
     
                 if (change.abs().isGreaterThanOrEqualTo(tracker.significantChangeThreshold)) {
                     await this.notifyChange(tracker, newSupplyPercentage, change);
@@ -123,8 +166,21 @@ class SupplyTracker {
                 tracker.currentSupplyPercentage = newSupplyPercentage;
             });
         } catch (error) {
-            console.error(`Error checking ${tracker.trackType} supply for ${tokenAddress} after multiple retries:`, error);
+            console.error(`Error checking ${tracker.trackType} supply for ${tracker.tokenAddress} after multiple retries:`, error);
         }
+    }
+
+    getTrackedSuppliesByUser(username) {
+        const userTrackers = this.userTrackers.get(username);
+        if (!userTrackers) return [];
+
+        return Array.from(userTrackers.entries()).map(([trackerId, tracker]) => ({
+            trackerId,
+            tokenAddress: trackerId.split('_')[0],
+            ticker: tracker.ticker,
+            currentSupplyPercentage: tracker.currentSupplyPercentage.toFixed(2),
+            trackType: tracker.trackType
+        }));
     }
 
     async getTokenBalance(walletAddress, tokenAddress, mainContext, subContext) {
@@ -137,7 +193,7 @@ class SupplyTracker {
     
                 console.log(`Fetching token balance for wallet: ${walletAddress}, token: ${tokenAddress}`);
                 
-                const tokenAccounts = await solanaApi.getTokenAccountsByOwner(walletAddress, { mint: tokenAddress }, { encoding: 'jsonParsed' }, mainContext, subContext);
+                const tokenAccounts = await solanaApi.getTokenAccountsByOwner(walletAddress, tokenAddress, mainContext, subContext);
                 
                 if (tokenAccounts && tokenAccounts.length > 0 && tokenAccounts[0].account?.data?.parsed?.info?.tokenAmount?.amount) {
                     const balance = new BigNumber(tokenAccounts[0].account.data.parsed.info.tokenAmount.amount);
@@ -149,7 +205,7 @@ class SupplyTracker {
                 return new BigNumber(0);
             } catch (error) {
                 console.error(`Error getting token balance for ${walletAddress}:`, error);
-                throw error; // Re-throw the error to trigger retry
+                throw error;
             }
         });
     }
@@ -162,13 +218,14 @@ class SupplyTracker {
     
         console.log(`Calculating controlled supply for token: ${tokenAddress}, Total supply: ${totalSupply.toString()}, Wallets:`, controllingWallets);
     
+        // Modifiez cette ligne :
         const balances = await Promise.all(controllingWallets.map(wallet => this.getTokenBalance(wallet.address, tokenAddress, mainContext, subContext)));
         
+        // Et mettez à jour le logging :
         balances.forEach((balance, index) => {
             console.log(`Wallet: ${controllingWallets[index].address}, Balance: ${balance.toString()}`);
         });
     
-        // Convert token balances using the decimals
         const totalBalance = balances.reduce((total, balance) => total.plus(balance.dividedBy(new BigNumber(10).pow(decimals))), new BigNumber(0));
         const supplyPercentage = totalBalance.dividedBy(totalSupply).multipliedBy(100);
         console.log(`Total controlled balance: ${totalBalance.toString()}, Supply percentage: ${supplyPercentage.toFixed(2)}%`);
@@ -188,7 +245,6 @@ class SupplyTracker {
             console.log(`Wallet: ${teamWallets[index]}, Balance: ${balance.toString()}`);
         });
     
-        // Convert token balances using the decimals
         const totalBalance = balances.reduce((total, balance) => total.plus(balance.dividedBy(new BigNumber(10).pow(decimals))), new BigNumber(0));
         const supplyPercentage = totalBalance.dividedBy(totalSupply).multipliedBy(100);
         console.log(`Total team balance: ${totalBalance.toString()}, Supply percentage: ${supplyPercentage.toFixed(2)}%`);
@@ -204,7 +260,6 @@ class SupplyTracker {
         await this.bot.sendMessage(tracker.chatId, message);
         console.log(`Notification sent for ${tracker.trackType} of ${tracker.ticker}: ${message}`);
     }
-
 }
 
 module.exports = SupplyTracker;

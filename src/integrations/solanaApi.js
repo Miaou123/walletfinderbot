@@ -1,6 +1,6 @@
 const { Connection, PublicKey } = require('@solana/web3.js');
-const config = require('../utils/config');
-const { rateLimitedAxios } = require('../utils/rateLimiter');
+const config = require('../config/config');
+const HeliusRateLimiter = require('../utils/rateLimiters/heliusRateLimiter');
 const ApiCallCounter = require('../utils/ApiCallCounter');
 
 class SolanaApi {
@@ -12,46 +12,39 @@ class SolanaApi {
     this.connection = new Connection(this.heliusUrl, 'confirmed');
   }
 
-  async callHeliusApi(method, params, mainContext = 'default', subContext = null) {
+  async callHelius(method, params, apiType = 'rpc', mainContext = 'default', subContext = null) {
     try {
-      ApiCallCounter.incrementCall(method, mainContext, subContext);
-      const response = await rateLimitedAxios({
+      ApiCallCounter.incrementCall('Helius', method, mainContext, subContext);
+      const response = await HeliusRateLimiter.rateLimitedAxios({
         method: 'post',
         url: this.heliusUrl,
         data: {
           jsonrpc: '2.0',
-          id: 'helius-api-call',
+          id: 'helius-call',
           method: method,
           params: params
-        }
-      }, true);
+        },
+        timeout: 30000
+      }, apiType);
+
       if (!response.data || !response.data.result) {
-        console.error(`Unexpected response structure from Helius API for method ${method}:`, response.data);
+        console.error(`Unexpected response structure from Helius for method ${method}:`, response.data);
         return null;
       }
       return response.data.result;
     } catch (error) {
-      console.error(`Error calling Helius API method ${method}:`, error);
+      console.error(`Error calling Helius method ${method}:`, error);
       throw error;
     }
   }
 
-  async getBalance(address, mainContext = 'default', subContext = null) {
-    const result = await this.callHeliusApi('getBalance', [address], mainContext, subContext);
-    if (result === null || result.value === undefined) {
-      console.error(`Unexpected result for getBalance of address ${address}:`, result);
-      return null;
-    }
-    return result;
-  }
-
   async getAssetsByOwner(ownerAddress, page = 1, limit = 1000, showFungible = true, mainContext = 'default', subContext = null) {
-    const result = await this.callHeliusApi('getAssetsByOwner', {
+    const result = await this.callHelius('getAssetsByOwner', {
       ownerAddress,
       page,
       limit,
       displayOptions: { showFungible }
-    }, mainContext, subContext);
+    },'api', mainContext, subContext);
     if (!result || !Array.isArray(result.items)) {
       console.error(`Unexpected result structure for getAssetsByOwner of address ${ownerAddress}:`, result);
       return { items: [], total: 0 };
@@ -79,7 +72,7 @@ class SolanaApi {
       params.cursor = cursor;
     }
     try {
-      const response = await this.callHeliusApi('getTokenAccounts', params, mainContext, subContext);
+      const response = await this.callHelius('getTokenAccounts', params, 'api',  mainContext, subContext);
       if (!response || !Array.isArray(response.token_accounts)) {
         console.error(`Unexpected response structure from getTokenAccounts for mint ${mint}:`, response);
         return { token_accounts: [], cursor: null };
@@ -94,8 +87,21 @@ class SolanaApi {
     }
   }
 
+  async getTokenAccountsByOwner(walletAddress, tokenAddress, mainContext = 'default', subContext = null) {
+    const result = await this.callHelius('getTokenAccountsByOwner', [
+      walletAddress,
+      { mint: tokenAddress },
+      { encoding: 'jsonParsed' }
+    ], 'rpc', mainContext, subContext);
+    if (!result || !Array.isArray(result.value)) {
+      console.error(`Unexpected result for getTokenAccountsByOwner for wallet ${walletAddress} and token ${tokenAddress}:`, result);
+      return [];
+    }
+    return result.value;
+  }
+
   async getTokenLargestAccounts(tokenMint, mainContext = 'default', subContext = null) {
-    const response = await this.callHeliusApi('getTokenLargestAccounts', [tokenMint], mainContext, subContext);
+    const response = await this.callHelius('getTokenLargestAccounts', [tokenMint], 'rpc', mainContext, subContext);
     if (!response || !Array.isArray(response.value)) {
       console.error(`Invalid response for getTokenLargestAccounts of token: ${tokenMint}`, response);
       return { value: [] };
@@ -104,7 +110,7 @@ class SolanaApi {
   }
 
   async getSignaturesForAddress(address, options = { limit: 1000 }, mainContext = 'default', subContext = null) {
-    const result = await this.callHeliusApi('getSignaturesForAddress', [address, options], mainContext, subContext);
+    const result = await this.callHelius('getSignaturesForAddress', [address, options], 'rpc', mainContext, subContext);
     if (!Array.isArray(result)) {
       console.error(`Unexpected result for getSignaturesForAddress of address ${address}:`, result);
       return [];
@@ -113,29 +119,25 @@ class SolanaApi {
   }
 
   async getTransaction(signature, options = { encoding: 'jsonParsed', maxSupportedTransactionVersion: 0 }, mainContext = 'default', subContext = null) {
-    const result = await this.callHeliusApi('getTransaction', [signature, options], mainContext, subContext);
+    const result = await this.callHelius('getTransaction', [signature, options], 'rpc', mainContext, subContext);
     if (!result) {
       console.error(`No transaction details found for signature ${signature}`);
       return null;
     }
     return result;
   }
-
-  async getWalletInfo(walletAddress, mainContext = 'default', subContext = null) {
-    const result = await this.callHeliusApi('getBalance', [walletAddress], mainContext, subContext);
-    if (!result || result.value === undefined) {
-      console.error(`Unexpected result for getWalletInfo of address ${walletAddress}:`, result);
+  
+  async getBalance(address, mainContext = 'default', subContext = null) {
+    const result = await this.callHelius('getBalance', [address], 'rpc', mainContext, subContext);
+    if (result === null || result.value === undefined) {
+      console.error(`Unexpected result for getBalance of address ${address}:`, result);
       return null;
     }
-    const balance = result.value / 1e9;
-    return {
-      address: walletAddress,
-      solanaBalance: balance,
-    };
+    return result;
   }
 
   async getTokenSupply(tokenAddress, mainContext = 'default', subContext = null) {
-    const result = await this.callHeliusApi('getTokenSupply', [tokenAddress], mainContext, subContext);
+    const result = await this.callHelius('getTokenSupply', [tokenAddress], 'rpc', mainContext, subContext);
     if (!result || result.value === undefined) {
       console.error(`Unexpected result for getTokenSupply of token ${tokenAddress}:`, result);
       return null;
@@ -143,21 +145,8 @@ class SolanaApi {
     return result;
   }
 
-  async getTokenAccountsByOwner(walletAddress, tokenAddress, mainContext = 'default', subContext = null) {
-    const result = await this.callHeliusApi('getTokenAccountsByOwner', [
-      walletAddress,
-      { mint: tokenAddress },
-      { encoding: 'jsonParsed' }
-    ], mainContext, subContext);
-    if (!result || !Array.isArray(result.value)) {
-      console.error(`Unexpected result for getTokenAccountsByOwner for wallet ${walletAddress} and token ${tokenAddress}:`, result);
-      return [];
-    }
-    return result.value;
-  }
-  
   async getAccountInfo(address, config = { encoding: 'jsonParsed' }, mainContext = 'default', subContext = null) {
-    const response = await this.callHeliusApi('getAccountInfo', [address, config], mainContext, subContext);
+    const response = await this.callHelius('getAccountInfo', [address, config], 'rpc', mainContext, subContext);
     if (!response || response.value === undefined) {
       console.error(`Invalid response for getAccountInfo of address: ${address}`, response);
       return null;

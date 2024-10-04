@@ -1,93 +1,113 @@
-const config = require('../utils/config');
-const { getAssetsForMultipleWallets } = require('../tools/walletValueCalculator');
+const { fetchMultipleWallets } = require('../tools/walletChecker');
 const { getSolanaApi } = require('../integrations/solanaApi');
 
 const analyzeEarlyBuyers = async (tokenAddress, minPercentage = 1, timeFrameHours = 1, tokenInfo, mainContext = 'default') => {
-  console.log(`Starting analysis for early buyers of ${tokenAddress}...`);
-  console.log(`Minimum percentage: ${minPercentage}%`);
-  console.log(`Time frame: ${timeFrameHours} hours`);
+  const solanaApi = getSolanaApi();
+  console.log(`Starting analysis for ${tokenAddress}`);
 
   const { signatures, apiCalls, totalTransactions } = await getTokenSignatures(tokenAddress, mainContext);
-  console.log(`Retrieved ${signatures.length} signatures in ${apiCalls} API calls.`);
+  console.log(`Retrieved ${signatures.length} signatures in ${apiCalls} API calls`);
 
   if (signatures.length === 0) {
-    console.log("No signatures found for the given token address.");
+    console.log("No signatures found");
     return { earlyBuyers: [] };
   }
 
   const creationTime = signatures[signatures.length - 1].blockTime;
-  console.log(`Token creation time: ${new Date(creationTime * 1000).toISOString()}`);
-
   const endTime = creationTime + (timeFrameHours * 3600);
-  console.log(`End time for early buyers: ${new Date(endTime * 1000).toISOString()}`);
+  console.log(`Token creation: ${new Date(creationTime * 1000).toISOString()}`);
+  console.log(`End time: ${new Date(endTime * 1000).toISOString()}`);
 
   const minAmountRaw = BigInt(Math.floor((tokenInfo.totalSupply * minPercentage / 100) * Math.pow(10, tokenInfo.decimals)));
-  console.log(`Minimum amount (raw): ${minAmountRaw}`);
 
   const earlyBuyers = new Map();
+  let reachedEndTime = false;
+  const batchSize = 20;
 
+  // Process signatures in reverse order (oldest to newest)
   signatures.reverse();
 
-  for (const sig of signatures) {
-    if (sig.blockTime > endTime) {
-      console.log(`Reached ${timeFrameHours} hour(s) after token creation. Stopping early buyers detection.`);
-      break;
-    }
+  for (let i = 0; i < signatures.length && !reachedEndTime; i += batchSize) {
+    const batch = signatures.slice(i, i + batchSize);
+    console.log(`Processing batch ${i / batchSize + 1}`);
 
-    try {
-      const solanaApi = getSolanaApi();
-      const txDetails = await solanaApi.getTransaction(sig.signature, { encoding: 'jsonParsed', maxSupportedTransactionVersion: 0 }, mainContext, 'getTransaction');
-      const tokenChange = calculateTokenChange(txDetails, tokenAddress);
+    const batchPromises = batch.map(sig => processSingleTransaction(sig, tokenAddress, endTime, minAmountRaw, earlyBuyers, mainContext));
+    const batchResults = await Promise.all(batchPromises);
 
-      if (tokenChange > 0) {  // Only consider positive changes (buys)
-        const buyer = txDetails.transaction.message.accountKeys[0].pubkey;
-        const currentAmount = earlyBuyers.get(buyer)?.amount || 0n;
-        const newAmount = currentAmount + tokenChange;
-
-        earlyBuyers.set(buyer, {
-          amount: newAmount,
-          transactions: [
-            ...(earlyBuyers.get(buyer)?.transactions || []),
-            {
-              signature: sig.signature,
-              amount: tokenChange,
-              timestamp: new Date(txDetails.blockTime * 1000).toISOString()
-            }
-          ]
-        });
-
-        if (newAmount >= minAmountRaw && currentAmount < minAmountRaw) {
-          console.log(`Early buyer detected: ${buyer}, Cumulative Amount: ${newAmount.toString()}`);
-        }
-      }
-    } catch (error) {
-      console.error(`Error analyzing transaction ${sig.signature}:`, error);
+    if (batchResults.some(result => result.reachedEndTime)) {
+      console.log('Reached endTime, stopping analysis');
+      reachedEndTime = true;
     }
   }
 
-  // Filter out buyers who didn't reach the minimum amount
   const qualifiedEarlyBuyers = new Map(
     Array.from(earlyBuyers.entries()).filter(([_, data]) => data.amount >= minAmountRaw)
   );
 
-  console.log(`\nDetected ${qualifiedEarlyBuyers.size} qualified early buyers for ${tokenAddress}`);
+  console.log(`Detected ${qualifiedEarlyBuyers.size} qualified early buyers`);
 
-  // Analyse des wallets en parallèle
-  const earlyBuyersArray = Array.from(qualifiedEarlyBuyers, ([buyer, data]) => ({ buyer, ...data }));
-  const walletAddresses = earlyBuyersArray.map(buyer => buyer.buyer);
-  const walletAnalysis = await getAssetsForMultipleWallets(walletAddresses, mainContext, 'getAssets');
+  // Use fetchMultipleWallets instead of getAssetsForMultipleWallets
+  const walletAddresses = Array.from(qualifiedEarlyBuyers.keys());
+  const walletAnalysis = await fetchMultipleWallets(walletAddresses, 5, mainContext, 'fetchEarlyBuyers');
 
-  // Combiner les informations des early buyers avec l'analyse des wallets
-  const combinedResults = earlyBuyersArray.map(buyer => ({
-    ...buyer,
-    walletInfo: walletAnalysis[buyer.buyer]
-  }));
+  const combinedResults = Array.from(qualifiedEarlyBuyers, ([buyer, data]) => {
+    const walletData = walletAnalysis.find(w => w.wallet === buyer);
+    return {
+      buyer,
+      ...data,
+      walletInfo: walletData ? walletData.data.data : null
+    };
+  });
 
   return { 
     earlyBuyers: combinedResults,
     tokenInfo 
   };
 };
+
+async function processSingleTransaction(sig, tokenAddress, endTime, minAmountRaw, earlyBuyers, mainContext) {
+  if (sig.blockTime > endTime) {
+    return { reachedEndTime: true };
+  }
+
+  try {
+    const solanaApi = getSolanaApi();
+    const txDetails = await solanaApi.getTransaction(sig.signature, { encoding: 'jsonParsed', maxSupportedTransactionVersion: 0 }, mainContext, 'getTransaction');
+    const tokenChange = calculateTokenChange(txDetails, tokenAddress);
+
+    if (tokenChange > 0) {
+      const buyer = txDetails.transaction.message.accountKeys[0].pubkey;
+      updateEarlyBuyers(earlyBuyers, buyer, tokenChange, sig, txDetails.blockTime, minAmountRaw);
+    }
+  } catch (error) {
+    console.error(`Error processing ${sig.signature}`);
+  }
+
+  return { reachedEndTime: false };
+}
+
+function updateEarlyBuyers(earlyBuyers, buyer, tokenChange, sig, blockTime, minAmountRaw) {
+  const currentData = earlyBuyers.get(buyer) || { amount: 0n, transactions: [] };
+  const newAmount = currentData.amount + tokenChange;
+
+  const updatedData = {
+    amount: newAmount,
+    transactions: [
+      ...currentData.transactions,
+      {
+        signature: sig.signature,
+        amount: tokenChange,
+        timestamp: new Date(blockTime * 1000).toISOString()
+      }
+    ]
+  };
+
+  earlyBuyers.set(buyer, updatedData);
+
+  if (newAmount >= minAmountRaw && currentData.amount < minAmountRaw) {
+    console.log(`New early buyer: ${buyer.slice(0, 8)}... Amount: ${newAmount.toString()}`);
+  }
+}
 
 async function getTokenSignatures(tokenAddress, mainContext) {
   const solanaApi = getSolanaApi();
@@ -116,10 +136,6 @@ async function getTokenSignatures(tokenAddress, mainContext) {
       lastSignature = newSignatures[newSignatures.length - 1].signature;
       const lastTimestamp = new Date(newSignatures[newSignatures.length - 1].blockTime * 1000).toISOString();
       
-      console.log(`API call ${apiCalls}: Fetched ${newSignatures.length} signatures. Total: ${signatures.length}`);
-      console.log(`Last signature: ${lastSignature}`);
-      console.log(`Last timestamp: ${lastTimestamp}`);
-      
       const oldestAllowedTimestamp = new Date('2020-01-01').getTime();
       if (newSignatures[newSignatures.length - 1].blockTime * 1000 < oldestAllowedTimestamp) {
         console.log("Reached transactions older than the allowed date. Stopping.");
@@ -131,7 +147,6 @@ async function getTokenSignatures(tokenAddress, mainContext) {
     }
   }
   
-  console.log(`Total API calls: ${apiCalls}`);
   console.log(`Total transactions fetched: ${totalTransactions}`);
   
   return { signatures, apiCalls, totalTransactions };

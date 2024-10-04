@@ -1,14 +1,14 @@
 const BigNumber = require('bignumber.js');
-const { rateLimitedDexScreenerAxios } = require('../utils/dsrateLimiter');
 const { EXCLUDED_ADDRESSES, isExcludedAddress, addExcludedAddress } = require('../utils/excludedAddresses');
 const { getSolanaApi } = require('../integrations/solanaApi');
+const { getDexScreenerApi } = require('../integrations/dexscreenerApi');
 const NodeCache = require('node-cache');
 
-const DEXSCREENER_URL = 'https://api.dexscreener.com/latest/dex/tokens';
 const TIMEOUT = 2 * 60 * 1000;
 
 const solPriceCache = new NodeCache({ stdTTL: 900 });
 const solanaApi = getSolanaApi();
+const dexScreenerApi = getDexScreenerApi();
 
 const getSolPrice = async () => {
   try {
@@ -17,20 +17,14 @@ const getSolPrice = async () => {
       return new BigNumber(solPrice);
     }
 
-    const solPriceResponse = await rateLimitedDexScreenerAxios({
-      method: 'get',
-      url: `${DEXSCREENER_URL}/So11111111111111111111111111111111111111112`
-    });
+    const SOL_ADDRESS = 'So11111111111111111111111111111111111111112';
+    const solPriceData = await dexScreenerApi.getMultipleTokenPrices([SOL_ADDRESS]);
 
-    if (!solPriceResponse.data || !solPriceResponse.data.pairs || solPriceResponse.data.pairs.length === 0) {
+    if (!solPriceData || !solPriceData[SOL_ADDRESS]) {
       throw new Error('Unexpected SOL price response structure');
     }
 
-    const bestPair = solPriceResponse.data.pairs.reduce((best, current) => {
-      return (current.liquidity?.usd || 0) > (best.liquidity?.usd || 0) ? current : best;
-    }, solPriceResponse.data.pairs[0]);
-
-    solPrice = bestPair.priceUsd;
+    solPrice = solPriceData[SOL_ADDRESS].priceUsd;
     
     if (!solPrice) {
       throw new Error('Unable to find valid SOL price');
@@ -40,7 +34,6 @@ const getSolPrice = async () => {
     return new BigNumber(solPrice);
   } catch (error) {
     console.error('Error fetching SOL price:', error);
-    console.error('Error details:', error.response?.data);
     return new BigNumber(0);
   }
 };
@@ -100,7 +93,7 @@ const getAssetsForMultipleWallets = async (walletAddresses, mainContext = 'defau
 
       const poolCheck = await isLiquidityPool(address);
       if (poolCheck.isPool) {
-        console.log(`${address} is a liquidity pool`);
+        //console.log(`${address} is a liquidity pool`);
         await addExcludedAddress(address, 'liquidityPool');
         results[address] = { isPool: true, poolName: poolCheck.poolName };
         return;
@@ -113,15 +106,15 @@ const getAssetsForMultipleWallets = async (walletAddresses, mainContext = 'defau
           allItems = allItems.concat(assetsResponse.items);
           hasMore = assetsResponse.items.length === ITEMS_PER_PAGE;
           page++;
-          console.log(`Retrieved ${assetsResponse.items.length} items, total: ${allItems.length}`);
+         // console.log(`Retrieved ${assetsResponse.items.length} items, total: ${allItems.length}`);
         } else {
           hasMore = false;
-          console.log(`No more items for ${address}`);
+         // console.log(`No more items for ${address}`);
         }
       }
 
       if (allItems.length > MAX_UNIQUE_TOKENS) {
-        console.log(`${address} exceeded MAX_UNIQUE_TOKENS, marking as bot`);
+      // console.log(`${address} exceeded MAX_UNIQUE_TOKENS, marking as bot`);
         await addExcludedAddress(address, 'bot');
         results[address] = { isBot: true };
         return;
@@ -152,7 +145,7 @@ const getAssetsForMultipleWallets = async (walletAddresses, mainContext = 'defau
         mint: 'SOL'
       });
 
-      console.log(`Processing ${allItems.length} items for ${address}`);
+      //console.log(`Processing ${allItems.length} items for ${address}`);
       allItems.forEach(asset => {
         if (asset.interface === 'FungibleToken' && asset.token_info) {
           let tokenInfo = {
@@ -188,7 +181,7 @@ const getAssetsForMultipleWallets = async (walletAddresses, mainContext = 'defau
         }
       });
 
-      console.log(`Processed ${tokenInfos.length} tokens for ${address}`);
+     // console.log(`Processed ${tokenInfos.length} tokens for ${address}`);
       results[address] = {
         tokenInfos: tokenInfos,
         totalValue: totalValue.toString(),
@@ -212,7 +205,7 @@ const getAssetsForMultipleWallets = async (walletAddresses, mainContext = 'defau
   const BATCH_SIZE = 10;
   for (let i = 0; i < filteredAddresses.length; i += BATCH_SIZE) {
     const batch = filteredAddresses.slice(i, i + BATCH_SIZE);
-    console.log(`Processing batch ${i / BATCH_SIZE + 1} of ${Math.ceil(filteredAddresses.length / BATCH_SIZE)}`);
+    //console.log(`Processing batch ${i / BATCH_SIZE + 1} of ${Math.ceil(filteredAddresses.length / BATCH_SIZE)}`);
     await processWalletBatch(batch);
     if (i + BATCH_SIZE < filteredAddresses.length) {
       await new Promise(resolve => setTimeout(resolve, 1000)); 
@@ -223,7 +216,7 @@ const getAssetsForMultipleWallets = async (walletAddresses, mainContext = 'defau
   if (uniqueTokensWithoutPrice.size > 0) {
     console.log('Fetching prices from DexScreener');
     const dexScreenerPrices = await fetchDexScreenerPrices(Array.from(uniqueTokensWithoutPrice));
-    console.log(`Retrieved prices for ${Object.keys(dexScreenerPrices).length} tokens`);
+    //console.log(`Retrieved prices for ${Object.keys(dexScreenerPrices).length} tokens`);
     
     for (const address of filteredAddresses) {
       const wallet = results[address];
@@ -258,31 +251,31 @@ const chunkArray = (arr, size) => {
 };
 
 const fetchDexScreenerPrices = async (tokenAddresses, chunkSize = 10) => {
+  //console.log(`Starting fetchDexScreenerPrices with ${tokenAddresses.length} tokens`);
   const tokenChunks = chunkArray(tokenAddresses, chunkSize);
+ // console.log(`Split into ${tokenChunks.length} chunks of size ${chunkSize}`);
+  
   const prices = {};
+  const dexScreenerApi = getDexScreenerApi();
 
-  for (const chunk of tokenChunks) {
+  for (let i = 0; i < tokenChunks.length; i++) {
+    const chunk = tokenChunks[i];
+   // console.log(`Processing chunk ${i + 1}/${tokenChunks.length}: ${chunk.join(',')}`);
+    
     try {
-      const response = await rateLimitedDexScreenerAxios({
-        method: 'get',
-        url: `${DEXSCREENER_URL}/${chunk.join(',')}`
-      });
+      //console.log(`Calling getMultipleTokenPrices for chunk ${i + 1}`);
+      const chunkPrices = await dexScreenerApi.getMultipleTokenPrices(chunk);
+      //console.log(`Received prices for chunk ${i + 1}:`, chunkPrices);
       
-      if (response.data && response.data.pairs) {
-        response.data.pairs.forEach(pair => {
-          if (pair.chainId === 'solana') {
-            prices[pair.baseToken.address] = {
-              priceUsd: pair.priceUsd,
-              symbol: pair.baseToken.symbol
-            };
-          }
-        });
-      }
+      Object.assign(prices, chunkPrices);
+     // console.log(`Updated prices object. Current keys: ${Object.keys(prices).join(', ')}`);
     } catch (error) {
-      console.error(`Error fetching prices for chunk: ${chunk.join(',')}`, error);
+      // console.error(`Error fetching prices for chunk ${i + 1}: ${chunk.join(',')}`, error);
+      // console.error('Full error object:', JSON.stringify(error, Object.getOwnPropertyNames(error)));
     }
   }
 
+  //console.log(`Finished fetchDexScreenerPrices. Total prices fetched: ${Object.keys(prices).length}`);
   return prices;
 };
 

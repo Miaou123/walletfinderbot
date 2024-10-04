@@ -1,4 +1,4 @@
-const { formatNumber } = require('./walletAnalyzerFormatter');
+const { formatNumber, getEmojiForPnl } = require('./generalFormatters');
 
 const sendFormattedCrossAnalysisMessage = async (bot, chatId, filteredHolders, contractAddresses, tokenInfos) => {
     if (!Array.isArray(filteredHolders) || filteredHolders.length === 0) {
@@ -12,49 +12,44 @@ const sendFormattedCrossAnalysisMessage = async (bot, chatId, filteredHolders, c
     message += `Total common holders: ${filteredHolders.length}\n\n`;
 
     const walletMessages = filteredHolders.map((wallet, index) => 
-        formatCrossAnalysisWallet(wallet, contractAddresses, index + 1)
+        formatCrossAnalysisWallet(wallet, contractAddresses, tokenInfos, index + 1)
     );
 
     const validMessages = walletMessages.filter(msg => msg !== '');
     message += validMessages.join('\n');
 
-    // Use sendLongMessage to send the message, which will handle splitting if necessary
     await bot.sendLongMessage(chatId, message, { parse_mode: 'HTML', disable_web_page_preview: true });
 };
 
-const formatCrossAnalysisWallet = (wallet, contractAddresses, rank) => {
-    if (!wallet || !wallet.tokenInfos) {
+const formatCrossAnalysisWallet = (wallet, contractAddresses, tokenInfos, rank) => {
+    if (!wallet) {
         console.error('Invalid wallet data:', wallet);
         return '';
     }
 
     const shortAddress = `${wallet.address.slice(0, 4)}...${wallet.address.slice(-4)}`;
-    let result = `${rank} - <a href="https://solscan.io/account/${wallet.address}">${shortAddress}</a>\n`;
-
-    const relevantTokens = wallet.tokenInfos.filter(token => 
-        contractAddresses.includes(token.mint)
-    );
-
-    if (relevantTokens.length === 0) {
-        console.warn('No relevant tokens found for wallet:', wallet.address);
-        return '';
-    }
-
-    const combinedValueDetails = relevantTokens.map(token => 
-        `$${formatNumber(parseFloat(token.value))} ${token.symbol}`
-    ).join(', ');
-
-    result += `├ 💰 Combined Value: $${formatNumber(wallet.combinedValue)} (${combinedValueDetails})\n`;
+    const pnlEmoji = getEmojiForPnl(wallet.walletCheckerData?.total_value || 0);
     
-    if (wallet.totalValue) {
-        result += `├ 💲 Port: $${formatNumber(parseFloat(wallet.totalValue))}\n`;
+    let result = `${rank}. <a href="https://solscan.io/account/${wallet.address}">${shortAddress}</a> ${pnlEmoji} <a href="https://gmgn.ai/sol/address/${wallet.address}">gmgn</a>/<a href="https://app.cielo.finance/profile/${wallet.address}/pnl/tokens">cielo</a>\n`;
+
+    if (wallet.walletCheckerData) {
+        const { total_value, sol_balance, realized_profit_30d, unrealized_profit, winrate } = wallet.walletCheckerData;
+        const winratePercentage = (winrate * 100).toFixed(2);
+
+        result += `├ 💼 Port: $${formatNumber(total_value, 0)} (SOL: ${formatNumber(sol_balance, 2)})\n`;
+        result += `├ 💰 P/L (30d): $${formatNumber(realized_profit_30d, 0)} 📈 uP/L: $${formatNumber(unrealized_profit, 0)}\n`;
+        result += `├ 📊 Winrate (30d): ${winratePercentage}%\n`;
     }
 
-    if (wallet.solBalance) {
-        result += `└ 💳 Sol: ${wallet.solBalance}\n`;
-    }
+    result += `└ 🔗 Combined Value: $${formatNumber(wallet.combinedValue)} (`;
+    result += contractAddresses.map(address => {
+        const tokenInfo = tokenInfos.find(t => t.address === address);
+        const value = wallet[`value_${address}`] || 0;
+        return `${tokenInfo.symbol}: $${formatNumber(value)}`;
+    }).join(', ');
+    result += ')\n';
 
-    return result + '\n';
+    return result;
 };
 
 module.exports = { 

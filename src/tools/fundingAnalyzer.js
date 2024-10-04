@@ -17,10 +17,11 @@ async function analyzeFunding(wallets, mainContext, subContext) {
         const batchResults = await Promise.all(batch.map(wallet => analyzeWalletFunding(wallet, mainContext, subContext)));
         analyzedWallets.push(...batchResults);
     }
-    const groupedWallets = groupWalletsByFunder(analyzedWallets);
-    console.log(`Funding analysis completed. Found ${groupedWallets.length} groups of wallets with common funders`);
-    return { groupedWallets };
+    
+    console.log(`Funding analysis completed for ${analyzedWallets.length} wallets`);
+    return analyzedWallets;
 }
+
 
 async function analyzeWalletFunding(wallet, mainContext, subContext) {
     console.log(`Analyzing funding for wallet: ${wallet.address}`);
@@ -101,22 +102,6 @@ function analyzeTxForFunder(txDetails, recipientAddress) {
 
     console.log('No relevant transfer or balance change found in transaction');
     return null;
-}
-
-function groupWalletsByFunder(walletAnalysis) {
-    console.log(`Grouping ${walletAnalysis.length} wallets by funder`);
-    const groups = {};
-    walletAnalysis.forEach(wallet => {
-        if (wallet.funderAddress) {
-            if (!groups[wallet.funderAddress]) {
-                groups[wallet.funderAddress] = [];
-            }
-            groups[wallet.funderAddress].push(wallet);
-        }
-    });
-    const filteredGroups = Object.entries(groups).filter(([_, wallets]) => wallets.length >= 3);
-    console.log(`Found ${filteredGroups.length} groups with 3 or more wallets`);
-    return filteredGroups;
 }
 
 module.exports = { analyzeFunding };

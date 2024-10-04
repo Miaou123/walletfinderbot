@@ -19,6 +19,12 @@ const formatNumber = (number, decimals = 1) => {
   formattedNumber = formattedNumber.replace(/\.0+([kM])?$/, '$1'); 
   return `<code>${formattedNumber}</code>`;
 };
+
+
+function escapeMarkdown(text) {
+  const specialChars = ['_', '*', '[', ']', '(', ')', '~', '`', '>', '#', '+', '-', '=', '|', '{', '}', '.', '!'];
+  return specialChars.reduce((acc, char) => acc.replace(new RegExp('\\' + char, 'g'), '\\' + char), text);
+}
   
   const formatAge = (pairCreatedAt) => {
     if (!pairCreatedAt) return 'N/A';
@@ -33,5 +39,17 @@ const formatNumber = (number, decimals = 1) => {
       return `${Math.round(ageInMinutes / 43200)}mo`;
     }
   };
+
+function truncateAddress(address, start = 5, end = 4) {
+    return `${address.slice(0, start)}...${address.slice(-end)}`;
+}
+
+function getEmojiForPnl(totalValue) {
+  if (totalValue > 100000) return '🐳';
+  if (totalValue > 50000) return '🦈';
+  if (totalValue > 10000) return '🐬';
+  if (totalValue > 1000) return '🐟';
+    return '🦐'; 
+}
   
-  module.exports = { formatNumber, formatAge};
+  module.exports = { formatNumber, formatAge, truncateAddress, getEmojiForPnl};

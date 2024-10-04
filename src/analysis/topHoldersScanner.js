@@ -3,7 +3,8 @@ const { getDexScreenerApi } = require('../integrations/dexscreenerApi');
 const { getAssetsForMultipleWallets } = require('../tools/walletValueCalculator');
 const { checkInactivityPeriod } = require('../tools/inactivityPeriod');
 const { getHolders, getTopHolders } = require('../tools/getHolders');
-const config = require('../utils/config');
+const { fetchMultipleWallets } = require('../tools/walletChecker');
+const config = require('../config/config');
 const BigNumber = require('bignumber.js');
 
 async function scanToken(tokenAddress, requestedHolders = 10, trackSupply = false, mainContext = 'default') {
@@ -17,12 +18,10 @@ async function scanToken(tokenAddress, requestedHolders = 10, trackSupply = fals
   // Afficher les informations du token de manière structurée
   console.log('Token Information:');
   console.log(JSON.stringify(tokenInfo, null, 2));
-  
 
-  // 2. Récupérer les détenteurs (au moins 20 ou le nombre demandé si supérieur)
-  const holdersToFetch = Math.max(20, requestedHolders);
-  console.log(`Fetching top ${holdersToFetch} holders`);
-  const topHolders = await getTopHolders(tokenAddress, holdersToFetch, mainContext, 'getTopHolders');
+  // 2. Récupérer les détenteurs demandés
+  console.log(`Fetching top ${requestedHolders} holders`);
+  const topHolders = await getTopHolders(tokenAddress, requestedHolders, mainContext, 'getTopHolders');
   console.log(`Received ${topHolders.length} top holders`);
 
   // 3. Analyser les portefeuilles
@@ -106,19 +105,21 @@ async function scanToken(tokenAddress, requestedHolders = 10, trackSupply = fals
   });
   console.log(`Filtered wallets: ${filteredWallets.length}`);
 
-  // 6. Prendre le nombre demandé de portefeuilles ou tous si moins que demandé
-  const finalWallets = filteredWallets.slice(0, requestedHolders);
-  console.log(`Final number of wallets to display: ${finalWallets.length}`);
+  // 6. Process all wallets with walletChecker
+  if (filteredWallets.length > 0) {
+    console.log(`Processing ${filteredWallets.length} wallets with walletChecker`);
+    await fetchMultipleWallets(filteredWallets.map(w => w.address), 5, mainContext, 'scanToken');
+  }
 
   // 7. Calculer les statistiques globales
-  const totalSupplyControlled = finalWallets.reduce((sum, wallet) => sum + parseFloat(wallet.supplyPercentage || 0), 0);
-  const averagePortfolioValue = finalWallets.length > 0 
-    ? finalWallets.reduce((sum, wallet) => sum + parseFloat(wallet.portfolioValue || 0), 0) / finalWallets.length
+  const totalSupplyControlled = filteredWallets.reduce((sum, wallet) => sum + parseFloat(wallet.supplyPercentage || 0), 0);
+  const averagePortfolioValue = filteredWallets.length > 0 
+    ? filteredWallets.reduce((sum, wallet) => sum + parseFloat(wallet.portfolioValue || 0), 0) / filteredWallets.length
     : 0;
-  const notableAddresses = finalWallets.filter(wallet => wallet.isInteresting).length;
+  const notableAddresses = filteredWallets.filter(wallet => wallet.isInteresting).length;
 
   // 8. Formater le résultat
-  const result = formatScanResult(tokenInfo, finalWallets, totalSupplyControlled, averagePortfolioValue, notableAddresses, tokenAddress);
+  const result = formatScanResult(tokenInfo, filteredWallets, totalSupplyControlled, averagePortfolioValue, notableAddresses, tokenAddress);
 
   // 9. Si le tracking est demandé, retourner les informations nécessaires
   if (trackSupply) {
@@ -130,7 +131,7 @@ async function scanToken(tokenAddress, requestedHolders = 10, trackSupply = fals
         totalSupplyControlled,
         totalSupply: tokenInfo.totalSupply,
         decimals: tokenInfo.decimals,
-        topHoldersWallets: finalWallets.map(wallet => ({
+        topHoldersWallets: filteredWallets.map(wallet => ({
           address: wallet.address,
           percentage: parseFloat(wallet.supplyPercentage)
         }))
@@ -158,34 +159,37 @@ function formatScanResult(tokenInfo, finalWallets, totalSupplyControlled, averag
   result += `<strong>Holders Info</strong>\n\n`;
 
   finalWallets.forEach((wallet, index) => {
-    const rank = index + 1;
-    const emoji = getHoldingEmoji(wallet);
-    result += `${rank} - <a href="https://solscan.io/account/${wallet.address}">${(wallet.address.substring(0, 6))}...${(wallet.address.slice(-4))}</a> → (${(wallet.supplyPercentage)}%) ${emoji}\n`;
-    
-    if (wallet.isInteresting) {
-      result += `├ ❗️${wallet.category}\n`;
-    }
-    
-    result += `├ 💳 Sol: ${wallet.solBalance}\n`;
-    result += `└ 💲 Port: $${formatNumber(parseFloat(wallet.portfolioValue))}`;
-
-    if (wallet.tokenInfos && wallet.tokenInfos.length > 0) {
-      const topTokens = wallet.tokenInfos
-        .filter(token => token.symbol !== 'SOL' && token.valueNumber >= 1000)
-        .sort((a, b) => b.valueNumber - a.valueNumber)
-        .slice(0, 3);
-
-      if (topTokens.length > 0) {
-        result += ` (${topTokens.map(token => 
-          `<a href="https://dexscreener.com/solana/${token.mint}?maker=${wallet.address}">${token.symbol}</a> $${formatNumber(token.valueNumber)}`
-        ).join(', ')})`;
-      }
-    }
-
-    result += '\n\n';
+    result += formatWalletInfo(wallet, index);
   });
 
   return result;
+}
+
+function formatWalletInfo(wallet, index) {
+  let info = `${index + 1} - <a href="https://solscan.io/account/${wallet.address}">${(wallet.address.substring(0, 6))}...${(wallet.address.slice(-4))}</a> → (${(wallet.supplyPercentage)}%) ${getHoldingEmoji(wallet)}\n`;
+  
+  if (wallet.isInteresting) {
+    info += `├ ❗️${wallet.category}\n`;
+  }
+  
+  info += `├ 💳 Sol: ${wallet.solBalance}\n`;
+  info += `└ 💲 Port: $${formatNumber(parseFloat(wallet.portfolioValue))}`;
+
+  if (wallet.tokenInfos && wallet.tokenInfos.length > 0) {
+    const topTokens = wallet.tokenInfos
+      .filter(token => token.symbol !== 'SOL' && token.valueNumber >= 1000)
+      .sort((a, b) => b.valueNumber - a.valueNumber)
+      .slice(0, 3);
+
+    if (topTokens.length > 0) {
+      info += ` (${topTokens.map(token => 
+        `<a href="https://dexscreener.com/solana/${token.mint}?maker=${wallet.address}">${token.symbol}</a> $${formatNumber(token.valueNumber)}`
+      ).join(', ')})`;
+    }
+  }
+
+  info += '\n\n';
+  return info;
 }
 
 function formatNumber(num) {

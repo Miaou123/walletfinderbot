@@ -18,28 +18,15 @@ faire des options free et pro de chaque tool avec des version free qui utilisent
 teamsupply analyzer: Rajouter une fonction pour calculer combien la team a sell de tokens et combien de fric ils se sont fait et ajouter une option pour tracker les team wallets (en checkant avec les wallets qui ont fund si ils ont fund des wallets qui ont sell etc)
 
 
-A modifier plus tard:
-Rebosser sur le supply tracker
-Pour les early buyers, pirb bot le fait donc a voir si y'a quelque chose de mieux a faire ou pas vraiment
+Améliorations:
+Mettre winston partout
+Utiliser de la gestion de cache partout
+Passer tout en ES module
 La partie qui vérifie si un wallet est une pool de liquidité ou un bot dans walletvaluecalculator ne fonctionne pas bien
-La partie qui décide quels wallets appartiennent a la team avec le funding amène des erreurs (vu que par exemple il y a les addresses de binance etc)
-Cnetraliser tout les calls helius et solweb3j dans solanaApi et garder les dernier calls en mémoire (cache ou autre) pour éviter de faire plusieurs fois les même actions
+implémenter des test unitaires
+utiliser gmgn partout 
+séparer commandhandlers
+bundle checker ne vérifie que la premiere transaction
+Rajouter dex paid et ptet un truc pour voir les boosts
+mettre un call walletchecker dans toutes les fonctions
 
-A faire: Rebosser sur tout/ voir si tout marche bien/ clean tout + optimiser / le tracker de call api ne foncionne pas et rajouter un timer peut etre?
-
-
-Api calls:
---- Results for scan analysis ---
-
-Total API calls for scan: 174
-Breakdown by step:
-getTokenLargestAccounts: 1 calls
-callHeliusApi: 87 calls
-getAccountInfo: 20 calls
-getBalance: 39 calls
-getAssetsByOwner: 19 calls
-getSignaturesForAddress: 8 calls
-
-2947835
-2948036
-201 (affiché 174)
