@@ -1,5 +1,5 @@
 const { getSolanaApi } = require('../integrations/solanaApi');
-const { getDexScreenerApi } = require('../integrations/dexscreenerApi');
+const dexScreenerApi = require('../integrations/dexScreenerApi');
 const { getAssetsForMultipleWallets } = require('../tools/walletValueCalculator');
 const { checkInactivityPeriod } = require('../tools/inactivityPeriod');
 const { getHolders, getTopHolders } = require('../tools/getHolders');
@@ -9,8 +9,6 @@ const BigNumber = require('bignumber.js');
 
 async function scanToken(tokenAddress, requestedHolders = 10, trackSupply = false, mainContext = 'default') {
   console.log(`Scanning token: ${tokenAddress}, requested holders: ${requestedHolders}, context: ${mainContext}`);
-
-  const dexScreenerApi = getDexScreenerApi();
 
   // 1. Récupérer les informations du token
   const tokenInfo = await dexScreenerApi.getTokenInfo(tokenAddress, mainContext);

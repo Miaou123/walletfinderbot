@@ -1,6 +1,7 @@
 const { formatNumber } = require('./walletAnalyzerFormatter');
+const { getEmojiForPnl, truncateAddress } = require('./generalFormatters');
 
-const MINIMUM_PORT_SIZE = 1000; // Valeur minimale du portefeuille en USD
+const MINIMUM_PORT_SIZE = 1000;
 
 const formatEarlyBuyersMessage = (earlyBuyers, tokenInfo, hours, coinAddress) => {
   if (earlyBuyers.length === 0) {
@@ -29,20 +30,19 @@ const formatEarlyBuyersMessage = (earlyBuyers, tokenInfo, hours, coinAddress) =>
   return message;
 };
 
-
 const formatSingleWallet = (buyer, index, tokenInfo, coinAddress) => {
   const rank = index + 1;
-  const truncatedWallet = truncateAddress(buyer.buyer);
+  const truncatedWallet = buyer.walletAddress ? truncateAddress(buyer.walletAddress) : 'Unknown Address';
   const amountFormatted = formatNumber(Number(buyer.amount) / Math.pow(10, tokenInfo.decimals));
   
-  let pnlEmoji = '❓'; // Emoji par défaut si pas d'information sur le PNL
+  let pnlEmoji = '❓';
   if (buyer.walletInfo && buyer.walletInfo.total_value) {
     pnlEmoji = getEmojiForPnl(buyer.walletInfo.total_value);
   }
 
-  let result = `${rank}. <a href="https://solscan.io/account/${buyer.buyer}">${truncatedWallet}</a> ${pnlEmoji} `;
-  result += `<a href="https://gmgn.ai/sol/address/${buyer.buyer}">gmgn</a>/`;
-  result += `<a href="https://app.cielo.finance/profile/${buyer.buyer}/pnl/tokens">cielo</a>\n`;
+  let result = `${rank}. <a href="https://solscan.io/account/${buyer.walletAddress}">${truncatedWallet}</a> ${pnlEmoji} `;
+  result += `<a href="https://gmgn.ai/sol/address/${buyer.walletAddress}">gmgn</a>/`;
+  result += `<a href="https://app.cielo.finance/profile/${buyer.walletAddressr}/pnl/tokens">cielo</a>\n`;
   
   result += `├ 🪙 Total Amount: ${amountFormatted} ${tokenInfo.symbol}\n`;
 

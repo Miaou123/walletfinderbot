@@ -1,0 +1,12 @@
+# Ranking & Statistics Endpoints
+
+## Endpoints Related to Ranking and Statistics
+| **Endpoint**                              | **Purpose / Possible Use**                                      |
+|-------------------------------------------|-----------------------------------------------------------------|
+| `/rank/sol/wallets/7d`                    | Rankings for wallets over a 7-day period                        |
+| `/rank/sol/wallets/7d/history`            | Historical data for wallet rankings                             |
+| `/rank/sol/wallets/7d/metrics`            | Wallet metrics for the last 7 days                              |
+| `/rank/sol/wallets/7d/analytics`          | Analytics for wallets over a 7-day period                       |
+| `/rank/sol/swaps/1h`                      | Swap activity ranking over the last 1 hour                      |
+| **New** `/rank/sol/wallets/monthly`       | Monthly rankings for wallets                                    |
+| **New** `/rank/sol/swaps/monthly`         | Monthly swap activity rankings                                  |

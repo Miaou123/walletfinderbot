@@ -7,6 +7,7 @@ const config = {
   CIELO_API_URL: process.env.CIELO_API_URL ? `https://api.cielo.app/${process.env.CIELO_API_URL}` : '',
   CIELO_API_KEY: process.env.CIELO_API_KEY || '',
   MONGODB_URI: process.env.MONGODB_URI || '',
+  DEFINED_API_KEY: process.env.DEFINED_API_KEY || '',
   
   // Non-sensitive configuration
   TOP_HOLDERS_COUNT: 100,

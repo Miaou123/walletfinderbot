@@ -1,14 +1,13 @@
 const BigNumber = require('bignumber.js');
 const { EXCLUDED_ADDRESSES, isExcludedAddress, addExcludedAddress } = require('../utils/excludedAddresses');
 const { getSolanaApi } = require('../integrations/solanaApi');
-const { getDexScreenerApi } = require('../integrations/dexscreenerApi');
+const dexScreenerApi = require('../integrations/dexScreenerApi');
 const NodeCache = require('node-cache');
 
 const TIMEOUT = 2 * 60 * 1000;
 
 const solPriceCache = new NodeCache({ stdTTL: 900 });
 const solanaApi = getSolanaApi();
-const dexScreenerApi = getDexScreenerApi();
 
 const getSolPrice = async () => {
   try {
@@ -256,7 +255,6 @@ const fetchDexScreenerPrices = async (tokenAddresses, chunkSize = 10) => {
  // console.log(`Split into ${tokenChunks.length} chunks of size ${chunkSize}`);
   
   const prices = {};
-  const dexScreenerApi = getDexScreenerApi();
 
   for (let i = 0; i < tokenChunks.length; i++) {
     const chunk = tokenChunks[i];

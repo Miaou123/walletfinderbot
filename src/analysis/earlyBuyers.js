@@ -1,163 +1,170 @@
 const { fetchMultipleWallets } = require('../tools/walletChecker');
-const { getSolanaApi } = require('../integrations/solanaApi');
+const dexScreenerApi = require('../integrations/dexScreenerApi');
+const definedApi = require('../integrations/definedApi');
 
-const analyzeEarlyBuyers = async (tokenAddress, minPercentage = 1, timeFrameHours = 1, tokenInfo, mainContext = 'default') => {
-  const solanaApi = getSolanaApi();
-  console.log(`Starting analysis for ${tokenAddress}`);
-
-  const { signatures, apiCalls, totalTransactions } = await getTokenSignatures(tokenAddress, mainContext);
-  console.log(`Retrieved ${signatures.length} signatures in ${apiCalls} API calls`);
-
-  if (signatures.length === 0) {
-    console.log("No signatures found");
-    return { earlyBuyers: [] };
-  }
-
-  const creationTime = signatures[signatures.length - 1].blockTime;
-  const endTime = creationTime + (timeFrameHours * 3600);
-  console.log(`Token creation: ${new Date(creationTime * 1000).toISOString()}`);
-  console.log(`End time: ${new Date(endTime * 1000).toISOString()}`);
-
-  const minAmountRaw = BigInt(Math.floor((tokenInfo.totalSupply * minPercentage / 100) * Math.pow(10, tokenInfo.decimals)));
-
-  const earlyBuyers = new Map();
-  let reachedEndTime = false;
-  const batchSize = 20;
-
-  // Process signatures in reverse order (oldest to newest)
-  signatures.reverse();
-
-  for (let i = 0; i < signatures.length && !reachedEndTime; i += batchSize) {
-    const batch = signatures.slice(i, i + batchSize);
-    console.log(`Processing batch ${i / batchSize + 1}`);
-
-    const batchPromises = batch.map(sig => processSingleTransaction(sig, tokenAddress, endTime, minAmountRaw, earlyBuyers, mainContext));
-    const batchResults = await Promise.all(batchPromises);
-
-    if (batchResults.some(result => result.reachedEndTime)) {
-      console.log('Reached endTime, stopping analysis');
-      reachedEndTime = true;
-    }
-  }
-
-  const qualifiedEarlyBuyers = new Map(
-    Array.from(earlyBuyers.entries()).filter(([_, data]) => data.amount >= minAmountRaw)
-  );
-
-  console.log(`Detected ${qualifiedEarlyBuyers.size} qualified early buyers`);
-
-  // Use fetchMultipleWallets instead of getAssetsForMultipleWallets
-  const walletAddresses = Array.from(qualifiedEarlyBuyers.keys());
-  const walletAnalysis = await fetchMultipleWallets(walletAddresses, 5, mainContext, 'fetchEarlyBuyers');
-
-  const combinedResults = Array.from(qualifiedEarlyBuyers, ([buyer, data]) => {
-    const walletData = walletAnalysis.find(w => w.wallet === buyer);
+const calculateTokenAmounts = (event) => {
+    const wsolExchanged = parseFloat(event.token0SwapValueUsd) / parseFloat(event.token0PoolValueUsd);
+    const tokensBought = (1 / parseFloat(event.token1ValueBase)) * wsolExchanged;
+    
     return {
-      buyer,
-      ...data,
-      walletInfo: walletData ? walletData.data.data : null
+        baseToken: {
+            amount: wsolExchanged,
+            value: parseFloat(event.token0SwapValueUsd)
+        },
+        quoteToken: {
+            amount: tokensBought,
+            value: parseFloat(event.token1SwapValueUsd) * parseFloat(event.token0PoolValueUsd)
+        }
     };
-  });
-
-  return { 
-    earlyBuyers: combinedResults,
-    tokenInfo 
-  };
 };
 
-async function processSingleTransaction(sig, tokenAddress, endTime, minAmountRaw, earlyBuyers, mainContext) {
-  if (sig.blockTime > endTime) {
-    return { reachedEndTime: true };
-  }
+const MAXIMUM_UPL = 2000000; 
 
-  try {
-    const solanaApi = getSolanaApi();
-    const txDetails = await solanaApi.getTransaction(sig.signature, { encoding: 'jsonParsed', maxSupportedTransactionVersion: 0 }, mainContext, 'getTransaction');
-    const tokenChange = calculateTokenChange(txDetails, tokenAddress);
+const isBotWallet = (walletData) => {
+    const buy = parseInt(walletData.buy) || 0;
+    const sell = parseInt(walletData.sell) || 0;
+    const totalTransactions = buy + sell;
+    const upl = parseFloat(walletData.unrealized_profit) || 0;
 
-    if (tokenChange > 0) {
-      const buyer = txDetails.transaction.message.accountKeys[0].pubkey;
-      updateEarlyBuyers(earlyBuyers, buyer, tokenChange, sig, txDetails.blockTime, minAmountRaw);
+    if (totalTransactions < 10000) {
+        return false;
     }
-  } catch (error) {
-    console.error(`Error processing ${sig.signature}`);
-  }
 
-  return { reachedEndTime: false };
-}
+    // Vérifie si le nombre d'achats et de ventes est proche (différence de moins de 5%)
+    const difference = Math.abs(buy - sell) / totalTransactions;
+    
+    // Vérifie si l'uP/L est supérieur à 2 millions
+    const isHighUPL = upl > MAXIMUM_UPL;
 
-function updateEarlyBuyers(earlyBuyers, buyer, tokenChange, sig, blockTime, minAmountRaw) {
-  const currentData = earlyBuyers.get(buyer) || { amount: 0n, transactions: [] };
-  const newAmount = currentData.amount + tokenChange;
+    return difference < 0.05 || isHighUPL;
+};
 
-  const updatedData = {
-    amount: newAmount,
-    transactions: [
-      ...currentData.transactions,
-      {
-        signature: sig.signature,
-        amount: tokenChange,
-        timestamp: new Date(blockTime * 1000).toISOString()
-      }
-    ]
-  };
+const analyzeEarlyBuyers = async (tokenAddress, minPercentage = 1, timeFrameHours = 1, mainContext = 'default') => {
+    console.log(`Starting analysis for ${tokenAddress}`);
 
-  earlyBuyers.set(buyer, updatedData);
-
-  if (newAmount >= minAmountRaw && currentData.amount < minAmountRaw) {
-    console.log(`New early buyer: ${buyer.slice(0, 8)}... Amount: ${newAmount.toString()}`);
-  }
-}
-
-async function getTokenSignatures(tokenAddress, mainContext) {
-  const solanaApi = getSolanaApi();
-  let signatures = [];
-  let lastSignature = null;
-  let apiCalls = 0;
-  let totalTransactions = 0;
-  
-  while (true) {
-    apiCalls++;
     try {
-      const options = {
-        limit: 1000,
-        before: lastSignature
-      };
-      const newSignatures = await solanaApi.getSignaturesForAddress(tokenAddress, options, mainContext, 'getSignatures');
-      
-      if (!newSignatures || newSignatures.length === 0) {
-        console.log("No more signatures available. Reached the oldest transaction.");
-        break;
-      }
-      
-      signatures.push(...newSignatures);
-      totalTransactions += newSignatures.length;
-      
-      lastSignature = newSignatures[newSignatures.length - 1].signature;
-      const lastTimestamp = new Date(newSignatures[newSignatures.length - 1].blockTime * 1000).toISOString();
-      
-      const oldestAllowedTimestamp = new Date('2020-01-01').getTime();
-      if (newSignatures[newSignatures.length - 1].blockTime * 1000 < oldestAllowedTimestamp) {
-        console.log("Reached transactions older than the allowed date. Stopping.");
-        break;
-      }
-    } catch (error) {
-      console.error("Error fetching signatures:", error);
-      break;
-    }
-  }
-  
-  console.log(`Total transactions fetched: ${totalTransactions}`);
-  
-  return { signatures, apiCalls, totalTransactions };
-}
+        const tokenInfo = await dexScreenerApi.getTokenInfo(tokenAddress, mainContext);
+        console.log(`Token info retrieved for ${tokenAddress}:`, JSON.stringify(tokenInfo, null, 2));
 
-function calculateTokenChange(transaction, tokenAddress) {
-  const preBalance = BigInt(transaction.meta.preTokenBalances.find(b => b.mint === tokenAddress)?.uiTokenAmount.amount || 0);
-  const postBalance = BigInt(transaction.meta.postTokenBalances.find(b => b.mint === tokenAddress)?.uiTokenAmount.amount || 0);
-  return postBalance - preBalance;
-}
+        const creationTimestamp = Math.floor(tokenInfo.pairCreatedAt / 1000);
+        const endTimestamp = creationTimestamp + (timeFrameHours * 3600);
+
+        console.log(`Pair creation: ${new Date(creationTimestamp * 1000).toISOString()}`);
+        console.log(`End time: ${new Date(endTimestamp * 1000).toISOString()}`);
+
+        const totalSupply = Math.floor(parseFloat(tokenInfo.totalSupply) * Math.pow(10, tokenInfo.decimals));
+        const minAmountRaw = (totalSupply * minPercentage) / 100;
+        console.log(`Minimum amount (raw): ${minAmountRaw}`);
+
+        let cursor = null;
+        let hasMoreEvents = true;
+        const limit = 100;
+
+        const earlyBuyers = new Map();
+
+        while (hasMoreEvents) {
+            try {
+                console.log(`Fetching events with cursor: ${cursor}`);
+                const eventsResponse = await definedApi.getTokenEvents(
+                    tokenAddress,
+                    creationTimestamp,
+                    endTimestamp,
+                    cursor,
+                    limit,
+                    mainContext,
+                    'getTokenEvents'
+                );
+                
+                const events = eventsResponse.data.getTokenEvents;
+                console.log(`Received ${events.items.length} events`);
+
+                if (!events || !events.items || events.items.length === 0) {
+                    console.log("No more events to process");
+                    break;
+                }
+
+                for (const event of events.items) {
+                    if (event.timestamp > endTimestamp) {
+                        console.log(`Event timestamp ${event.timestamp} exceeds end timestamp ${endTimestamp}`);
+                        hasMoreEvents = false;
+                        break;
+                    }
+
+                    if (event.eventDisplayType === "Buy") {
+                        const buyer = event.maker;
+                        const tokenAmounts = calculateTokenAmounts(event);
+                        const amount = Math.floor(tokenAmounts.quoteToken.amount * Math.pow(10, tokenInfo.decimals));
+
+                        const currentData = earlyBuyers.get(buyer) || { amount: 0, transactions: [] };
+                        const newAmount = currentData.amount + amount;
+
+                        earlyBuyers.set(buyer, {
+                            amount: newAmount,
+                            transactions: [
+                                ...currentData.transactions,
+                                {
+                                    signature: event.transactionHash,
+                                    amount,
+                                    baseTokenAmount: tokenAmounts.baseToken.amount,
+                                    baseTokenValue: tokenAmounts.baseToken.value,
+                                    quoteTokenAmount: tokenAmounts.quoteToken.amount,
+                                    quoteTokenValue: tokenAmounts.quoteToken.value,
+                                    timestamp: new Date(event.timestamp * 1000).toISOString()
+                                }
+                            ]
+                        });
+                    }
+                }
+
+                cursor = events.cursor;
+                hasMoreEvents = cursor !== null && events.items.length === limit;
+                console.log(`Next cursor: ${cursor}, Has more events: ${hasMoreEvents}`);
+            } catch (error) {
+                console.error('Error fetching token events:', error);
+                break;
+            }
+        }
+
+        const qualifiedEarlyBuyers = new Map(
+            Array.from(earlyBuyers.entries()).filter(([_, data]) => data.amount >= minAmountRaw)
+        );
+
+        console.log(`Detected ${qualifiedEarlyBuyers.size} potential early buyers`);
+
+        const walletAddresses = Array.from(qualifiedEarlyBuyers.keys());
+        console.log(`Fetching wallet data for ${walletAddresses.length} addresses`);
+        const walletAnalysis = await fetchMultipleWallets(walletAddresses, 5, mainContext, 'fetchEarlyBuyers');
+
+        const filteredEarlyBuyers = new Map();
+
+        for (const [buyer, data] of qualifiedEarlyBuyers) {
+            const walletData = walletAnalysis.find(w => w.wallet === buyer);
+            if (walletData && walletData.data && walletData.data.data) {
+                if (!isBotWallet(walletData.data.data)) {
+                    filteredEarlyBuyers.set(buyer, {
+                        ...data,
+                        walletAddress: buyer,
+                        walletInfo: walletData.data.data
+                    });
+                } else {
+                    console.log(`Excluded bot wallet: ${buyer}`);
+                }
+            }
+        }
+
+        console.log(`Analysis complete. Returning results for ${filteredEarlyBuyers.size} early buyers`);
+
+        return { 
+            earlyBuyers: Array.from(filteredEarlyBuyers.values()),
+            tokenInfo
+        };
+
+    } catch (error) {
+        console.error(`Analysis failed for token ${tokenAddress}:`, error);
+        throw error;
+    }
+};
 
 module.exports = {
-  analyzeEarlyBuyers
+    analyzeEarlyBuyers
 };

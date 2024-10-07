@@ -1,109 +1,111 @@
 const dexscreenerRateLimiter = require('../utils/rateLimiters/dexscreenerRateLimiter');
-const { getSolanaApi } = require('../integrations/solanaApi');
+const { getSolanaApi } = require('./solanaApi');
 const BigNumber = require('bignumber.js');
+const ApiCallCounter = require('../utils/ApiCallCounter');
 
-const getDexScreenerApi = () => {
-  return {
-    getTokenInfo: async (tokenAddress) => {
-      try {
-        const solanaApi = getSolanaApi();
-        const [tokenResponse, solResponse, tokenSupplyResponse] = await Promise.all([
-          dexscreenerRateLimiter.enqueue({
-            method: 'get',
-            url: `https://api.dexscreener.com/latest/dex/tokens/${tokenAddress}`
-          }),
-          dexscreenerRateLimiter.enqueue({
-            method: 'get',
-            url: 'https://api.dexscreener.com/latest/dex/tokens/So11111111111111111111111111111111111111112'  
-          }),
-          solanaApi.getTokenSupply(tokenAddress)
-        ]);
-
-        let totalSupply = null;
-        let decimals = null;
-
-        if (tokenSupplyResponse && tokenSupplyResponse.value) {
-          decimals = tokenSupplyResponse.value.decimals;
-          totalSupply = new BigNumber(tokenSupplyResponse.value.amount)
-            .dividedBy(new BigNumber(10).pow(decimals));
-        } else {
-          console.error('Invalid token supply response:', tokenSupplyResponse);
-        }
-        
-        if (tokenResponse.data.pairs && tokenResponse.data.pairs.length > 0) {
-          const pair = tokenResponse.data.pairs[0];
-          
-          let solPrice = 0;
-          if (solResponse.data.pairs && solResponse.data.pairs.length > 0) {
-            solPrice = parseFloat(solResponse.data.pairs[0].priceUsd);
-          }
-          
-          return {
-            name: pair.baseToken.name,
-            symbol: pair.baseToken.symbol,
-            totalSupply: totalSupply ? totalSupply.toFixed() : null,
-            decimals: decimals,
-            priceUsd: parseFloat(pair.priceUsd),
-            volume24h: parseFloat(pair.volume.h24),
-            liquidityUsd: parseFloat(pair.liquidity.usd),
-            fdv: parseFloat(pair.fdv),
-            dexId: pair.dexId,
-            pairCreatedAt: pair.pairCreatedAt,
-            priceChange: pair.priceChange,
-            txns: pair.txns,
-            chainId: pair.chainId,
-            solPrice: solPrice
-          };
-        } else {
-          throw new Error('No pair data found for the given token address');
-        }
-      } catch (error) {
-        console.error('Error fetching token info:', error);
-        throw error;
-      }
-    },
-      
-    getMultipleTokenPrices: async (tokenAddresses) => {
-      console.log(`getMultipleTokenPrices called with ${tokenAddresses.length} addresses`);
-      if (!Array.isArray(tokenAddresses) || tokenAddresses.length === 0 || tokenAddresses.length > 10) {
-        throw new Error('Invalid input: tokenAddresses must be an array with 1 to 10 addresses');
-      }
-    
-      try {
-        console.log(`Calling DexScreener API for addresses: ${tokenAddresses.join(',')}`);
-        const response = await dexscreenerRateLimiter.enqueue({
-          method: 'get',
-          url: `https://api.dexscreener.com/latest/dex/tokens/${tokenAddresses.join(',')}`
-        });
-    
-        // console.log('Received response from DexScreener API');
-        // console.log('Response status:', response.status);
-        // console.log('Response data:', JSON.stringify(response.data, null, 2));
-    
-        if (!response.data || !response.data.pairs) {
-          console.error('Unexpected response structure:', response.data);
-          throw new Error('Unexpected response structure from DexScreener');
-        }
-    
-        const prices = {};
-        response.data.pairs.forEach(pair => {
-          if (pair.chainId === 'solana') {
-            prices[pair.baseToken.address] = {
-              priceUsd: parseFloat(pair.priceUsd),
-              symbol: pair.baseToken.symbol
-            };
-          }
-        });
-    
-        console.log(`Processed prices:`, prices);
-        return prices;
-      } catch (error) {
-        console.error('Error in getMultipleTokenPrices:', error);
-        console.error('Full error object:', JSON.stringify(error, Object.getOwnPropertyNames(error)));
-        throw error;
-      }
+class DexScreenerApi {
+    constructor() {
+        this.solanaApi = getSolanaApi();
     }
-  };
-};
 
-module.exports = { getDexScreenerApi };
+    async getTokenInfo(tokenAddress, mainContext = 'default', subContext = null) {
+        ApiCallCounter.incrementCall('DexScreener', 'getTokenInfo', mainContext, subContext);
+
+        try {
+            const [tokenResponse, solResponse, tokenSupplyResponse] = await Promise.all([
+                dexscreenerRateLimiter.enqueue({
+                    method: 'get',
+                    url: `https://api.dexscreener.com/latest/dex/tokens/${tokenAddress}`
+                }),
+                dexscreenerRateLimiter.enqueue({
+                    method: 'get',
+                    url: 'https://api.dexscreener.com/latest/dex/tokens/So11111111111111111111111111111111111111112'  
+                }),
+                this.solanaApi.getTokenSupply(tokenAddress)
+            ]);
+
+            let totalSupply = null;
+            let decimals = null;
+
+            if (tokenSupplyResponse && tokenSupplyResponse.value) {
+                decimals = tokenSupplyResponse.value.decimals;
+                totalSupply = new BigNumber(tokenSupplyResponse.value.amount)
+                    .dividedBy(new BigNumber(10).pow(decimals));
+            } else {
+                console.error('Invalid token supply response:', tokenSupplyResponse);
+            }
+            
+            if (tokenResponse.data.pairs && tokenResponse.data.pairs.length > 0) {
+                const pair = tokenResponse.data.pairs[0];
+                
+                let solPrice = 0;
+                if (solResponse.data.pairs && solResponse.data.pairs.length > 0) {
+                    solPrice = parseFloat(solResponse.data.pairs[0].priceUsd);
+                }
+                
+                return {
+                    name: pair.baseToken.name,
+                    symbol: pair.baseToken.symbol,
+                    totalSupply: totalSupply ? totalSupply.toFixed() : null,
+                    decimals: decimals,
+                    priceUsd: parseFloat(pair.priceUsd),
+                    volume24h: parseFloat(pair.volume.h24),
+                    liquidityUsd: parseFloat(pair.liquidity.usd),
+                    fdv: parseFloat(pair.fdv),
+                    dexId: pair.dexId,
+                    pairCreatedAt: pair.pairCreatedAt,
+                    priceChange: pair.priceChange,
+                    txns: pair.txns,
+                    chainId: pair.chainId,
+                    solPrice: solPrice
+                };
+            } else {
+                throw new Error('No pair data found for the given token address');
+            }
+        } catch (error) {
+            console.error('Error fetching token info:', error);
+            throw error;
+        }
+    }
+
+    async getMultipleTokenPrices(tokenAddresses, mainContext = 'default', subContext = null) {
+        ApiCallCounter.incrementCall('DexScreener', 'getMultipleTokenPrices', mainContext, subContext);
+
+        console.log(`getMultipleTokenPrices called with ${tokenAddresses.length} addresses`);
+        if (!Array.isArray(tokenAddresses) || tokenAddresses.length === 0 || tokenAddresses.length > 10) {
+            throw new Error('Invalid input: tokenAddresses must be an array with 1 to 10 addresses');
+        }
+    
+        try {
+            console.log(`Calling DexScreener API for addresses: ${tokenAddresses.join(',')}`);
+            const response = await dexscreenerRateLimiter.enqueue({
+                method: 'get',
+                url: `https://api.dexscreener.com/latest/dex/tokens/${tokenAddresses.join(',')}`
+            });
+    
+            if (!response.data || !response.data.pairs) {
+                console.error('Unexpected response structure:', response.data);
+                throw new Error('Unexpected response structure from DexScreener');
+            }
+    
+            const prices = {};
+            response.data.pairs.forEach(pair => {
+                if (pair.chainId === 'solana') {
+                    prices[pair.baseToken.address] = {
+                        priceUsd: parseFloat(pair.priceUsd),
+                        symbol: pair.baseToken.symbol
+                    };
+                }
+            });
+    
+            console.log(`Processed prices:`, prices);
+            return prices;
+        } catch (error) {
+            console.error('Error in getMultipleTokenPrices:', error);
+            console.error('Full error object:', JSON.stringify(error, Object.getOwnPropertyNames(error)));
+            throw error;
+        }
+    }
+}
+
+module.exports = new DexScreenerApi();

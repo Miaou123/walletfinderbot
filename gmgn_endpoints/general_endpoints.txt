@@ -1,0 +1,19 @@
+# General API Information Endpoints
+
+## Endpoints Related to General API Information
+| **Endpoint**                              | **Purpose / Possible Use**                                      |
+|-------------------------------------------|-----------------------------------------------------------------|
+| `/chains/sol/gas_price`                   | Gas prices on the Solana blockchain                             |
+| `/sol/tokens/realtime_token_price`        | Real-time price for a specific Solana token                     |
+| `/tokens`                                 | General endpoint for all tokens                                 |
+| `/token_price`                            | Pricing data for tokens                                         |
+| `/token_list`                             | List of all tokens available                                    |
+| `/token_details`                          | Detailed information about specific tokens                      |
+| `/wallet_info`                            | General info for a specific wallet                              |
+| `/wallet_data`                            | Data related to a specific wallet                               |
+| `/security`                               | General security information                                    |
+| `/version`                                | API version info                                                |
+| `/config`                                 | Configuration details for the API                               |
+| **New** `/tokens/security/sol/status`     | Security status and updates                                     |
+| **New** `/security/status`                | General API security status                                     |
+| **New** `/config/monthly`                 | Monthly updates for configuration changes                       |

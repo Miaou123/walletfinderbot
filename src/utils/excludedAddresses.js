@@ -19,6 +19,7 @@ const EXCLUDED_ADDRESSES = [
     '5VCwKtCXgCJ6kit5FybXjvriW3xELsFDhYrPSqtJNmcD', //OKX
     '5Q544fKrFoe6tsEbD7S8EmxGTJYAKtTVhAW5Q5pge4j1', //Raydium v4
     'G2YxRa6wt1qePMwfJzdXZG62ej4qaTC7YURzuh2Lwd3t', //Bridge/CEX?
+    '5Q544fKrFoe6tsEbD7S8EmxGTJYAKtTVhAW5Q5pge4j1', //raydium
 ];
 
 function isExcludedAddress(address) {

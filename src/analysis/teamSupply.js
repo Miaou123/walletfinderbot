@@ -1,5 +1,5 @@
 const { getSolanaApi } = require('../integrations/solanaApi');
-const { getDexScreenerApi } = require('../integrations/dexscreenerApi');
+const dexScreenerApi = require('../integrations/dexScreenerApi');
 const { checkInactivityPeriod } = require('../tools/inactivityPeriod');
 const { formatNumber } = require('../bot/formatters/generalFormatters');
 const { getHolders } = require('../tools/getHolders');
@@ -24,7 +24,6 @@ function filterSignificantHolders(allHolders, totalSupply) {
 }
 
 async function analyzeTeamSupply(tokenAddress, mainContext = 'default') {
-    const dexScreenerApi = getDexScreenerApi();
 
     try {
         const tokenInfo = await dexScreenerApi.getTokenInfo(tokenAddress, mainContext);
@@ -88,7 +87,7 @@ async function analyzeWallets(wallets, tokenAddress, mainContext) {
             daysSinceLastActivity
         };
     };
-    // Analyze wallets in batches to avoid overwhelming the system
+    // Analyze wallets in batches
     const batchSize = 10;
     const analyzedWallets = [];
     for (let i = 0; i < wallets.length; i += batchSize) {

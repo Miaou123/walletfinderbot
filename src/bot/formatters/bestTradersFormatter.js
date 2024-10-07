@@ -2,12 +2,12 @@ const { formatNumber, truncateAddress, getEmojiForPnl } = require('./generalForm
 
 const MAX_MESSAGE_LENGTH = 4096; // Limite de caractères pour un message Telegram
 
-function formatBestTraders(traders, sortOption) {
-    const formattedTraders = traders.map((trader, index) => formatTrader(trader, index + 1, sortOption));
+function formatBestTraders(traders) {
+    const formattedTraders = traders.map((trader, index) => formatTrader(trader, index + 1));
     return groupTraders(formattedTraders);
 }
 
-function formatTrader(trader, index, sortOption) {
+function formatTrader(trader, index) {
     const { wallet, data } = trader;
     const { 
         winrate, 
@@ -27,29 +27,9 @@ function formatTrader(trader, index, sortOption) {
     formattedString += `├ 💰 P/L (30d): $${formatNumber(realized_profit_30d, 0)} 📈 uP/L: $${formatNumber(unrealized_profit, 0)}\n`;
     formattedString += `└ 📊 Winrate (30d): ${winratePercentage}%`;
 
-    // Add an indicator for the sort option
-    const sortIndicator = getSortIndicator(sortOption);
-    formattedString += ` ${sortIndicator}`;
-
     return formattedString;
 }
 
-function getSortIndicator(sortOption) {
-    switch (sortOption.toLowerCase()) {
-        case 'pnl':
-            return '🏆';
-        case 'winrate':
-        case 'wr':
-            return '🎯';
-        case 'portfolio':
-        case 'port':
-            return '💼';
-        case 'sol':
-            return '☀️';
-        default:
-            return '';
-    }
-}
 
 function groupTraders(formattedTraders) {
     const messages = [];

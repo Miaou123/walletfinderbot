@@ -1,0 +1,16 @@
+# Wallets & SmartMoney Endpoints
+
+## Endpoints Related to Wallets and SmartMoney
+| **Endpoint**                              | **Purpose / Possible Use**                                      |
+|-------------------------------------------|-----------------------------------------------------------------|
+| `/smartmoney/sol/walletNew`               | General info about a new wallet on Solana                       |
+| `/smartmoney/sol/walletNew/details`       | Detailed information about a wallet                             |
+| `/smartmoney/sol/walletNew/transactions`  | Transaction history of a specific wallet                        |
+| `/smartmoney/sol/walletNew/create`        | Create a new wallet on Solana                                   |
+| `/smartmoney/sol/walletNew/update`        | Update wallet information                                       |
+| `/smartmoney/sol/walletNew/delete`        | Delete a specific wallet                                        |
+| `/smartmoney/sol/walletNew/metrics`       | Metrics and insights for a wallet                               |
+| `/smartmoney/sol/walletNew/stats`         | Statistics related to wallet activities                         |
+| `/smartmoney/sol/walletNew/analytics`     | Analytics and performance insights                              |
+| `/smartmoney/sol/walletNew/history`       | Historical data for a wallet                                    |
+| **New** `/smartmoney/sol/walletNew/monthly`| Monthly metrics and analysis for wallets                        |

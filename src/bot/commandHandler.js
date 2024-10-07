@@ -1,4 +1,4 @@
-const { getDexScreenerApi } = require('../integrations/dexscreenerApi');
+const dexScreenerApi = require('../integrations/dexScreenerApi');
 const ApiCallCounter = require('../utils/ApiCallCounter');
 const { formatEarlyBuyersMessage } = require('./formatters/earlyBuyersFormatter');
 const { analyzeEarlyBuyers } = require('../analysis/earlyBuyers');
@@ -23,57 +23,30 @@ const initializeSupplyTracker = (bot, accessControlInstance) => {
   supplyTrackerInstance = new SupplyTracker(bot, accessControlInstance);
 };
 
-const handleStartCommand = (bot, msg) => {
+const handleStartCommand  = (bot, msg, args) => {
   const newLocal = `
-  Welcome to Noesis! ✨🔍
+Welcome to Noesis! ✨🔍
   
-  Noesis is your go-to tool for in-depth analysis of Solana coins and discovering new wallets worth tracking. Our goal is to provide you with unique insights and help you stay ahead of the curve.
-  🔒 Access is free, but you must send a direct message to @Rengon0x on Telegram or Twitter to have your Telegram handle whitelisted. Spots left: X/50 (more spots will be open in the upcoming weeks)
-  This process ensures that we can manage the number of users and control the costs associated.
+For more information on the bot and the current beta phase, please check our <a href="https://smp-team.gitbook.io/noesis-bot">documentation</a>.
 
-  If you are already whitelisted you can start by using /help
-  /th 7GCihgDB8fe6KNjn2MYtkzZcRjQy3t9GHdC8uHYmW2hr 50
+If you are already whitelisted you can start by using /help for a full list of commands.
+  
+If you have any questions, want to report a bug or have any new feature suggestions feel free to dm @Rengon0x on telegram or twitter!
 
-  Please use /help for a full list of commands.
+Please note that some commands may take longer to execute than expected. This is primarily due to API restrictions, as we're currently using lower-tier API access. 
+As we advance, we intend to upgrade to higher tiers, which will result in 4–10x faster response times.
   
-  If you have any questions, want to report a bug or have any suggestion on new features feel free to dm @Rengon0x on telegram or twitter!
-  
-  ⚠️This bot is still in development phase and will probably be subject to many bugs/issues⚠️
-  
-  If you need any help, just type /help.
-  `;
-  const startMessage = newLocal;
-  
-  bot.sendLongMessage(msg.chat.id, startMessage);
-  };
-  
-const handleHelpCommand = (bot, msg) => {
-const helpMessage = `
-Here's a list of available commands and their descriptions:
-
-/ping - Check if the bot is online and get the response time
-/scan or /s [contract_address] [number_of_top_holders](10)* - Scan a token for a top holders breakdown. Increasing the number of top holders analyzed is recommended for a better overview on high mcap tokens.
-/bd or /bundle [contract_address] - Analyze bundle trades for a specific contract address
-/bt or /besttraders [contract_address] [winrate_threshold](50%)* [portfolio_threshold]($10000)* [sort_option](port)*  - Analyse the 100 best traders for a specific contract with given winrate and portfolio thresholds (sort option can be winrate/wr, pnl, portfolio/port, sol)
-/th or /topholders [contract_address] [number_of_holders](20)* - Analyze the top holders of a specific coin (default number is 20 but you can analyze up to 100 top holders).
-/c or /cross [contract_address1] [contract_address2] ... [Combined_value_min]($10000)* - Search for wallets that holds multiple coins (you can go up to 5 coins) with a minimum combined value (default is $1000)
-/t or /team [contract_address] - Analyze team and insider supply for a token with an homemade algorithm
-/search [contract_address] [partial_address1] [partial_address2]* - Search for wallets that hold a specific token and match the partial addresses provided (you can had multiple parts to one partial address by separating them with one or multiple dots.)
-/help - Show command list
-* = optional parameters
-() = default values
-
-If you have any questions, want to report a bug or have any suggestion on new features feel free to dm @Rengon0x on telegram or twitter!
-
 ⚠️This bot is still in development phase and will probably be subject to many bugs/issues⚠️
-`;
+  `;
+const startMessage = newLocal;
 
-bot.sendLongMessage(msg.chat.id, helpMessage);
+bot.sendLongMessage(msg.chat.id, startMessage);
 };
+  
 
-const handlePingCommand = async (bot, msg) => {
+const handlePingCommand = async (bot, msg, args) => {
   const startTime = Date.now();
-  const message = await bot.sendMessage(msg.chat.id, 'Pinging...');
+  const message = await bot.sendLongMessage(msg.chat.id, 'Pinging...');
   const endTime = Date.now();
   const latency = endTime - startTime;
   await bot.editMessageText(`Pong! Latency is ${latency}ms`, {
@@ -82,35 +55,22 @@ const handlePingCommand = async (bot, msg) => {
   });
 };
 
-const handleScanCommand = async (bot, msg, match) => {
+const handleScanCommand = async (bot, msg, args) => {
   try {
-    if (!match || !match[1]) {
-      await bot.sendMessage(msg.chat.id, "Please provide a token address. Usage: /scan <token_address> [number_of_holders]");
-      return;
-    }
-
-    const args = match[1].split(' ');
-    const tokenAddress = args[0];
-    const numberOfHolders = args[1] ? parseInt(args[1]) : 10;
-
-    // Validation de l'adresse du token
-    if (!/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(tokenAddress)) {
-      await bot.sendMessage(msg.chat.id, "Invalid token address format. Please provide a valid Solana address.");
-      return;
-    }
+    const [tokenAddress, numberOfHoldersStr] = args;
+    const numberOfHolders = numberOfHoldersStr ? parseInt(numberOfHoldersStr) : 10;
 
     // Validation du nombre de détenteurs
     if (isNaN(numberOfHolders) || numberOfHolders < 1 || numberOfHolders > 100) {
-      await bot.sendMessage(msg.chat.id, "Invalid number of holders. Please provide a number between 1 and 100.");
+      await bot.sendLongMessage(msg.chat.id, "Invalid number of holders. Please provide a number between 1 and 100.");
       return;
     }
 
-    await bot.sendMessage(msg.chat.id, `Starting scan for token: ${tokenAddress}\nAnalyzing top ${numberOfHolders} holders. This may take a few minutes...`);
+    await bot.sendLongMessage(msg.chat.id, `Starting scan for token: ${tokenAddress}\nAnalyzing top ${numberOfHolders} holders. This may take a few minutes...`);
 
     const scanResult = await scanToken(tokenAddress, numberOfHolders, true, 'scan');
-
     // Envoyer le résultat formaté
-    await bot.sendMessage(msg.chat.id, scanResult.formattedResult, { 
+    await bot.sendLongMessage(msg.chat.id, scanResult.formattedResult, { 
       parse_mode: 'HTML', 
       disable_web_page_preview: true,
       reply_markup: {
@@ -142,94 +102,19 @@ const handleScanCommand = async (bot, msg, match) => {
 
   } catch (error) {
     console.error('Error in handleScanCommand:', error);
-    await bot.sendMessage(msg.chat.id, `An error occurred during the token scan: ${error.message}`);
+    await bot.sendLongMessage(msg.chat.id, `An error occurred during the token scan: ${error.message}`);
   } finally {
     ApiCallCounter.logApiCalls('scan');
   }
 };
-  
-const handleShowMoreWallets = async (bot, chatId, tokenAddress) => {
+
+const handleTopHoldersCommand = async (bot, msg, args) => {
   try {
-    const analysisResults = lastAnalysisResults[chatId];
-    if (!analysisResults || analysisResults.tokenAddress !== tokenAddress) {
-      throw new Error("Analysis results not found or mismatch in token address");
-    }
+    const [coinAddress, topHoldersCountStr] = args;
+    const count = parseInt(topHoldersCountStr) || 20;
 
-    const { allAnalyzedWallets, displayedWallets, tokenInfo } = analysisResults;
-    const remainingWallets = allAnalyzedWallets.slice(displayedWallets);
-
-    if (remainingWallets.length === 0) {
-      await bot.sendMessage(chatId, "No more wallets to display.");
-      return;
-    }
-
-    const moreWalletsResult = formatAdditionalWallets(remainingWallets, tokenInfo, displayedWallets);
-    await bot.sendLongMessage(chatId, moreWalletsResult, { 
-      parse_mode: 'HTML', 
-      disable_web_page_preview: true 
-    });
-
-    // Update the number of displayed wallets
-    lastAnalysisResults[chatId].displayedWallets = allAnalyzedWallets.length;
-
-  } catch (error) {
-    console.error('Error in handleShowMoreWallets:', error);
-    await bot.sendMessage(chatId, `An error occurred while fetching more wallets: ${error.message}`);
-  }
-};
-
-function formatAdditionalWallets(wallets, tokenInfo, startRank) {
-  let result = `<b>Additional Holders for ${tokenInfo.symbol}</b>\n\n`;
-
-  wallets.forEach((wallet, index) => {
-    const rank = startRank + index + 1;
-    const emoji = getHoldingEmoji(wallet);
-    result += `${rank} - <a href="https://solscan.io/account/${wallet.address}">${wallet.address.substring(0, 6)}...${wallet.address.slice(-4)}</a> → (${wallet.supplyPercentage}%) ${emoji}\n`;
-    
-    if (wallet.isInteresting) {
-      result += `├ ❗️${wallet.category}\n`;
-    }
-    
-    result += `├ 💳 Sol: ${wallet.solBalance}\n`;
-    result += `└ 💲 Port: $${formatNumber(parseFloat(wallet.portfolioValue))}`;
-
-    if (wallet.tokenInfos && wallet.tokenInfos.length > 0) {
-      const topTokens = wallet.tokenInfos
-        .filter(token => token.symbol !== 'SOL' && token.valueNumber >= 1000)
-        .sort((a, b) => b.valueNumber - a.valueNumber)
-        .slice(0, 3);
-
-      if (topTokens.length > 0) {
-        result += ` (${topTokens.map(token => 
-          `<a href="https://dexscreener.com/solana/${token.mint}?maker=${wallet.address}">${token.symbol}</a> $${formatNumber(token.valueNumber)}`
-        ).join(', ')})`;
-      }
-    }
-
-    result += '\n\n';
-  });
-
-  return result;
-}
-
-const handleAnalyzeCommand = async (bot, msg, match) => {
-  try {
-    if (!match || !match[1]) {
-      await (bot).sendLongMessage(msg.chat.id, "Please provide a coin address. Usage: /analyze <coin_address> [number_of_holders]");
-      return;
-    }
-    const [coinAddress, topHoldersCount] = match[1].split(' ');
-
-    // Validation de l'adresse du contrat
-    if (!/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(coinAddress)) {
-      await (bot).sendLongMessage(msg.chat.id, "Invalid contract address format. Please provide a valid Solana address.");
-      return;
-    }
-
-    // Validation du nombre de top holders
-    const count = parseInt(topHoldersCount) || 20;
     if (isNaN(count) || count < 1 || count > 100) {
-      await (bot).sendLongMessage(msg.chat.id, "Invalid number of holders. Please provide a number between 1 and 100.");
+      await bot.sendLongMessage(msg.chat.id, "Invalid number of holders. Please provide a number between 1 and 100.");
       return;
     }
 
@@ -242,7 +127,7 @@ const handleAnalyzeCommand = async (bot, msg, match) => {
     
     // Vérifiez que analyzedWallets n'est pas vide
     if (analyzedWallets.length === 0) {
-      await bot.sendMessage(msg.chat.id, "No wallets found for analysis.");
+      await bot.sendLongMessage(msg.chat.id, "No wallets found for analysis.");
       return;
     }
 
@@ -260,46 +145,29 @@ const handleAnalyzeCommand = async (bot, msg, match) => {
     if (errors.length > 0) {
       console.error('Errors encountered during analysis:');
       errors.forEach(error => console.error(error));
-      await bot.sendMessage(msg.chat.id, "Some errors occurred during analysis. Please check the logs for more details.");
+      await bot.sendLongMessage(msg.chat.id, "Some errors occurred during analysis. Please check the logs for more details.");
     }
 
   } catch (error) {
-    console.error(`Error in handleAnalyzeCommand:`, error);
-    await bot.sendMessage(msg.chat.id, `An error occurred during analysis: ${error.message}`);
+    console.error(`Error in handleTopHoldersCommand:`, error);
+    await bot.sendLongMessage(msg.chat.id, `An error occurred during analysis: ${error.message}`);
   } finally {
     ApiCallCounter.logApiCalls('Analyze');
   }
 
 };
 
-const handleEarlyBuyersCommand = async (bot, msg, match) => {
+const handleEarlyBuyersCommand = async (bot, msg, args) => {
   try {
-    console.log("EB command triggered");
-    
-    if (!match || !match[1]) {
-      console.log("No input provided");
-      await bot.sendMessage(msg.chat.id, "Please provide a coin address. Usage: /eb <coin_address> [time_frame] [percentage]");
-      return;
-    }
-
-    const [coinAddress, timeFrame, percentage] = match[1].split(' ');
-    console.log(`Coin Address: ${coinAddress}, Time Frame: ${timeFrame}, Percentage: ${percentage}`);
-
-    // Validation de l'adresse du contrat
-    if (!/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(coinAddress)) {
-      await bot.sendMessage(msg.chat.id, "Invalid contract address format. Please provide a valid Solana address.");
-      return;
-    }
+    const [coinAddress, timeFrame, percentage] = args;
 
     // Validation du time frame
     const hours = validateAndParseTimeFrame(timeFrame);
     if (hours === null) {
-      await bot.sendMessage(msg.chat.id, "Invalid time frame. Please enter a number between 0.25 and 5 hours, or 15 and 300 minutes.");
+      await bot.sendLongMessage(msg.chat.id, "Invalid time frame. Please enter a number between 0.25 and 5 hours, or 15 and 300 minutes.");
       return;
     }
 
-    // Fetch token info to get decimals and total supply
-    const dexScreenerApi = getDexScreenerApi();
     const tokenInfo = await dexScreenerApi.getTokenInfo(coinAddress);
     
     if (!tokenInfo) {
@@ -312,7 +180,7 @@ const handleEarlyBuyersCommand = async (bot, msg, match) => {
 
     console.log(`Parsed time frame into hours: ${hours}, Min percentage: ${minPercentage}%`);
 
-    await bot.sendMessage(
+    await bot.sendLongMessage(
       msg.chat.id,
       `🔎 Analyzing early buyers for <b>${tokenInfo.symbol}</b>\n` +
       `⏳ Time frame: <b>${hours} hours</b>\n` +
@@ -332,7 +200,7 @@ const handleEarlyBuyersCommand = async (bot, msg, match) => {
       formattedMessage = "No early buyers found or error in formatting the message.";
     }
 
-    const sentMessage = await bot.sendMessage(msg.chat.id, formattedMessage, { parse_mode: 'HTML', disable_web_page_preview: true });
+    const sentMessage = await bot.sendLongMessage(msg.chat.id, formattedMessage, { parse_mode: 'HTML', disable_web_page_preview: true });
 
   } catch (error) {
     console.error(`Error in handleEarlyBuyersCommand:`, error);
@@ -340,7 +208,7 @@ const handleEarlyBuyersCommand = async (bot, msg, match) => {
     if (error.stack) {
       console.error("Error stack:", error.stack);
     }
-    await bot.sendMessage(msg.chat.id, errorMessage);
+    await bot.sendLongMessage(msg.chat.id, errorMessage);
   } finally {
     ApiCallCounter.logApiCalls('earlyBuyers');
   }
@@ -386,20 +254,11 @@ const validateAndParseMinAmountOrPercentage = (input, totalSupply, decimals) => 
   return { minAmount, minPercentage };
 };
 
-const handleCrossCommand = async (bot, msg, match) => {
+const handleCrossCommand = async (bot, msg, args) => {
   console.log('Entering handleCrossCommand');
   const DEFAULT_MIN_COMBINED_VALUE = 1000; 
   try {
-    if (!match || !match[1]) {
-      console.log('Insufficient input provided');
-      await bot.sendLongMessage(msg.chat.id, "Please provide at least two coin addresses and optionally a minimum combined value. Usage: /cross <coin_address1> <coin_address2> [coin_address3...] [min_value]");
-      return;
-    }
-
-    console.log('Cross command input:', match[1]);
-    const input = match[1].trim().split(' ');
-    if (input.length < 2) {
-      console.log('Insufficient input provided');
+    if (args.length < 2) {
       await bot.sendLongMessage(msg.chat.id, "Please provide at least two coin addresses and optionally a minimum combined value. Usage: /cross <coin_address1> <coin_address2> [coin_address3...] [min_value]");
       return;
     }
@@ -444,7 +303,6 @@ const handleCrossCommand = async (bot, msg, match) => {
           return;
       }
 
-      const dexScreenerApi = getDexScreenerApi();
       const tokenInfos = await Promise.all(contractAddresses.map(async (address) => {
           try {
               const tokenInfo = await dexScreenerApi.getTokenInfo(address);
@@ -483,22 +341,12 @@ const handleCrossCommand = async (bot, msg, match) => {
   }  
 };
 
-const handleTeamSupplyCommand = async (bot, msg, match) => {
+const handleTeamSupplyCommand = async (bot, msg, args) => {
   try {
-    if (!match || !match[1]) {
-      await bot.sendMessage(msg.chat.id, "Please provide a token address. Usage: /team <token_address>");
-      return;
-    }
+    const [tokenAddress] = args;
 
-    const tokenAddress = match[1].trim();
+    await bot.sendLongMessage(msg.chat.id, `Analyzing team supply for token: ${tokenAddress}\nThis may take a few minutes...`);
 
-    // Validation de l'adresse du token
-    if (!/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(tokenAddress)) {
-      await bot.sendMessage(msg.chat.id, "Invalid token address format. Please provide a valid Solana address.");
-      return;
-    }
-
-    await bot.sendMessage(msg.chat.id, `Analyzing team supply for token: ${tokenAddress}\nThis may take a few minutes...`);
 
     const { formattedResults, allWalletsDetails, allTeamWallets, tokenInfo } = await analyzeTeamSupply(tokenAddress, 'teamSupply');
 
@@ -523,7 +371,7 @@ const handleTeamSupplyCommand = async (bot, msg, match) => {
       username: msg.from.username
     };
 
-    await bot.sendMessage(msg.chat.id, formattedResults, { 
+    await bot.sendLongMessage(msg.chat.id, formattedResults, { 
         parse_mode: 'HTML',
         reply_markup: {
             inline_keyboard: [
@@ -537,16 +385,16 @@ const handleTeamSupplyCommand = async (bot, msg, match) => {
     });
   } catch (error) {
       console.error('Error in handleTeamSupplyCommand:', error);
-      await bot.sendMessage(msg.chat.id, `An error occurred during team supply analysis: ${error.message}`);
+      await bot.sendLongMessage(msg.chat.id, `An error occurred during team supply analysis: ${error.message}`);
   } finally {
     ApiCallCounter.logApiCalls('teamSupply');
   }
 };
 
-// Modifiez handleCallbackQuery comme suit :
 const handleCallbackQuery = async (bot, callbackQuery) => {
   const action = callbackQuery.data;
   const chatId = callbackQuery.message.chat.id;
+  const username = callbackQuery.from.username;
   console.log('Received callback query:', action);
 
   try {
@@ -554,17 +402,12 @@ const handleCallbackQuery = async (bot, callbackQuery) => {
     console.log('Action type:', actionType, 'Token Address:', tokenAddress, 'Param:', param);
 
     let trackingInfo = lastAnalysisResults[chatId];
-    if (!trackingInfo) {
-      throw new Error("No analysis results found. Please run the scan or team command again.");
-    }
-
-    console.log('Tracking info:', JSON.stringify(trackingInfo, null, 2));
 
     switch (actionType) {
       case 'track':
         return await handleTrackAction(bot, chatId, tokenAddress, trackingInfo);
       case 'details':
-        if (!trackingInfo.allWalletsDetails || !trackingInfo.tokenInfo) {
+        if (!trackingInfo || !trackingInfo.allWalletsDetails || !trackingInfo.tokenInfo) {
           throw new Error("No wallet details or token information found. Please run the analysis again.");
         }
         return await sendWalletDetails(bot, chatId, trackingInfo.allWalletsDetails, trackingInfo.tokenInfo);
@@ -577,27 +420,37 @@ const handleCallbackQuery = async (bot, callbackQuery) => {
       case 'st':
         await handleStartTracking(bot, chatId, trackingInfo, parseFloat(param) || 1);
         break;
-      case 'more':
-        if (param === 'wallets') {
-          await handleShowMoreWallets(bot, chatId, tokenAddress);
+      case 'stop':
+        // New case for handling stop tracking
+        const trackerId = `${tokenAddress}_${param}`; // Assuming param is 'team' or 'topHolders'
+        const success = supplyTrackerInstance.stopTracking(username, trackerId);
+        if (success) {
+          await bot.answerCallbackQuery(callbackQuery.id, { text: "Tracking stopped successfully." });
+          await bot.editMessageText("Tracking stopped. Use /tracker to see your current trackers.", {
+            chat_id: chatId,
+            message_id: callbackQuery.message.message_id
+          });
+        } else {
+          await bot.answerCallbackQuery(callbackQuery.id, { text: "Failed to stop tracking. Tracker not found." });
         }
         break;
       default:
         throw new Error(`Unknown action type: ${actionType}`);
     }
 
-    await bot.answerCallbackQuery(callbackQuery.id);
+    if (!callbackQuery.answered) {
+      await bot.answerCallbackQuery(callbackQuery.id);
+    }
   } catch (error) {
     console.error('Error in handleCallbackQuery:', error);
     const errorMessage = `An error occurred: ${error.message}. Please try again or contact support.`;
-    await bot.sendMessage(chatId, errorMessage);
+    await bot.sendLongMessage(chatId, errorMessage);
     if (!callbackQuery.answered) {
       await bot.answerCallbackQuery(callbackQuery.id, { text: "An error occurred", show_alert: true });
     }
   }
 };
 
-// Modifiez handleTrackAction comme suit :
 const handleTrackAction = async (bot, chatId, tokenAddress, trackingInfo) => {
   console.log('Entering handleTrackAction');
   console.log('ChatId:', chatId);
@@ -634,11 +487,10 @@ const handleTrackAction = async (bot, chatId, tokenAddress, trackingInfo) => {
   };
 
   console.log('Sending message with keyboard');
-  await bot.sendMessage(chatId, message, { reply_markup: keyboard });
+  await bot.sendLongMessage(chatId, message, { reply_markup: keyboard });
   console.log('Message sent successfully');
 };
 
-// Modifiez handleStartTracking comme suit :
 const handleStartTracking = async (bot, chatId, trackingInfo, threshold) => {
   console.log('Entering handleStartTracking');
   console.log('ChatId:', chatId);
@@ -665,7 +517,7 @@ const handleStartTracking = async (bot, chatId, trackingInfo, threshold) => {
   
   if (!wallets || wallets.length === 0) {
     console.warn(`No ${trackType} wallets found for ${tokenAddress}. This may cause issues with tracking.`);
-    await bot.sendMessage(chatId, `Warning: No ${trackType} wallets found. Tracking may not work as expected.`);
+    await bot.sendLongMessage(chatId, `Warning: No ${trackType} wallets found. Tracking may not work as expected.`);
     return;
   }
 
@@ -697,51 +549,61 @@ const handleStartTracking = async (bot, chatId, trackingInfo, threshold) => {
       username
     );
 
+    await bot.sendLongMessage(chatId, `Tracking started for ${tokenInfo.symbol} ${trackType} supply with ${threshold}% threshold. Use /tracker to see and manage your active trackings.`);
     console.log('SupplyTracker.startTracking called successfully');
-
-    await bot.sendMessage(chatId, `Tracking started for ${tokenInfo.symbol} ${trackType} supply with ${threshold}% threshold.`);
-    console.log('Success message sent to user');
   } catch (error) {
     console.error("Error starting tracking:", error);
-    await bot.sendMessage(chatId, `An error occurred while starting the tracking: ${error.message}`);
+    await bot.sendLongMessage(chatId, `An error occurred while starting the tracking: ${error.message}`);
   }
 };
 
-// Ajoutez cette nouvelle fonction pour gérer l'arrêt du tracking
-const handleStopTracking = async (bot, msg, match) => {
+const handleStopCommand = async (bot, msg, args) => {
   const chatId = msg.chat.id;
   const username = msg.from.username;
-  const trackerId = match[1];
+  const [trackerId] = args;
 
   try {
-      supplyTrackerInstance.stopTracking(username, trackerId);
-      await bot.sendMessage(chatId, `Tracking stopped for ${trackerId}`);
+    const success = supplyTrackerInstance.stopTracking(username, trackerId);
+    if (success) {
+      await bot.sendLongMessage(chatId, `Tracking stopped for ${trackerId}`);
+    } else {
+      await bot.sendLongMessage(chatId, `No active tracking found for ${trackerId}`);
+    }
   } catch (error) {
-      console.error(`Error stopping tracking: ${error.message}`);
-      await bot.sendMessage(chatId, "An error occurred while stopping the tracking.");
+    console.error(`Error stopping tracking: ${error.message}`);
+    await bot.sendLongMessage(chatId, "An error occurred while stopping the tracking.");
   }
 };
 
-// Ajoutez cette nouvelle fonction pour afficher les trackings actifs
-const handleTrackerCommand = async (bot, msg) => {
+const handleTrackerCommand = async (bot, msg, args) => {
   const chatId = msg.chat.id;
   const username = msg.from.username;
 
   const trackedSupplies = supplyTrackerInstance.getTrackedSuppliesByUser(username);
 
   if (trackedSupplies.length === 0) {
-      await bot.sendMessage(chatId, "You are not currently tracking any supplies.");
-      return;
+    await bot.sendLongMessage(chatId, "You are not currently tracking any supplies. To start tracking supplies please run /team or /scan first");
+    return;
   }
 
   let message = "Your currently tracked supplies:\n\n";
+  const inlineKeyboard = [];
+
   trackedSupplies.forEach((supply, index) => {
-      message += `${index + 1}. ${supply.ticker} (${supply.tokenAddress})\n`;
-      message += `   Type: ${supply.trackType}, Current supply: ${supply.currentSupplyPercentage}%\n`;
-      message += `   /stop_${supply.trackerId}\n\n`;
+    message += `${index + 1}. ${supply.ticker} (${supply.tokenAddress})\n`;
+    message += `   Type: ${supply.trackType}, Current supply: ${supply.currentSupplyPercentage}%\n\n`;
+    
+    inlineKeyboard.push([{
+      text: `Stop tracking ${supply.ticker}`,
+      callback_data: `stop_${supply.tokenAddress}_${supply.trackType}`
+    }]);
   });
 
-  await bot.sendMessage(chatId, message);
+  await bot.sendLongMessage(chatId, message, {
+    reply_markup: {
+      inline_keyboard: inlineKeyboard
+    }
+  });
 };
 
 const handleSetDefaultThreshold = async (bot, chatId, trackingInfo, trackingId) => {
@@ -789,20 +651,9 @@ const handleMessage = async (bot, msg) => {
 };
 
 
-const handleSearchCommand = async (bot, msg, match) => {
+const handleSearchCommand = async (bot, msg, args) => {
   try {
-    if (!match || !match[1]) {
-      await bot.sendLongMessage(msg.chat.id, "Please provide a token address and search criteria. Usage: /search <token_address> <search_criteria>");
-      return;
-    }
-
-    const [tokenAddress, ...searchCriteria] = match[1].split(' ');
-
-    // Validation de l'adresse du token
-    if (!/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(tokenAddress)) {
-      await bot.sendLongMessage(msg.chat.id, "Invalid token address format. Please provide a valid Solana address.");
-      return;
-    }
+    const [tokenAddress, ...searchCriteria] = args;
 
     if (searchCriteria.length === 0) {
       await bot.sendLongMessage(msg.chat.id, "Please provide search criteria.");
@@ -831,66 +682,35 @@ const handleSearchCommand = async (bot, msg, match) => {
   }
 };
 
-const handleBundleCommand = async (bot, msg, match) => {
-  console.log('Entering handleBundleCommand');
-  const chatId = msg.chat.id;
-  const input = match[1]; // L'input est dans match[1] pour être cohérent avec les autres commandes
-
-  console.log('chatId:', chatId);
-  console.log('input:', input);
-
+const handleBundleCommand = async (bot, msg, args) => {
   try {
-      if (!input) {
-          await bot.sendMessage(chatId, "Please provide a contract address. Usage: /bundle <contract_address> or /bd <contract_address>");
-          return;
-      }
-
-      const contractAddress = input.trim();
-
-      // Validation de l'adresse du contrat Solana
-      if (!/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(contractAddress)) {
-          await bot.sendMessage(chatId, "Invalid contract address format. Please provide a valid Solana address.");
-          return;
-      }
-
-      const bundleFinder = new BundleFinder();
-      const bundleData = await bundleFinder.findBundle(contractAddress);
-      const formattedResponse = formatBundleResponse(bundleData);
-      
-      await bot.sendMessage(chatId, formattedResponse, { parse_mode: 'Markdown' });
+    const [tokenAddress] = args;
+    const bundleFinder = new BundleFinder();
+    const bundleData = await bundleFinder.findBundle(tokenAddress);
+    const formattedResponse = formatBundleResponse(bundleData);
+    
+    await bot.sendLongMessage(chatId, formattedResponse, { parse_mode: 'Markdown' });
   } catch (error) {
       console.error(`Error handling bundle command: ${error.message}`);
-      await bot.sendMessage(chatId, 'An error occurred while processing your request. Please try again later.');
+      await bot.sendLongMessage(chatId, 'An error occurred while processing your request. Please try again later.');
   } finally {
       ApiCallCounter.logApiCalls('bundle');
   }
 };
 
-const handleBestTradersCommand = async (bot, msg, match) => {
+const handleBestTradersCommand = async (bot, msg, args) => {
   console.log('Entering handleBestTradersCommand');
   try {
-    if (!match || !match[1]) {
-      await bot.sendLongMessage(msg.chat.id, "Please provide a contract address and optional parameters. Usage: /bt <contract_address> [winrate] [portfolio] [sort_option]");
-      return;
-    }
-
-    const input = match[1].trim().split(' ');
-    const contractAddress = input[0];
+    const [contractAddress, ...otherArgs] = args;
     let winrateThreshold = 50;
     let portfolioThreshold = 10000;
     let sortOption = 'winrate';
 
-    // Validation de l'adresse du contrat
-    if (!/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(contractAddress)) {
-      await bot.sendLongMessage(msg.chat.id, "Invalid contract address format. Please provide a valid Solana address.");
-      return;
-    }
-
     // Parse remaining arguments
-    for (let i = 1; i < input.length; i++) {
-      const arg = input[i].toLowerCase();
-      if (arg === 'pnl' || arg === 'winrate' || arg === 'wr' || arg === 'portfolio' || arg === 'port' || arg === 'sol') {
-        sortOption = arg;
+    for (const arg of otherArgs) {
+      const lowercaseArg = arg.toLowerCase();
+      if (['pnl', 'winrate', 'wr', 'portfolio', 'port', 'sol'].includes(lowercaseArg)) {
+        sortOption = lowercaseArg;
       } else {
         const num = parseFloat(arg);
         if (!isNaN(num)) {
@@ -902,6 +722,7 @@ const handleBestTradersCommand = async (bot, msg, match) => {
         }
       }
     }
+
 
     await bot.sendLongMessage(msg.chat.id, `Analyzing best traders for contract: ${contractAddress} with winrate >${winrateThreshold}% and portfolio value >$${portfolioThreshold}, sorted by ${sortOption}`);
 
@@ -926,20 +747,28 @@ const handleBestTradersCommand = async (bot, msg, match) => {
 };
 
 module.exports = {
-  handlePingCommand,
+  start: handleStartCommand,
+  ping: handlePingCommand,
+  scan: handleScanCommand,
+  s: handleScanCommand,
+  th: handleTopHoldersCommand,
+  topholders: handleTopHoldersCommand,
+  eb: handleEarlyBuyersCommand,
+  earlybuyers: handleEarlyBuyersCommand,
+  cross: handleCrossCommand,
+  c: handleCrossCommand,
+  team: handleTeamSupplyCommand,
+  t: handleTeamSupplyCommand,
+  search: handleSearchCommand,
+  sh: handleSearchCommand,
+  bundle: handleBundleCommand,
+  bd: handleBundleCommand,
+  bt: handleBestTradersCommand,
+  besttraders: handleBestTradersCommand,
+  tracker: handleTrackerCommand,
+  tr: handleTrackerCommand,
+  stop: handleStopCommand,
   initializeSupplyTracker,
-  handleStartCommand,
-  handleSearchCommand,
-  handleHelpCommand,
-  handleAnalyzeCommand,
-  handleEarlyBuyersCommand,
-  handleCrossCommand,
-  handleTeamSupplyCommand,
-  handleScanCommand,
   handleCallbackQuery,
-  handleMessage,
-  handleBestTradersCommand,
-  handleBundleCommand,
-  handleStopTracking,
-  handleTrackerCommand
+  handleMessage
 };

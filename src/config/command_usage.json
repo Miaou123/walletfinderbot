@@ -1,12 +1,18 @@
 {
   "Rengon0x": {
-    "th": 2,
-    "team": 21,
-    "tracker": 5,
-    "scan": 33,
-    "cross": 4
+    "scan": 4,
+    "team": 32,
+    "cancel": 5,
+    "eb": 2,
+    "tracker": 8,
+    "stop": 1
+  },
+  "loncapa": {
+    "team": 4,
+    "tracker": 1
   },
   "Rengon0x0": {
+    "scan": 1,
     "team": 1
   }
 }

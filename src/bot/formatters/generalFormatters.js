@@ -20,11 +20,6 @@ const formatNumber = (number, decimals = 1) => {
   return `<code>${formattedNumber}</code>`;
 };
 
-
-function escapeMarkdown(text) {
-  const specialChars = ['_', '*', '[', ']', '(', ')', '~', '`', '>', '#', '+', '-', '=', '|', '{', '}', '.', '!'];
-  return specialChars.reduce((acc, char) => acc.replace(new RegExp('\\' + char, 'g'), '\\' + char), text);
-}
   
   const formatAge = (pairCreatedAt) => {
     if (!pairCreatedAt) return 'N/A';

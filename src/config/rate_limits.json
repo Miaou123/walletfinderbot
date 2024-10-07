@@ -1,6 +1,14 @@
 {
   "Rengon0x0:team": {
     "count": 1,
-    "resetTime": 1727987529386
+    "resetTime": 1728397297945
+  },
+  "loncapa:team": {
+    "count": 3,
+    "resetTime": 1728380337064
+  },
+  "Rengon0x0:scan": {
+    "count": 1,
+    "resetTime": 1728310884869
   }
 }

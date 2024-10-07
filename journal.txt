@@ -19,6 +19,8 @@ teamsupply analyzer: Rajouter une fonction pour calculer combien la team a sell 
 
 
 Améliorations:
+Finir le commandmanager etc (check claude)
+Bosser sur la détection des bots sandwich
 Mettre winston partout
 Utiliser de la gestion de cache partout
 Passer tout en ES module

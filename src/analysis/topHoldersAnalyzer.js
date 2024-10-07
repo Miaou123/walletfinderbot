@@ -1,5 +1,5 @@
 const { getSolanaApi } = require('../integrations/solanaApi');
-const { getDexScreenerApi } = require('../integrations/dexscreenerApi');
+const dexScreenerApi = require('../integrations/dexScreenerApi');
 const { checkInactivityPeriod } = require('../tools/inactivityPeriod');
 const { getAssetsForMultipleWallets } = require('../tools/walletValueCalculator');
 const { getHolders, getTopHolders } = require('../tools/getHolders');
@@ -8,7 +8,6 @@ const config = require('../config/config');
 const BigNumber = require('bignumber.js');
 
 async function analyzeToken(coinAddress, count, mainContext = 'default') {
-  const dexScreenerApi = getDexScreenerApi();
 
   // Fetch token info
   const tokenInfo = await dexScreenerApi.getTokenInfo(coinAddress, mainContext);

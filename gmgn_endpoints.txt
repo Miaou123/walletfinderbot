@@ -1,0 +1,101 @@
+# GMGN API Endpoints Summary
+
+## 1. Endpoints Related to Tokens
+| **Endpoint**                              | **Purpose / Possible Use**                                      |
+|-------------------------------------------|-----------------------------------------------------------------|
+| `/tokens/sol`                             | General information about tokens on Solana                      |
+| `/tokens/top_traders/sol`                 | Top traders of a specific Solana token                          |
+| `/tokens/top_buyers/sol`                  | Top buyers of a specific Solana token                           |
+| `/tokens/security/sol`                    | Security details of a specific token                            |
+| `/tokens/sol/create`                      | Endpoint to create a new Solana token                           |
+| `/tokens/sol/update`                      | Endpoint to update a specific Solana token                      |
+| `/tokens/sol/delete`                      | Endpoint to delete a specific Solana token                      |
+| `/tokens/sol/details`                     | Detailed information about a specific token                     |
+| `/tokens/sol/metadata`                    | Metadata information for a specific Solana token                |
+| `/tokens/sol/metrics`                     | Metrics and analytics for a specific Solana token               |
+| `/tokens/sol/prices`                      | Pricing data for a specific Solana token                        |
+| `/tokens/sol/historical`                  | Historical price data for a specific Solana token               |
+| `/tokens/sol/analytics`                   | Analytics and insights for a specific Solana token              |
+| `/tokens/sol/alerts`                      | Alerts related to a specific Solana token                       |
+| `/tokens/sol/info`                        | General info about a specific Solana token                      |
+| `/tokens/sol/stats`                       | Statistics and aggregated data about a Solana token             |
+| `/tokens/sol/history`                     | History of changes or transactions for a Solana token           |
+| `/tokens/security/sol/audit`              | Security audit details for a Solana token                       |
+| `/tokens/security/sol/status`             | Current security status of a Solana token                       |
+| `/tokens/security/sol/report`             | Security reports related to a Solana token                      |
+| `/tokens/security/sol/alerts`             | Alerts related to security of a specific token                  |
+| `/tokens/top_traders/sol/details`         | Details about top traders of a specific Solana token            |
+| `/tokens/top_traders/sol/history`         | Historical trading data of top traders                          |
+| `/tokens/top_buyers/sol/history`          | Historical data of top buyers for a Solana token                |
+| `/tokens/top_buyers/sol/details`          | Detailed info on top buyers of a specific Solana token          |
+
+## 2. Endpoints Related to Trades
+| **Endpoint**                              | **Purpose / Possible Use**                                      |
+|-------------------------------------------|-----------------------------------------------------------------|
+| `/trades/sol`                             | General trade data for a specific Solana token                  |
+| `/trades/sol?limit=100`                   | Trade data with a limit parameter                               |
+| `/trades/sol?tag[]=creator&tag[]=dev_team`| Trades tagged as creator or dev team transactions               |
+| `/trades/sol/create`                      | Endpoint to create a new trade                                  |
+| `/trades/sol/update`                      | Endpoint to update an existing trade                            |
+| `/trades/sol/delete`                      | Endpoint to delete a trade                                      |
+| `/trades/sol/metrics`                     | Metrics and analytics for specific trades                       |
+| `/trades/sol/history`                     | Historical trade data                                           |
+| `/trades/sol/analytics`                   | Analytics and insights about trades                             |
+| `/trades/sol/stats`                       | General statistics about trades                                 |
+
+## 3. Endpoints Related to Wallets and SmartMoney
+| **Endpoint**                              | **Purpose / Possible Use**                                      |
+|-------------------------------------------|-----------------------------------------------------------------|
+| `/smartmoney/sol/walletNew`               | General info about a new wallet on Solana                       |
+| `/smartmoney/sol/walletNew/details`       | Detailed information about a wallet                             |
+| `/smartmoney/sol/walletNew/transactions`  | Transaction history of a specific wallet                        |
+| `/smartmoney/sol/walletNew/create`        | Create a new wallet on Solana                                    |
+| `/smartmoney/sol/walletNew/update`        | Update wallet information                                       |
+| `/smartmoney/sol/walletNew/delete`        | Delete a specific wallet                                         |
+| `/smartmoney/sol/walletNew/metrics`       | Metrics and insights for a wallet                                |
+| `/smartmoney/sol/walletNew/stats`         | Statistics related to wallet activities                         |
+| `/smartmoney/sol/walletNew/analytics`     | Analytics and performance insights                               |
+| `/smartmoney/sol/walletNew/history`       | Historical data for a wallet                                     |
+
+## 4. Endpoints Related to Signals and Alerts
+| **Endpoint**                              | **Purpose / Possible Use**                                      |
+|-------------------------------------------|-----------------------------------------------------------------|
+| `/signals/sol/new`                        | New signals detected                                            |
+| `/signals/sol/history`                    | Historical signals                                              |
+| `/signals/sol/alerts`                     | Alerts related to trading signals                               |
+| `/signals/sol/info`                       | General information about signals                               |
+
+## 5. Endpoints Related to Ranking and Statistics
+| **Endpoint**                              | **Purpose / Possible Use**                                      |
+|-------------------------------------------|-----------------------------------------------------------------|
+| `/rank/sol/wallets/7d`                    | Rankings for wallets over a 7-day period                        |
+| `/rank/sol/wallets/7d/history`            | Historical data for wallet rankings                             |
+| `/rank/sol/wallets/7d/metrics`            | Wallet metrics for the last 7 days                              |
+| `/rank/sol/wallets/7d/analytics`          | Analytics for wallets over a 7-day period                       |
+| `/rank/sol/swaps/1h`                      | Swap activity ranking over the last 1 hour                      |
+
+## 6. Endpoints Related to General API Information
+| **Endpoint**                              | **Purpose / Possible Use**                                      |
+|-------------------------------------------|-----------------------------------------------------------------|
+| `/chains/sol/gas_price`                   | Gas prices on the Solana blockchain                              |
+| `/sol/tokens/realtime_token_price`        | Real-time price for a specific Solana token                      |
+| `/tokens`                                 | General endpoint for all tokens                                  |
+| `/token_price`                            | Pricing data for tokens                                          |
+| `/token_list`                             | List of all tokens available                                     |
+| `/token_details`                          | Detailed information about specific tokens                       |
+| `/wallet_info`                            | General info for a specific wallet                                |
+| `/wallet_data`                            | Data related to a specific wallet                                 |
+| `/security`                               | General security information                                      |
+| `/version`                                | API version info                                                 |
+| `/config`                                 | Configuration details for the API                                |
+
+## 7. Endpoints Related to Monthly Data (New)
+| **Endpoint**                              | **Purpose / Possible Use**                                      |
+|-------------------------------------------|-----------------------------------------------------------------|
+| `/tokens/sol/monthly`                     | Monthly summary and data for a specific token                   |
+| `/trades/sol/monthly`                     | Monthly trade statistics                                        |
+| `/smartmoney/sol/walletNew/monthly`        | Monthly metrics for wallets                                     |
+| `/rank/sol/wallets/monthly`               | Monthly rankings for wallets                                    |
+| `/rank/sol/swaps/monthly`                 | Monthly swap activity rankings                                  |
+| `/signals/sol/monthly`                    | Monthly signal statistics                                       |
+| `/analytics/sol/monthly`                  | Monthly analytics for Solana-related data                       |

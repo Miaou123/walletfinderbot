@@ -90,6 +90,7 @@ class SupplyTracker {
             decimals,
             trackType,
             tokenAddress,
+            username,
             intervalId: setInterval(() => this.checkSupply(username, trackerId), CHECK_INTERVAL)
         };
 
@@ -99,32 +100,32 @@ class SupplyTracker {
 
     stopTracking(username, trackerId) {
         const userTrackers = this.userTrackers.get(username);
-        if (userTrackers && userTrackers.has(trackerId)) {
-            const tracker = userTrackers.get(trackerId);
-            clearInterval(tracker.intervalId);
-            userTrackers.delete(trackerId);
-            console.log(`Stopped tracking for ${tracker.tokenAddress}, tracker ID: ${trackerId}`);
-        } else {
-            console.warn(`No tracker found for user ${username} with ID ${trackerId}`);
+        if (!userTrackers) return false;
+
+        const tracker = userTrackers.get(trackerId);
+        if (!tracker) return false;
+
+        clearInterval(tracker.intervalId);
+        userTrackers.delete(trackerId);
+
+        if (userTrackers.size === 0) {
+            this.userTrackers.delete(username);
         }
+
+        return true;
     }
 
     getTrackedSuppliesByUser(username) {
-        const userTrackers = [];
-        for (const [tokenAddress, tokenTrackers] of this.trackers) {
-            for (const [trackerId, tracker] of tokenTrackers) {
-                if (tracker.username === username) {
-                    userTrackers.push({
-                        trackerId,
-                        tokenAddress,
-                        ticker: tracker.ticker,
-                        currentSupplyPercentage: tracker.currentSupplyPercentage.toFixed(2),
-                        trackType: tracker.trackType
-                    });
-                }
-            }
-        }
-        return userTrackers;
+        const userTrackers = this.userTrackers.get(username);
+        if (!userTrackers) return [];
+
+        return Array.from(userTrackers.entries()).map(([trackerId, tracker]) => ({
+            trackerId,
+            tokenAddress: tracker.tokenAddress,
+            ticker: tracker.ticker,
+            currentSupplyPercentage: tracker.currentSupplyPercentage.toFixed(2),
+            trackType: tracker.trackType
+        }));
     }
 
     async checkSupply(username, trackerId) {
