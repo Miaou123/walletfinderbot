@@ -46,5 +46,29 @@ function getEmojiForPnl(totalValue) {
   if (totalValue > 1000) return '🐟';
     return '🦐'; 
 }
+
+const summarizeHolders = (categorizedWallets, tokenInfo) => {
+  const summary = {
+    '🐳 (> $100K)': 0,
+    '🦈 ($50K - $100K)': 0,
+    '🐬 ($10K - $50K)': 0,
+    '🐟 ($1K - $10K)': 0,
+    '🦐 ($0 - $1K)': 0
+  };
+  try {
+    Object.values(categorizedWallets).flat().forEach(wallet => {
+      const usdValue = parseFloat(wallet.stats.totalValue) || (parseFloat(wallet.solBalance) * tokenInfo.solPrice);
+      if (usdValue > 100000) summary['🐳 (> $100K)']++;
+      else if (usdValue > 50000) summary['🦈 ($50K - $100K)']++;
+      else if (usdValue > 10000) summary['🐬 ($10K - $50K)']++;
+      else if (usdValue > 1000) summary['🐟 ($1K - $10K)']++;
+      else summary['🦐 ($0 - $1K)']++;
+    });
+  } catch (error) {
+    logger.error('Error in summarizeHolders:', error);
+  }
+
+  return summary;
+};
   
-  module.exports = { formatNumber, formatAge, truncateAddress, getEmojiForPnl};
+  module.exports = { formatNumber, formatAge, truncateAddress, getEmojiForPnl, summarizeHolders};

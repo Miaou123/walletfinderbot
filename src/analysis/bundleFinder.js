@@ -1,12 +1,13 @@
 const puppeteer = require('puppeteer-extra');
 const StealthPlugin = require('puppeteer-extra-plugin-stealth');
-puppeteer.use(StealthPlugin());
 const UserAgent = require('user-agents');
+const gmgnApi = require('../integrations/gmgnApi'); // Assurez-vous que ce chemin est correct
+
+puppeteer.use(StealthPlugin());
 
 class BundleFinder {
     constructor() {
         this.txHashes = new Set();
-        this.formatTokens = (x) => parseFloat(x) / 1_000_000;
     }
 
     async fetchData(url) {
@@ -19,16 +20,15 @@ class BundleFinder {
             await page.goto(url, { waitUntil: 'networkidle0' });
             
             const data = await page.evaluate(() => {
-                const text = document.body.innerText;
-                return JSON.parse(text);
+                return JSON.parse(document.body.innerText);
             });
 
-            await browser.close();
             return data;
         } catch (error) {
             console.error(`Error fetching data: ${error.message}`);
-            await browser.close();
             throw error;
+        } finally {
+            await browser.close();
         }
     }
 
@@ -39,13 +39,9 @@ class BundleFinder {
             const totalSupply = info.launchpad.toLowerCase() === "pump.fun" ? 1_000_000_000 : info.total_supply;
 
             const tradesData = await gmgnApi.getTeamTrades(contractAddress);
-            const response = tradesData.data.history;
-
-            for (const buy of response) {
-                if (buy.event === "buy") {
-                    this.txHashes.add(buy.tx_hash);
-                }
-            }
+            const buyTrades = tradesData.data.history.filter(trade => trade.event === "buy");
+            
+            this.txHashes = new Set(buyTrades.map(trade => trade.tx_hash));
 
             return [this.txHashes, totalSupply];
         } catch (error) {
@@ -55,55 +51,42 @@ class BundleFinder {
     }
 
     async checkBundle(txHashes, totalSupply) {
-        let total_amount = 0.00;
-        let transactions = 0;
-
         const data = {
             transactions: 0,
-            totalAmount: 0.00,
+            totalAmount: 0,
             bundleDetected: false,
-            transactionDetails: {}
+            transactionDetails: {},
+            developerInfo: {}
         };
 
         for (const txHash of txHashes) {
-            const url = `https://api.solana.fm/v0/transfers/${txHash}`;
             try {
-                const response = await this.fetchData(url);
+                const response = await this.fetchData(`https://api.solana.fm/v0/transfers/${txHash}`);
                 const actions = response.result.data;
 
                 if (Array.isArray(actions)) {
-                    for (const action of actions) {
-                        if (action.action === "transfer" && action.token !== "") {
-                            const amount = this.formatTokens(action.amount);
-                            total_amount += amount;
-                            transactions += 1;
-                        }
+                    const transferActions = actions.filter(action => action.action === "transfer" && action.token !== "");
+                    const amounts = transferActions.map(action => this.formatTokens(action.amount));
+                    
+                    data.transactions += transferActions.length;
+                    data.totalAmount += amounts.reduce((sum, amount) => sum + amount, 0);
+
+                    if (amounts.length > 0) {
+                        data.transactionDetails[txHash] = {
+                            amounts,
+                            amountsPercentages: amounts.map(amount => (amount / totalSupply) * 100)
+                        };
                     }
-                }
-
-                const amounts = actions
-                    .filter(action => action.action === "transfer" && action.token !== "")
-                    .map(action => this.formatTokens(action.amount));
-
-                if (amounts.length > 0) {
-                    const amountsPercentages = amounts.map(amount => (amount / totalSupply) * 100);
-                    data.transactionDetails[txHash] = {
-                        amounts,
-                        amountsPercentages
-                    };
                 }
             } catch (error) {
                 console.error(`Error fetching transaction data for ${txHash}: ${error.message}`);
             }
         }
 
-        data.transactions = transactions;
-        data.totalAmount = total_amount;
-        data.bundleDetected = transactions > 1;
-
+        data.bundleDetected = data.transactions > 1;
         data.developerInfo = {
-            bundledAmount: total_amount,
-            percentageOfSupply: total_amount / totalSupply
+            bundledAmount: data.totalAmount,
+            percentageOfSupply: data.totalAmount / totalSupply
         };
 
         return data;
@@ -112,12 +95,15 @@ class BundleFinder {
     async findBundle(contractAddress) {
         try {
             const [txHashes, totalSupply] = await this.teamTrades(contractAddress);
-            const bundleData = await this.checkBundle(txHashes, totalSupply);
-            return bundleData;
+            return await this.checkBundle(txHashes, totalSupply);
         } catch (error) {
             console.error(`Error in findBundle: ${error.message}`);
             throw error;
         }
+    }
+
+    formatTokens(x) {
+        return parseFloat(x) / 1_000_000;
     }
 }
 

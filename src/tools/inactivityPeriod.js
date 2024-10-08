@@ -1,27 +1,28 @@
 const config = require('../config/config');
 const { getSolanaApi } = require('../integrations/solanaApi');
+const logger = require('../utils/logger');
 
 const solanaApi = getSolanaApi();
 
 async function checkInactivityPeriod(address, coinAddress, mainContext, subContext = 'checkInactivity') {
   try {
+    logger.info('Checking inactivity for address:', address); 
     const tokenAccounts = await solanaApi.getTokenAccountsByOwner(address, coinAddress, mainContext, subContext);
 
     if (!tokenAccounts || tokenAccounts.length === 0) {
-      console.log(`No token accounts found for ${address.slice(0, 6)}...`);
       return { isInactive: false, daysSinceLastActivity: 0, category: 'No Token' };
-  }
+    }
 
     const tokenAccountAddress = tokenAccounts[0].pubkey;
-
     const ataTransaction = await getFirstTransactionForATA(tokenAccountAddress, mainContext, subContext);
+
     if (!ataTransaction) {
       return { isInactive: false, daysSinceLastActivity: 0, category: 'No ATA Transaction' };
     }
+
     const lastSwapTransaction = await getLastSwapBeforeATA(address, ataTransaction.signature, mainContext, subContext);
 
     if (!lastSwapTransaction) {
-      console.log(`No swap transaction found for ${address.slice(0, 6)}...`);
       return { isInactive: true, daysSinceLastActivity: Infinity };
     }
 
@@ -32,54 +33,58 @@ async function checkInactivityPeriod(address, coinAddress, mainContext, subConte
     const isInactive = daysSinceLastActivity > config.INACTIVITY_THRESHOLD_DAYS;
     return { isInactive, daysSinceLastActivity };
   } catch (error) {
-    console.error(`Error checking inactivity for ${address.slice(0, 6)}...`, error);
+    logger.error(`Error checking inactivity for address: ${shortenAddress(String(address))}.`, { error });
     return { isInactive: false, daysSinceLastActivity: 0 };
   }
 }
 
-async function getFirstTransactionForATA(tokenAccountAddress, mainContext, subContext= 'checkInactivity') {
-  let before = null;
-  let firstTransaction = null;
+async function getFirstTransactionForATA(tokenAccountAddress, mainContext, subContext = 'checkInactivity') {
+  try {
+    let before = null;
+    let firstTransaction = null;
 
-  while (!firstTransaction) {
-    const signatures = await solanaApi.getSignaturesForAddress(tokenAccountAddress, { limit: 1000, before }, mainContext, subContext);
+    while (!firstTransaction) {
+      const signatures = await solanaApi.getSignaturesForAddress(tokenAccountAddress, { limit: 1000, before }, mainContext, subContext);
 
-    if (!signatures || signatures.length === 0) {
-      break;
+      if (!signatures || signatures.length === 0) break;
+
+      firstTransaction = signatures[signatures.length - 1];
+      before = firstTransaction.signature;
     }
-
-    firstTransaction = signatures[signatures.length - 1];
-    before = firstTransaction.signature;
+    return firstTransaction;
+  } catch (error) {
+    logger.error(`Error fetching first transaction for ATA: ${tokenAccountAddress}.`, { error });
+    throw error;
   }
-
-  return firstTransaction;
 }
 
-async function getLastSwapBeforeATA(ownerAddress, ataSignature, mainContext, subContext= 'checkInactivity') {
-  let before = ataSignature;
-  let lastSwapTransaction = null;
-  let paginationToken = null;
+async function getLastSwapBeforeATA(ownerAddress, ataSignature, mainContext, subContext = 'checkInactivity') {
+  try {
+    let before = ataSignature;
+    let lastSwapTransaction = null;
+    let paginationToken = null;
 
-  while (!lastSwapTransaction) {
-    const signatures = await solanaApi.getSignaturesForAddress(ownerAddress, { limit: 100, before, paginationToken }, mainContext, subContext);
+    while (!lastSwapTransaction) {
+      const signatures = await solanaApi.getSignaturesForAddress(ownerAddress, { limit: 100, before, paginationToken }, mainContext, subContext);
 
-    if (!signatures || signatures.length === 0) {
-      break;
-    }
+      if (!signatures || signatures.length === 0) break;
 
-    for (let tx of signatures) {
-      const txDetails = await solanaApi.getTransaction(tx.signature, { encoding: 'jsonParsed', maxSupportedTransactionVersion: 0 }, mainContext, subContext);
-      if (await isSwapTransaction(txDetails)) {
-        lastSwapTransaction = tx;
-        break;
+      for (const tx of signatures) {
+        const txDetails = await solanaApi.getTransaction(tx.signature, { encoding: 'jsonParsed', maxSupportedTransactionVersion: 0 }, mainContext, subContext);
+        if (await isSwapTransaction(txDetails)) {
+          lastSwapTransaction = tx;
+          break;
+        }
       }
+
+      paginationToken = signatures[signatures.length - 1].paginationToken;
+      before = signatures[signatures.length - 1].signature;
     }
-
-    paginationToken = signatures[signatures.length - 1].paginationToken;
-    before = signatures[signatures.length - 1].signature;
+    return lastSwapTransaction;
+  } catch (error) {
+    logger.error(`Error fetching last swap transaction before ATA for address: ${ownerAddress}.`, { error });
+    throw error;
   }
-
-  return lastSwapTransaction;
 }
 
 async function isSwapTransaction(txDetails) {
@@ -94,7 +99,7 @@ async function isSwapTransaction(txDetails) {
     '675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8'
   ];
 
-  const usesSwapProgram = txDetails.transaction.message.accountKeys.some(key => 
+  const usesSwapProgram = txDetails.transaction.message.accountKeys.some(key =>
     knownSwapPrograms.includes(key.pubkey)
   );
 
@@ -104,7 +109,7 @@ async function isSwapTransaction(txDetails) {
 
   for (const ix of txDetails.meta.innerInstructions) {
     for (const innerIx of ix.instructions) {
-      if (innerIx.parsed && innerIx.parsed.type === "transfer") {
+      if (innerIx.parsed && innerIx.parsed.type === 'transfer') {
         return true;
       }
     }
@@ -124,5 +129,13 @@ async function isSwapTransaction(txDetails) {
   return false;
 }
 
+/**
+ * Shortens an address for logging purposes.
+ * @param {string} address - The address to shorten.
+ * @returns {string} - Shortened address.
+ */
+function shortenAddress(address) {
+  return `${address.slice(0, 6)}...${address.slice(-4)}`;
+}
 
 module.exports = { checkInactivityPeriod };

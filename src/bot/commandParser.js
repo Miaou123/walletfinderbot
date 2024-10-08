@@ -148,7 +148,6 @@ const parseCommand = (text) => {
   let commandWithSlash = parts[0].toLowerCase();
   let args = parts.slice(1);
 
-  // Vérifie si la commande est "/help <command>"
   if (commandWithSlash === '/help' && args.length > 0) {
     const potentialCommand = args[0].startsWith('/') ? args[0].slice(1) : args[0];
     if (commandConfigs[potentialCommand]) {
@@ -156,16 +155,13 @@ const parseCommand = (text) => {
     }
   }
 
-  // Vérifie si "help" est ajouté après une commande, comme "/scan help"
   if (args.length > 0 && args[args.length - 1].toLowerCase() === 'help') {
     const command = commandWithSlash.startsWith('/') ? commandWithSlash.slice(1) : commandWithSlash;
     return { command: 'help', args: [command] };
   }
 
-  // Vérifie et extrait le nom de la commande
   const command = commandWithSlash.startsWith('/') ? commandWithSlash.slice(1) : commandWithSlash;
 
-  // Recherchez la commande correspondante ou son alias
   for (const [cmd, config] of Object.entries(commandConfigs)) {
     if (cmd === command || config.aliases.includes(command)) {
       return { command: cmd, args };
@@ -174,8 +170,6 @@ const parseCommand = (text) => {
 
   return { command: null, args };
 };
-
-
 
 const getCommandHelp = (command) => {
   const config = commandConfigs[command];
@@ -187,7 +181,6 @@ const getCommandHelp = (command) => {
 
   return `${config.description}\n\nUsage: ${config.usage}\n* = optional parameters\n() = default values\n\n${config.helpMessage}`;
 };
-
 
 const validateArgs = (command, args) => {
   const config = commandConfigs[command];
@@ -206,7 +199,6 @@ const validateArgs = (command, args) => {
     errors.push(`Too many arguments. ${getCommandHelp(command)}`);
   }
 
-  // Validate Solana address for commands that require it
   if (['scan', 'bundle', 'bt', 'th', 'team', 'search', 'eb'].includes(command)) {
     if (!validateSolanaAddress(args[0])) {
       errors.push(`Invalid contract address format. Please provide a valid Solana address.\n\n${getCommandHelp(command)}`);

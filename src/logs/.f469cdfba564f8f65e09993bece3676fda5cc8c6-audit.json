@@ -1,0 +1,15 @@
+{
+    "keep": {
+        "days": true,
+        "amount": 14
+    },
+    "auditLog": "C:\\Users\\olivi\\OneDrive\\Documents\\TelegramBots\\walletfinderbot-js\\src\\logs\\.f469cdfba564f8f65e09993bece3676fda5cc8c6-audit.json",
+    "files": [
+        {
+            "date": 1728393153401,
+            "name": "C:\\Users\\olivi\\OneDrive\\Documents\\TelegramBots\\walletfinderbot-js\\src\\logs\\error-2024-10-08.log",
+            "hash": "aa50ff743aaa53d80b0627d6f905732331ecb39322cd3c3409aa98859e4b51cc"
+        }
+    ],
+    "hashType": "sha256"
+}

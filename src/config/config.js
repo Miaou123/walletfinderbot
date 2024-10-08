@@ -1,15 +1,15 @@
 require('dotenv').config();
 
-const config = {
-  TELEGRAM_TOKEN: process.env.TELEGRAM_TOKEN || '',
-  HELIUS_API_KEY: process.env.HELIUS_API_KEY || '',
-  HELIUS_RPC_URL: process.env.HELIUS_API_KEY ? `https://rpc.helius.xyz/?api-key=${process.env.HELIUS_API_KEY}` : '',
+const sensitiveConfig = {
+  TELEGRAM_TOKEN: process.env.TELEGRAM_TOKEN,
+  HELIUS_API_KEY: process.env.HELIUS_API_KEY,
   CIELO_API_URL: process.env.CIELO_API_URL ? `https://api.cielo.app/${process.env.CIELO_API_URL}` : '',
-  CIELO_API_KEY: process.env.CIELO_API_KEY || '',
-  MONGODB_URI: process.env.MONGODB_URI || '',
-  DEFINED_API_KEY: process.env.DEFINED_API_KEY || '',
-  
-  // Non-sensitive configuration
+  CIELO_API_KEY: process.env.CIELO_API_KEY,
+  MONGODB_URI: process.env.MONGODB_URI,
+  DEFINED_API_KEY: process.env.DEFINED_API_KEY,
+};
+
+const nonSensitiveConfig = {
   TOP_HOLDERS_COUNT: 100,
   LOW_TRANSACTION_THRESHOLD: 100,
   MIN_TOKEN_THRESHOLD: 10000,
@@ -24,5 +24,19 @@ const config = {
     MOONSHOT: 'MoonCVVNZFSYkqNXP6bxHLPL6QQJiMagDL3qcqUQTrG',
   },
 };
+
+const config = {
+  ...sensitiveConfig,
+  ...nonSensitiveConfig,
+  HELIUS_RPC_URL: sensitiveConfig.HELIUS_API_KEY ? `https://rpc.helius.xyz/?api-key=${sensitiveConfig.HELIUS_API_KEY}` : '',
+};
+
+const requiredEnvVars = ['TELEGRAM_TOKEN', 'HELIUS_API_KEY', 'MONGODB_URI'];
+for (const envVar of requiredEnvVars) {
+  if (!process.env[envVar]) {
+    console.error(`Error: Environment variable ${envVar} is not set.`);
+    process.exit(1);
+  }
+}
 
 module.exports = config;

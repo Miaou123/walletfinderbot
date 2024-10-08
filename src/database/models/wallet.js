@@ -1,25 +1,21 @@
-// models/wallet.js
+const Joi = require('joi');
 
-class Wallet {
-    constructor(address, data) {
-        this.address = address;
-        this.data = data;
-        this.lastUpdated = new Date();
-    }
+const walletSchema = Joi.object({
+    address: Joi.string().required(),
+    balance: Joi.number().min(0).required(),
+    total_value: Joi.number().min(0).required(),
+    realized_profit_30d: Joi.number().required(),
+    winrate: Joi.number().min(0).max(1).required(),
+    buy_30d: Joi.number().integer().min(0).required(),
+    token_avg_cost: Joi.number().min(0).required(),
+    token_sold_avg_profit: Joi.number().required(),
+    pnl_2x_5x_num: Joi.number().integer().min(0).required(),
+    pnl_gt_5x_num: Joi.number().integer().min(0).required(),
+    lastUpdated: Joi.date().required()
+});
 
-    static fromDocument(doc) {
-        const wallet = new Wallet(doc.address, doc.data);
-        wallet.lastUpdated = doc.lastUpdated;
-        return wallet;
-    }
-
-    toDocument() {
-        return {
-            address: this.address,
-            data: this.data,
-            lastUpdated: this.lastUpdated
-        };
-    }
+function validateWallet(wallet) {
+    return walletSchema.validate(wallet);
 }
 
-module.exports = Wallet;
+module.exports = { validateWallet };

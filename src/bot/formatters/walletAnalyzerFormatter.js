@@ -1,4 +1,5 @@
 const { formatNumber } = require('./generalFormatters');
+const logger = require('../../utils/logger');
 
 const getHoldingEmoji = (wallet) => {
   try {
@@ -9,7 +10,7 @@ const getHoldingEmoji = (wallet) => {
     if (totalValue > 1000) return '🐟';
     return '🦐';
   } catch (error) {
-    console.error('Error in getHoldingEmoji:', error);
+    logger.error('Error in getHoldingEmoji:', error);
     return '❓';
   }
 };
@@ -35,7 +36,7 @@ const summarizeHolders = (categorizedWallets, tokenInfo) => {
 
     return summary;
   } catch (error) {
-    console.error('Error in summarizeHolders:', error);
+    logger.error('Error in summarizeHolders:', error);
     return {};
   }
 };
@@ -73,7 +74,7 @@ const formatSingleWallet = (wallet, index, tokenInfo) => {
   
     return result + '\n\n';
   } catch (error) {
-    console.error('Error in formatSingleWallet:', error);
+    logger.error('Error in formatSingleWallet:', error);
     return '';
   }
 };
@@ -85,7 +86,7 @@ const formatSimpleWallet = (wallet, index) => {
     const shortAddress = `${wallet.address.substring(0, 6)}...${wallet.address.slice(-4)}`;
     return `${rank} - <a href="https://solscan.io/account/${wallet.address}">${shortAddress}</a> → (${wallet.supplyPercentage}%)\n`;
   } catch (error) {
-    console.error('Error in formatSimpleWallet:', error);
+    logger.error('Error in formatSimpleWallet:', error);
     return '';
   }
 };
@@ -93,13 +94,13 @@ const formatSimpleWallet = (wallet, index) => {
 const formatWhaleMap = (analysisResult, tokenInfo, category, title) => {
   try {
     if (!analysisResult || !analysisResult.categorizedWallets) {
-      console.error('Invalid analysis result in formatWhaleMap:', analysisResult);
+      logger.error('Invalid analysis result in formatWhaleMap:', analysisResult);
       return null;
     }
 
     const wallets = analysisResult.categorizedWallets[category] || [];
     if (wallets.length === 0) {
-      console.log(`No wallets found for category: ${category}`);
+      logger.log(`No wallets found for category: ${category}`);
       return null;
     }
 
@@ -113,7 +114,7 @@ const formatWhaleMap = (analysisResult, tokenInfo, category, title) => {
 
     return message;
   } catch (error) {
-    console.error(`Error in formatWhaleMap for category ${category}:`, error);
+    logger.error(`Error in formatWhaleMap for category ${category}:`, error);
     return null;
   }
 };
@@ -132,7 +133,7 @@ const formatFreshWalletMessage = (analysisResult, tokenInfo) => {
 
     return message;
   } catch (error) {
-    console.error('Error in formatFreshWalletMessage:', error);
+    logger.error('Error in formatFreshWalletMessage:', error);
     return null;
   }
 };
@@ -154,12 +155,14 @@ const formatInactiveWalletMessage = (analysisResult, tokenInfo) => {
 
     return message;
   } catch (error) {
-    console.error('Error in formatInactiveWalletMessage:', error);
+    logger.error('Error in formatInactiveWalletMessage:', error);
     return null;
   }
 };
 
 const formatAnalysisMessage = (analysisResult, tokenInfo) => {
+
+  logger.info(`Formatting early buyers message for ${tokenInfo.symbol}`);
   const messages = [];
   const errors = [];
 
@@ -216,7 +219,7 @@ const formatAnalysisMessage = (analysisResult, tokenInfo) => {
     }
 
   } catch (error) {
-    console.error('Error in formatAnalysisMessage:', error);
+    logger.error('Error in formatAnalysisMessage:', error);
     errors.push(`Error in analysis formatting: ${error.message}`);
     messages.push('An error occurred while formatting the analysis results.');
   }

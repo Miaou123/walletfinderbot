@@ -1,25 +1,27 @@
 const { MongoClient } = require('mongodb');
 const config = require('../config/config');
-
-// Ajout de logs pour déboguer
-console.log('MONGODB_URI from config:', config.MONGODB_URI);
-console.log('MONGODB_URI from process.env:', process.env.MONGODB_URI);
+const logger = require('../utils/logger');  // Assurez-vous que le chemin est correct
+const { validateWallet } = require('./models/wallet');
 
 let uri = config.MONGODB_URI || process.env.MONGODB_URI;
 
 if (!uri) {
+    logger.error('MONGODB_URI is not defined in environment variables or config file');
     throw new Error('MONGODB_URI is not defined in environment variables or config file');
 }
 
 uri = uri.trim();
 
 if (!uri.startsWith('mongodb://') && !uri.startsWith('mongodb+srv://')) {
+    logger.error(`Invalid MongoDB URI: ${uri}. URI must start with mongodb:// or mongodb+srv://`);
     throw new Error(`Invalid MongoDB URI: ${uri}. URI must start with mongodb:// or mongodb+srv://`);
 }
 
-console.log('Cleaned MONGODB_URI:', uri);
-
-const client = new MongoClient(uri);
+logger.info('Cleaned MONGODB_URI:', uri);
+const client = new MongoClient(uri, {
+    connectTimeoutMS: 5000,
+    socketTimeoutMS: 30000,
+});
 
 let db;
 
@@ -28,10 +30,15 @@ async function connectToDatabase() {
         try {
             await client.connect();
             db = client.db("interesting_wallets");
-            console.log("Connected to the database");
+            logger.info("Connected to the database");
+            client.on('close', async () => {
+                logger.warn("Connection to database lost. Attempting to reconnect...");
+                db = null;
+                await connectToDatabase();
+            });
             await db.collection("wallets").createIndex({ address: 1 }, { unique: true });
         } catch (error) {
-            console.error("Error connecting to the database:", error);
+            logger.error("Error connecting to the database:", error);
             throw error;
         }
     }
@@ -45,36 +52,21 @@ async function getDatabase() {
     return db;
 }
 
-
 async function saveInterestingWallet(address, walletData) {
     const database = await getDatabase();
     const collection = database.collection("wallets");
     
-    const {
-        balance,
-        total_value,
-        realized_profit_30d,
-        winrate,
-        buy_30d,
-        token_avg_cost,
-        token_sold_avg_profit,
-        pnl_2x_5x_num,
-        pnl_gt_5x_num
-    } = walletData;
-
     const walletToSave = {
         address,
-        balance,
-        total_value,
-        realized_profit_30d,
-        winrate,
-        buy_30d,
-        token_avg_cost,
-        token_sold_avg_profit,
-        pnl_2x_5x_num,
-        pnl_gt_5x_num,
+        ...walletData,
         lastUpdated: new Date()
     };
+
+    const { error } = validateWallet(walletToSave);
+    if (error) {
+        logger.error(`Invalid wallet data for address ${address}:`, error.details[0].message);
+        throw new Error(`Invalid wallet data: ${error.details[0].message}`);
+    }
 
     try {
         const result = await collection.updateOne(
@@ -84,16 +76,16 @@ async function saveInterestingWallet(address, walletData) {
         );
         
         if (result.upsertedCount > 0) {
-            console.log(`New wallet ${address} saved to database`);
+            logger.info(`New wallet ${address} saved to database`);
         } else if (result.modifiedCount > 0) {
-            console.log(`Existing wallet ${address} updated in database`);
+            logger.info(`Existing wallet ${address} updated in database`);
         } else {
-            console.log(`Wallet ${address} already up to date in database`);
+            logger.debug(`Wallet ${address} already up to date in database`);
         }
         
         return result;
     } catch (error) {
-        console.error("Error saving wallet to database:", error);
+        logger.error("Error saving wallet to database:", error);
         throw error;
     }
 }

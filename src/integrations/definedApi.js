@@ -4,8 +4,8 @@ const definedRateLimiter = require('../utils/rateLimiters/definedRateLimiter');
 
 class DefinedApi {
     constructor() {
-        this.baseUrl = 'https://graph.defined.fi/graphql'; // URL de base générique de l'API
-        this.apiKey = process.env.DEFINED_API_KEY; // Assurez-vous que votre clé API est définie
+        this.baseUrl = 'https://graph.defined.fi/graphql';
+        this.apiKey = process.env.DEFINED_API_KEY;
         this.solanaNetworkId = 1399811149;
     }
 
@@ -14,24 +14,24 @@ class DefinedApi {
     
         const requestFunction = async () => {
             try {
-                console.log(`Envoi de la requête à l'API Defined (${methodName}):`, JSON.stringify({ query, variables }, null, 2));
+                console.log(`Sending request to Defined API (${methodName}):`, JSON.stringify({ query, variables }, null, 2));
                 const response = await axios.post(this.baseUrl, { query, variables }, {
                     headers: {
                         'Content-Type': 'application/json',
-                        'Authorization': this.apiKey, // Pas de 'Bearer' ici
+                        'Authorization': this.apiKey,
                     },
                 });
-                console.log('Réponse reçue:', JSON.stringify(response.data, null, 2));
+                console.log('Response received:', JSON.stringify(response.data, null, 2));
                 if (response.data.errors) {
                     throw new Error(JSON.stringify(response.data.errors));
                 }
                 return response.data;
             } catch (error) {
-                console.error(`Erreur lors de l'appel à l'API Defined (${methodName}):`, error.message);
+                console.error(`Error calling Defined API (${methodName}):`, error.message);
                 if (error.response) {
-                    console.error('Données de réponse:', error.response.data);
-                    console.error('Statut de réponse:', error.response.status);
-                    console.error('En-têtes de réponse:', error.response.headers);
+                    console.error('Response data:', error.response.data);
+                    console.error('Response status:', error.response.status);
+                    console.error('Response headers:', error.response.headers);
                 }
                 throw error;
             }
@@ -76,11 +76,10 @@ class DefinedApi {
             }
         };
     
-        console.log('Variables getTokenEvents:', JSON.stringify(variables, null, 2));
+        console.log('Variables for getTokenEvents:', JSON.stringify(variables, null, 2));
     
         return this.fetchData(query, variables, 'getTokenEvents', mainContext, subContext);
     }    
-
 }
 
 module.exports = new DefinedApi();
