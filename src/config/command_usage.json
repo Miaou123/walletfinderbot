@@ -11,6 +11,8 @@
   "Rengon0x0": {
     "team": 1,
     "eb": 1,
-    "scan": 1
+    "scan": 2,
+    "bt": 1,
+    "cross": 1
   }
 }
