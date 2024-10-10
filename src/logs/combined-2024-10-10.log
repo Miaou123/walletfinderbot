@@ -364,3 +364,18 @@
 {"0":"\"","1":"t","10":"i","11":"n","12":"d","13":"\"","14":" ","15":"i","16":"s","17":" ","18":"n","19":"o","2":"w","20":"t","21":" ","22":"a","23":"l","24":"l","25":"o","26":"w","27":"e","28":"d","3":"i","4":"t","5":"t","6":"e","7":"r","8":"_","9":"b","level":"error","message":"Invalid wallet data for address 2AXKCshcLRDU2EFXpWw4FCpDHoqRY5wjbn9mtGDsAbGb:","service":"telegram-bot","timestamp":"2024-10-10T14:21:30.379Z"}
 {"level":"info","message":"Cross-analysis message sent successfully to chat ID: 5831227801","service":"telegram-bot","timestamp":"2024-10-10T14:21:30.836Z"}
 {"level":"debug","message":"Cross command completed","service":"telegram-bot","timestamp":"2024-10-10T14:21:30.836Z"}
+{"0":"m","1":"o","10":"v","11":":","12":"/","13":"/","14":"o","15":"l","16":"i","17":"v","18":"i","19":"e","2":"n","20":"r","21":"b","22":"e","23":"r","24":"t","25":"a","26":"u","27":"1","28":"2","29":"3","3":"g","30":":","31":"K","32":"O","33":"7","34":"I","35":"O","36":"O","37":"S","38":"P","39":"3","4":"o","40":"I","41":"M","42":"r","43":"z","44":"6","45":"k","46":"c","47":"@","48":"c","49":"l","5":"d","50":"u","51":"s","52":"t","53":"e","54":"r","55":"0","56":".","57":"c","58":"8","59":"u","6":"b","60":"5","61":"u","62":".","63":"m","64":"o","65":"n","66":"g","67":"o","68":"d","69":"b","7":"+","70":".","71":"n","72":"e","73":"t","74":"/","8":"s","9":"r","level":"info","message":"Cleaned MONGODB_URI:","service":"telegram-bot","timestamp":"2024-10-10T16:04:32.296Z"}
+{"level":"info","message":"Set rate limit for command \"scan\" to 10 executions per 86400000ms.","service":"telegram-bot","timestamp":"2024-10-10T16:04:32.319Z"}
+{"level":"info","message":"Set rate limit for command \"bundle\" to 5 executions per 86400000ms.","service":"telegram-bot","timestamp":"2024-10-10T16:04:32.319Z"}
+{"level":"info","message":"Set rate limit for command \"bt\" to 5 executions per 86400000ms.","service":"telegram-bot","timestamp":"2024-10-10T16:04:32.319Z"}
+{"level":"info","message":"Set rate limit for command \"th\" to 5 executions per 86400000ms.","service":"telegram-bot","timestamp":"2024-10-10T16:04:32.320Z"}
+{"level":"info","message":"Set rate limit for command \"cross\" to 5 executions per 86400000ms.","service":"telegram-bot","timestamp":"2024-10-10T16:04:32.320Z"}
+{"level":"info","message":"Set rate limit for command \"team\" to 5 executions per 86400000ms.","service":"telegram-bot","timestamp":"2024-10-10T16:04:32.320Z"}
+{"level":"info","message":"Set rate limit for command \"search\" to 5 executions per 86400000ms.","service":"telegram-bot","timestamp":"2024-10-10T16:04:32.320Z"}
+{"level":"info","message":"Set rate limit for command \"eb\" to 5 executions per 86400000ms.","service":"telegram-bot","timestamp":"2024-10-10T16:04:32.321Z"}
+{"level":"info","message":"Bot is starting...","service":"telegram-bot","timestamp":"2024-10-10T16:04:32.325Z"}
+{"level":"info","message":"Bot is running...","service":"telegram-bot","timestamp":"2024-10-10T16:04:32.325Z"}
+{"level":"info","message":"Access control configuration loaded successfully.","service":"telegram-bot","timestamp":"2024-10-10T16:04:32.352Z"}
+{"0":"rengon0x","level":"info","message":"Final admin users:","service":"telegram-bot","timestamp":"2024-10-10T16:04:32.353Z"}
+{"level":"info","message":"Rate limit usage data loaded successfully.","service":"telegram-bot","timestamp":"2024-10-10T16:04:32.353Z"}
+{"level":"info","message":"Command usage data loaded successfully.","service":"telegram-bot","timestamp":"2024-10-10T16:04:32.353Z"}
