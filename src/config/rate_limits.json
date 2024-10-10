@@ -8,11 +8,19 @@
     "resetTime": 1728380337064
   },
   "Rengon0x0:scan": {
-    "count": 1,
+    "count": 2,
     "resetTime": 1728651561960
   },
   "Rengon0x0:eb": {
     "count": 1,
     "resetTime": 1728565157063
+  },
+  "Rengon0x0:bt": {
+    "count": 1,
+    "resetTime": 1728570038317
+  },
+  "Rengon0x0:cross": {
+    "count": 1,
+    "resetTime": 1728570076366
   }
 }
