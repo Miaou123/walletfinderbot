@@ -1,30 +1,31 @@
 const { Worker } = require('worker_threads');
 const path = require('path');
+const ActiveCommandsTracker = require('./activeCommandsTracker');
 
 class CommandManager {
     constructor() {
-        this.activeWorkers = new Map(); // Stocke les Workers actifs par utilisateur
+        this.activeWorkers = new Map();
     }
 
     startCommand(userId, command, args, onComplete, onError) {
-        // Si une commande est déjà en cours, on la refuse
-        if (this.activeWorkers.has(userId)) {
-            throw new Error(`User ${userId} already has an active command.`);
+        if (!ActiveCommandsTracker.addCommand(userId)) {
+            throw new Error(`User ${userId} has reached the maximum number of concurrent commands.`);
         }
 
-        // Initialiser un nouveau Worker avec la commande
         const worker = new Worker(path.join(__dirname, 'commandWorker.js'), {
             workerData: { command, args }
         });
 
         worker.on('message', (result) => {
             onComplete(result);
-            this.activeWorkers.delete(userId); // Supprimer le Worker terminé
+            this.activeWorkers.delete(userId);
+            ActiveCommandsTracker.removeCommand(userId);
         });
 
         worker.on('error', (error) => {
             onError(error);
-            this.activeWorkers.delete(userId); // Supprimer le Worker en cas d'erreur
+            this.activeWorkers.delete(userId);
+            ActiveCommandsTracker.removeCommand(userId);
         });
 
         worker.on('exit', (code) => {
@@ -32,6 +33,7 @@ class CommandManager {
                 onError(new Error(`Worker stopped with exit code ${code}`));
             }
             this.activeWorkers.delete(userId);
+            ActiveCommandsTracker.removeCommand(userId);
         });
 
         this.activeWorkers.set(userId, worker);
@@ -42,6 +44,7 @@ class CommandManager {
         if (worker) {
             worker.terminate();
             this.activeWorkers.delete(userId);
+            ActiveCommandsTracker.removeCommand(userId);
             return true;
         }
         return false;

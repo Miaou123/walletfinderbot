@@ -16,7 +16,18 @@ class GmgnApi {
   
       const requestFunction = async () => {
         const userAgent = new UserAgent();
-        const browser = await puppeteer.launch({ headless: true });
+        const browser = await puppeteer.launch({
+            headless: true,
+            args: [
+              '--no-sandbox',
+              '--disable-setuid-sandbox',
+              '--disable-dev-shm-usage',
+              '--disable-accelerated-2d-canvas',
+              '--no-first-run',
+              '--no-zygote',
+              '--disable-gpu'
+            ]
+          });          
         const page = await browser.newPage();
   
         try {
@@ -39,6 +50,8 @@ class GmgnApi {
         } catch (error) {
           await browser.close();
           throw error;
+        } finally {
+            await browser.close();
         }
       };
   

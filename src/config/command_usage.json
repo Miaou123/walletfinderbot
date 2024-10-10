@@ -3,9 +3,14 @@
     "team": 14,
     "scan": 15,
     "th": 5,
-    "bt": 3,
+    "bt": 4,
     "bundle": 3,
     "eb": 1,
-    "cross": 4
+    "cross": 5
+  },
+  "Rengon0x0": {
+    "team": 1,
+    "eb": 1,
+    "scan": 1
   }
 }

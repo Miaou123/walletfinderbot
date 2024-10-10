@@ -8,6 +8,7 @@ const { parseCommand, validateArgs, commandConfigs, getCommandHelp } = require('
 const AccessControl = require('./accessManager/accessControl');
 const RateLimiter = require('./accessManager/commandRateLimiter');
 const CommandUsageTracker = require('./accessManager/commandUsageTracker');
+const ActiveCommandsTracker = require('./activeCommandsTracker');
 
 // Constants
 const ONE_DAY_IN_MS = 24 * 60 * 60 * 1000;
@@ -170,6 +171,13 @@ bot.on('message', async (msg) => {
     if (!command) {
       await bot.sendLongMessage(msg.chat.id, "Unknown command. Use /help to see available commands.");
       return;
+    }
+
+    // Vérifiez le nombre de commandes actives pour l'utilisateur
+    const userId = msg.from.id;
+    if (ActiveCommandsTracker.getActiveCommandCount(userId) >= 2) {
+        await bot.sendLongMessage(msg.chat.id, "You have reached the maximum number of concurrent commands. Please wait for one of your commands to finish before starting a new one.");
+        return;
     }
 
     // Direct execution for commands without arguments
