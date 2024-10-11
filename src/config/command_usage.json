@@ -1,18 +1,19 @@
 {
   "Rengon0x": {
-    "team": 14,
-    "scan": 15,
-    "th": 5,
-    "bt": 4,
+    "team": 31,
+    "scan": 49,
+    "th": 12,
+    "bt": 10,
     "bundle": 3,
     "eb": 1,
     "cross": 5
   },
   "Rengon0x0": {
-    "team": 1,
-    "eb": 1,
-    "scan": 2,
-    "bt": 1,
-    "cross": 1
+    "team": 2,
+    "eb": 3,
+    "scan": 8,
+    "bt": 6,
+    "cross": 2,
+    "th": 5
   }
 }

@@ -14,14 +14,31 @@ const { analyzeTeamSupply, sendWalletDetails } = require('../analysis/teamSupply
 const BundleFinder = require('../analysis/bundleFinder');
 const { formatBundleResponse } = require('./formatters/bundleFormatter');
 const SupplyTracker = require('../tools/SupplyTracker');
+const UserManager = require('./accessManager/userManager');
+const ActiveCommandsTracker = require('./commandsManager/activeCommandsTracker'); 
+const path = require('path');  
 const logger = require('../utils/logger');
 
 let lastAnalysisResults = {};
 let supplyTrackerInstance;
 let pendingTracking = new Map();
+let userManager;
 
-const initializeSupplyTracker = (bot, accessControlInstance) => {
+const initializeUserManager = async () => {
+  const userFilePath = path.join(__dirname, '../data/all_users.json');
+  userManager = new UserManager(userFilePath);
+  await userManager.loadUsers();
+};
+
+const initializeSupplyTracker = async (bot, accessControlInstance) => {
   supplyTrackerInstance = new SupplyTracker(bot, accessControlInstance);
+  try {
+    await supplyTrackerInstance.init();
+    logger.info('SupplyTracker initialized successfully');
+  } catch (error) {
+    logger.error('Error initializing SupplyTracker:', error);
+    throw error;
+  }
 };
 
 // Utility functions
@@ -60,25 +77,40 @@ const validateAndParseMinAmountOrPercentage = (input, totalSupply, decimals) => 
   return { minAmount, minPercentage };
 };
 
-// Command handlers
-const handleStartCommand = (bot, msg, args) => {
+
+// Modifions la fonction handleStartCommand
+const handleStartCommand = async (bot, msg, args) => {
+  const chatId = msg.chat.id;
+  const userId = msg.from.id;
+  const username = msg.from.username;
+
+  // Vérification de l'initialisation de userManager
+  if (!userManager) {
+    logger.error('UserManager is not initialized. Ensure initializeUserManager is called before using the command.');
+    return;
+  }
+
+  // Ajouter l'utilisateur à la liste des utilisateurs avec toutes les informations
+  userManager.addUser(userId, chatId, username);
+
   const startMessage = `
 Welcome to Noesis! ✨🔍
-  
+
 For more information on the bot and the current beta phase, please check our <a href="https://smp-team.gitbook.io/noesis-bot">documentation</a>.
 
 If you are already whitelisted you can start by using /help for a full list of commands.
-  
+
 If you have any questions, want to report a bug or have any new feature suggestions feel free to dm @Rengon0x on telegram or twitter!
 
 Please note that some commands may take longer to execute than expected. This is primarily due to API restrictions, as we're currently using lower-tier API access. 
 As we advance, we intend to upgrade to higher tiers, which will result in 4–10x faster response times.
-  
+
 ⚠️This bot is still in development phase and will probably be subject to many bugs/issues⚠️
   `;
 
-  bot.sendLongMessage(msg.chat.id, startMessage);
+  await bot.sendLongMessage(chatId, startMessage);
 };
+
 
 const handlePingCommand = async (bot, msg, args) => {
   const startTime = Date.now();
@@ -93,6 +125,8 @@ const handlePingCommand = async (bot, msg, args) => {
 
 
 const handleScanCommand = async (bot, msg, args) => {
+  logger.info(`Starting Scan command for user ${msg.from.username}`);
+  const userId = msg.from.id; 
   try {
     const [tokenAddress, numberOfHoldersStr] = args;
     const numberOfHolders = numberOfHoldersStr ? parseInt(numberOfHoldersStr) : 10;
@@ -142,10 +176,12 @@ const handleScanCommand = async (bot, msg, args) => {
     await bot.sendLongMessage(msg.chat.id, `An error occurred during the token scan: ${error.message}`);
   } finally {
     ApiCallCounter.logApiCalls('scan');
+    ActiveCommandsTracker.removeCommand(userId, 'scan');
   }
 };
 
 const handleTopHoldersCommand = async (bot, msg, args) => {
+  const userId = msg.from.id; 
   logger.info(`Starting TopHolders command for user ${msg.from.username}`);
   try {
     const [coinAddress, topHoldersCountStr] = args;
@@ -181,10 +217,13 @@ const handleTopHoldersCommand = async (bot, msg, args) => {
   } finally {
     logger.debug('TopHolders command completed');
     ApiCallCounter.logApiCalls('Analyze');
+    ActiveCommandsTracker.removeCommand(userId, 'th');
+    
   }
 };
 
 const handleEarlyBuyersCommand = async (bot, msg, args) => {
+  const userId = msg.from.id; 
   logger.info(`Starting EarlyBuyers command for user ${msg.from.username}`);
   try {
     const [coinAddress, timeFrame, percentage] = args;
@@ -234,10 +273,12 @@ const handleEarlyBuyersCommand = async (bot, msg, args) => {
   } finally {
     logger.debug('EarlyBuyers command completed');
     ApiCallCounter.logApiCalls('earlyBuyers');
+    ActiveCommandsTracker.removeCommand(userId, 'eb');
   }
 };
 
 const handleCrossCommand = async (bot, msg, args) => {
+  const userId = msg.from.id; 
   logger.info(`Starting Cross command for user ${msg.from.username}`);
   const DEFAULT_MIN_COMBINED_VALUE = 1000; 
   try {
@@ -305,10 +346,12 @@ const handleCrossCommand = async (bot, msg, args) => {
   } finally {
     logger.debug('Cross command completed');
     ApiCallCounter.logApiCalls('crossWallet');
+    ActiveCommandsTracker.removeCommand(userId, 'cross');
   }  
 };
 
 const handleTeamSupplyCommand = async (bot, msg, args) => {
+  const userId = msg.from.id; 
   logger.info(`Starting Team Supply command for user ${msg.from.username}`);
   try {
     const [tokenAddress] = args;
@@ -356,10 +399,12 @@ const handleTeamSupplyCommand = async (bot, msg, args) => {
   } finally {
     logger.debug('handleTeamSupplyCommand command completed');
     ApiCallCounter.logApiCalls('teamSupply');
+    ActiveCommandsTracker.removeCommand(userId, 'team');
   }
 };
 
 const handleSearchCommand = async (bot, msg, args) => {
+  const userId = msg.from.id; 
   logger.info(`Starting Search command for user ${msg.from.username}`);
   try {
     const [tokenAddress, ...searchCriteria] = args;
@@ -389,10 +434,12 @@ const handleSearchCommand = async (bot, msg, args) => {
   } finally {
     logger.debug('Search command completed');
     ApiCallCounter.logApiCalls('searchWallet');
+    ActiveCommandsTracker.removeCommand(userId, 'search');
   }
 };
 
 const handleBundleCommand = async (bot, msg, args) => {
+  const userId = msg.from.id; 
   logger.info(`Starting Bundle command for user ${msg.from.username}`);
   try {
     const [tokenAddress] = args;
@@ -407,10 +454,12 @@ const handleBundleCommand = async (bot, msg, args) => {
   } finally {
     logger.debug('Search command completed');
     ApiCallCounter.logApiCalls('bundle');
+    ActiveCommandsTracker.removeCommand(userId, 'bundle');
   }
 };
 
 const handleBestTradersCommand = async (bot, msg, args) => {
+  const userId = msg.from.id; 
   logger.info(`Starting BestTrader command for user ${msg.from.username}`);
   try {
     const [contractAddress, ...otherArgs] = args;
@@ -453,6 +502,7 @@ const handleBestTradersCommand = async (bot, msg, args) => {
   } finally {
     logger.debug('bestTraders command completed');
     ApiCallCounter.logApiCalls('bestTraders');
+    ActiveCommandsTracker.removeCommand(userId, 'bt');
   }
 };
 
@@ -462,31 +512,54 @@ const handleTrackerCommand = async (bot, msg, args) => {
   const username = msg.from.username;
 
   const trackedSupplies = supplyTrackerInstance.getTrackedSuppliesByUser(username);
+  console.log("Tracked supplies:", trackedSupplies);
 
   if (trackedSupplies.length === 0) {
-    await bot.sendLongMessage(chatId, "You are not currently tracking any supplies. To start tracking supplies please run /team or /scan first");
+    await bot.sendLongMessage(chatId, "You are not currently tracking any supplies. To start tracking supplies, please run /team or /scan first.");
     return;
   }
 
-  let message = "Your currently tracked supplies:\n\n";
+  let message = `<b>Your currently tracked supplies:</b>\n\n`;
   const inlineKeyboard = [];
 
   trackedSupplies.forEach((supply, index) => {
-    message += `${index + 1}. ${supply.ticker} (${supply.tokenAddress})\n`;
-    message += `   Type: ${supply.trackType}, Current supply: ${supply.currentSupplyPercentage}%\n\n`;
+    let { ticker, tokenAddress, trackType, currentSupplyPercentage, significantChangeThreshold } = supply;
+
+    currentSupplyPercentage = currentSupplyPercentage ? parseFloat(currentSupplyPercentage) : null;
     
+    significantChangeThreshold = significantChangeThreshold ? parseFloat(significantChangeThreshold) : 'N/A';
+
+    const typeEmoji = trackType === 'topHolders' ? '🥇' : '👥';
+
+    let supplyEmoji = '☠️';
+    if (currentSupplyPercentage !== null) {
+      if (currentSupplyPercentage <= 10) supplyEmoji = '🟢';
+      else if (currentSupplyPercentage <= 20) supplyEmoji = '🟡';
+      else if (currentSupplyPercentage <= 40) supplyEmoji = '🟠';
+      else if (currentSupplyPercentage <= 50) supplyEmoji = '🔴';
+    }
+
+    const formattedSupply = currentSupplyPercentage !== null ? currentSupplyPercentage.toFixed(2) : 'N/A';
+
+    message += `${index + 1}. <b>${ticker}</b> <a href="https://dexscreener.com/solana/${tokenAddress}">📈</a>\n`;
+    message += `   Tracking type: ${trackType} ${typeEmoji}\n`;
+    message += `   Supply: ${formattedSupply}% ${supplyEmoji}\n`;
+    message += `   Threshold: ${significantChangeThreshold}%\n\n`;
+
     inlineKeyboard.push([{
-      text: `Stop tracking ${supply.ticker}`,
-      callback_data: `stop_${supply.tokenAddress}_${supply.trackType}`
+      text: `Stop tracking ${ticker}`,
+      callback_data: `stop_${tokenAddress}_${trackType}`
     }]);
   });
 
   await bot.sendLongMessage(chatId, message, {
     reply_markup: {
       inline_keyboard: inlineKeyboard
-    }
+    },
+    parse_mode: 'HTML'
   });
 };
+
 
 const handleStopCommand = async (bot, msg, args) => {
   const chatId = msg.chat.id;
@@ -506,17 +579,18 @@ const handleStopCommand = async (bot, msg, args) => {
   }
 };
 
+const userStates = new Map();
+
 const handleCallbackQuery = async (bot, callbackQuery) => {
   const action = callbackQuery.data;
   const chatId = callbackQuery.message.chat.id;
   const username = callbackQuery.from.username;
-  logger.log('Received callback query:', action, 'from', username);
 
   try {
     let [actionType, tokenAddress, param] = action.split('_');
-    logger.log('Action type:', actionType, 'Token Address:', tokenAddress, 'Param:', param);
 
-    let trackingInfo = lastAnalysisResults[chatId];
+    const trackingId = `${chatId}_${tokenAddress}`;
+    let trackingInfo = pendingTracking.get(trackingId) || lastAnalysisResults[chatId];
 
     switch (actionType) {
       case 'track':
@@ -527,10 +601,10 @@ const handleCallbackQuery = async (bot, callbackQuery) => {
         }
         return await sendWalletDetails(bot, chatId, trackingInfo.allWalletsDetails, trackingInfo.tokenInfo);
       case 'sd':
-        await handleSetDefaultThreshold(bot, chatId, trackingInfo, tokenAddress);
+        await handleSetDefaultThreshold(bot, chatId, trackingInfo, trackingId);
         break;
       case 'sc':
-        await handleSetCustomThreshold(bot, chatId, trackingInfo, tokenAddress);
+        await handleSetCustomThreshold(bot, chatId, trackingInfo, trackingId);
         break;
       case 'st':
         await handleStartTracking(bot, chatId, trackingInfo, parseFloat(param) || 1);
@@ -579,14 +653,14 @@ const handleTrackAction = async (bot, chatId, tokenAddress, trackingInfo) => {
     const initialSupplyPercentage = trackingInfo.totalSupplyControlled || trackingInfo.initialSupplyPercentage || 0;
     const trackType = trackingInfo.analysisType === 'tokenScanner' ? 'topHolders' : 'team';
     const username = trackingInfo.username;
-    
+    const supplyType = trackType === 'team' ? 'team supply' : 'total supply';
+
     logger.debug('Extracted info:', { totalSupply, decimals, ticker, initialSupplyPercentage, trackType, username });
 
     if (!totalSupply || isNaN(initialSupplyPercentage)) {
       throw new Error('Invalid supply information');
     }
 
-    const supplyType = trackType === 'team' ? 'team supply' : 'total supply';
     const message = `🔁 Ready to track ${ticker} ${supplyType} (${initialSupplyPercentage.toFixed(2)}%)\n\n` +
                     `You will receive a notification when ${supplyType} changes by more than 1%`;
 
@@ -600,20 +674,80 @@ const handleTrackAction = async (bot, chatId, tokenAddress, trackingInfo) => {
       ]
     };
 
-    await bot.sendLongMessage(chatId, message, { reply_markup: keyboard });
+    // Use bot.sendMessage to get the sentMessage object with message_id
+    const sentMessage = await bot.sendMessage(chatId, message, { reply_markup: keyboard, parse_mode: 'HTML' });
+    trackingInfo.messageId = sentMessage.message_id;
+
+    // Update lastAnalysisResults and pendingTracking
+    lastAnalysisResults[chatId] = trackingInfo;
+    const trackingId = `${chatId}_${tokenAddress}`;
+    pendingTracking.set(trackingId, trackingInfo);
+
     logger.info('Track action message sent successfully');
   } catch (error) {
     logger.error('Error in handleTrackAction:', error);
     try {
-      await bot.sendLongMessage(chatId, `An error occurred while setting up tracking: ${error.message}. Please try again or contact support.`);
+      await bot.sendMessage(chatId, `An error occurred while setting up tracking: ${error.message}. Please try again or contact support.`);
     } catch (sendError) {
       logger.error('Error sending error message to user:', sendError);
     }
   }
 };
 
-const handleStartTracking = async (bot, chatId, trackingInfo, threshold) => {
 
+const handleSetDefaultThreshold = async (bot, chatId, trackingInfo, trackingId) => {
+  trackingInfo.threshold = 1;
+  pendingTracking.set(trackingId, trackingInfo);
+  await updateTrackingMessage(bot, chatId, trackingInfo, trackingId);
+};
+
+const updateTrackingMessage = async (bot, chatId, trackingInfo, trackingId) => {
+  const tokenAddress = trackingInfo.tokenAddress;
+  const threshold = trackingInfo.threshold || 1;
+  const ticker = trackingInfo.tokenInfo.symbol || 'Unknown';
+  const initialSupplyPercentage = trackingInfo.totalSupplyControlled || trackingInfo.initialSupplyPercentage || 0;
+  const trackType = trackingInfo.trackType || (trackingInfo.analysisType === 'tokenScanner' ? 'topHolders' : 'team');
+  const supplyType = trackType === 'team' ? 'team supply' : 'total supply';
+
+  const message = `🔁 Ready to track ${ticker} ${supplyType} (${initialSupplyPercentage.toFixed(2)}%)\n\n` +
+                  `You will receive a notification when ${supplyType} changes by more than ${threshold}%`;
+
+  const isDefaultThreshold = threshold === 1;
+
+  const keyboard = {
+    inline_keyboard: [
+      [
+        { text: isDefaultThreshold ? "✅1%" : "1%", callback_data: `sd_${tokenAddress}_1` },
+        { text: !isDefaultThreshold ? `✅${threshold}%` : "Custom %", callback_data: `sc_${tokenAddress}` }
+      ],
+      [{ text: "Start tracking", callback_data: `st_${tokenAddress}_${threshold}` }]
+    ]
+  };
+
+  try {
+    await bot.editMessageText(message, {
+      chat_id: chatId,
+      message_id: trackingInfo.messageId,
+      reply_markup: keyboard
+    });
+  } catch (error) {
+    logger.error('Error updating tracking message:', error);
+  }
+};
+
+const handleSetCustomThreshold = async (bot, chatId, trackingInfo, trackingId) => {
+  await bot.sendLongMessage(chatId, "Enter new supply change percentage (e.g., 2.5):");
+  trackingInfo.awaitingCustomThreshold = true;
+  pendingTracking.set(trackingId, trackingInfo);
+
+  userStates.set(chatId, {
+    action: 'awaiting_custom_threshold',
+    trackingId: trackingId
+  });
+};
+
+const handleStartTracking = async (bot, chatId, trackingInfo, threshold) => {
+  threshold = trackingInfo.threshold || threshold || 1;
   const { tokenAddress, teamWallets, topHoldersWallets, initialSupplyPercentage, tokenInfo, username, analysisType } = trackingInfo;
   const trackType = trackingInfo.trackType || (trackingInfo.analysisType === 'tokenScanner' ? 'topHolders' : 'team');
   const totalSupply = tokenInfo.totalSupply;
@@ -621,13 +755,12 @@ const handleStartTracking = async (bot, chatId, trackingInfo, threshold) => {
   logger.debug('Extracted info for Handle tracking:', { trackType, tokenAddress, teamWallets, topHoldersWallets, initialSupplyPercentage, totalSupply, tokenInfo, username });
 
   const wallets = trackType === 'team' ? teamWallets : topHoldersWallets;
-  
+
   if (!wallets || wallets.length === 0) {
     logger.warn(`No ${trackType} wallets found for ${tokenAddress}. This may cause issues with tracking.`);
     await bot.sendLongMessage(chatId, `Warning: No ${trackType} wallets found. Tracking may not work as expected.`);
     return;
   }
-
 
   try {
     supplyTrackerInstance.startTracking(
@@ -651,49 +784,44 @@ const handleStartTracking = async (bot, chatId, trackingInfo, threshold) => {
   }
 };
 
-const handleSetDefaultThreshold = async (bot, chatId, trackingInfo, trackingId) => {
-  trackingInfo.threshold = 1;
-  await bot.sendLongMessage(chatId, `Threshold set to default (1%)`);
-  pendingTracking.set(trackingId, trackingInfo);
-};
-
-const handleSetCustomThreshold = async (bot, chatId, trackingInfo, trackingId) => {
-  await bot.sendLongMessage(chatId, "Enter new supply change (ex: 2.5):");
-  trackingInfo.awaitingCustomThreshold = true;
-  pendingTracking.set(trackingId, trackingInfo);
-};
-
 const handleMessage = async (bot, msg) => {
   const chatId = msg.chat.id;
-  const trackingInfo = pendingTracking.get(chatId);
-  
-  if (trackingInfo && trackingInfo.awaitingCustomThreshold) {
-    const threshold = parseFloat(msg.text);
-    if (isNaN(threshold) || threshold <= 0 || threshold > 100) {
-      await bot.sendLongMessage(chatId, "Please enter a valid number between 0 and 100 for the threshold.");
+  const text = msg.text.trim();
+  const userState = userStates.get(chatId);
+
+  if (userState && userState.action === 'awaiting_custom_threshold') {
+    const trackingId = userState.trackingId;
+    let trackingInfo = pendingTracking.get(trackingId);
+
+    if (!trackingInfo) {
+      await bot.sendLongMessage(chatId, "Tracking info not found. Please start over.");
+      userStates.delete(chatId);
       return;
     }
-    
+
+    // Retirer le symbole '%' s'il est présent et vérifier la valeur
+    const thresholdInput = text.replace('%', '').trim();
+    const threshold = parseFloat(thresholdInput);
+
+    // Vérifier si le seuil est valide (entre 0.1 et 100)
+    if (isNaN(threshold) || threshold < 0.1 || threshold > 100) {
+      await bot.sendLongMessage(chatId, "Invalid input. Please enter a number between 0.1 and 100 for the threshold.");
+      return;
+    }
+
+    // Si l'entrée est correcte, continuer avec la mise à jour
     trackingInfo.threshold = threshold;
     trackingInfo.awaitingCustomThreshold = false;
-    pendingTracking.set(chatId, trackingInfo);
+    pendingTracking.set(trackingId, trackingInfo);
 
-    const message = `🔁 Ready to track ${trackingInfo.tokenInfo.symbol} ${trackingInfo.trackType} supply (${trackingInfo.initialSupplyPercentage.toFixed(2)}%)\n\n` +
-                    `You will receive a notification when supply changes by more than ${threshold}%`;
-
-    const keyboard = {
-      inline_keyboard: [
-        [
-          { text: "1%", callback_data: `set_default_threshold_${trackingInfo.trackType}_${trackingInfo.tokenAddress.substring(0, 20)}` },
-          { text: `✅${threshold}%`, callback_data: `set_custom_threshold_${trackingInfo.trackType}_${trackingInfo.tokenAddress.substring(0, 20)}` }
-        ],
-        [{ text: "Start tracking", callback_data: `start_tracking_${trackingInfo.trackType}_${trackingInfo.tokenAddress.substring(0, 20)}` }]
-      ]
-    };
-
-    await bot.sendLongMessage(chatId, message, { reply_markup: keyboard });
+    await updateTrackingMessage(bot, chatId, trackingInfo, trackingId);
+    userStates.delete(chatId);
+  } else {
+    // Gérer d'autres messages ou ignorer
   }
 };
+
+
 
 // Export all command handlers
 module.exports = {
@@ -720,5 +848,6 @@ module.exports = {
   stop: handleStopCommand,
   initializeSupplyTracker,
   handleCallbackQuery,
-  handleMessage
+  handleMessage,
+  initializeUserManager, 
 };

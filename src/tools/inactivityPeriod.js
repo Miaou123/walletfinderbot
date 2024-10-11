@@ -6,7 +6,7 @@ const solanaApi = getSolanaApi();
 
 async function checkInactivityPeriod(address, coinAddress, mainContext, subContext = 'checkInactivity') {
   try {
-    logger.info('Checking inactivity for address:', address); 
+    //logger.info('Checking inactivity for address:', address); 
     const tokenAccounts = await solanaApi.getTokenAccountsByOwner(address, coinAddress, mainContext, subContext);
 
     if (!tokenAccounts || tokenAccounts.length === 0) {

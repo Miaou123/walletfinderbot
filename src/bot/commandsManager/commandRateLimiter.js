@@ -61,7 +61,7 @@ class RateLimiter {
    */
   setLimit(command, limit, period) {
     this.limits.set(command, { limit, period });
-    logger.info(`Set rate limit for command "${command}" to ${limit} executions per ${period}ms.`);
+    //logger.info(`Set rate limit for command "${command}" to ${limit} executions per ${period}ms.`);
   }
 
   /**

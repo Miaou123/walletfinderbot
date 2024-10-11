@@ -1,0 +1,50 @@
+{
+  "Rengon0x": [
+    {
+      "trackerId": "J9SXKctbZVws65vjBHL91mqStzq5an1xZxdi6a4h853o_topHolders",
+      "chatId": 1718036512,
+      "wallets": [
+        {
+          "address": "3Kn7r5C8qGBbXfNaDhR23ZJd4cfepSkEG87GapoScees",
+          "percentage": 3.21
+        },
+        {
+          "address": "7odCEtcoFfXVGcc5vkDXzyYkzgW2iD5AWfybgSzysM5J",
+          "percentage": 2.47
+        },
+        {
+          "address": "BMMFwQoE9ZGEm5n6XhVDvKnuRUutg9mGHXqmDQ5FWRjD",
+          "percentage": 2.11
+        },
+        {
+          "address": "AjwVNpX7UNpvrm65pYcLdhzGCJekfB3Kjt2wBLQWtXEj",
+          "percentage": 1.87
+        },
+        {
+          "address": "JCfk3uWPY4MkHcqRZPR4bqgjLHJuiCH5Q2HHPm6fuiX7",
+          "percentage": 1.81
+        },
+        {
+          "address": "5bo21nNfs37Gwm25PeTmSfxbdevSBMJHqfrwPohv1nw4",
+          "percentage": 1.79
+        },
+        {
+          "address": "H3ZLcBH4YjJCxzNu14URJe72NbU84STScns2m8XDipwE",
+          "percentage": 1.77
+        },
+        {
+          "address": "EBuzHh8BxwktRAhEi9Vj3CL5FATCMWdy7iiGTSVjswXG",
+          "percentage": 1.61
+        }
+      ],
+      "initialSupplyPercentage": "16.64",
+      "currentSupplyPercentage": "16.6834395299181151",
+      "totalSupply": "999897138.565076",
+      "significantChangeThreshold": "1",
+      "ticker": "HODL",
+      "decimals": 6,
+      "trackType": "topHolders",
+      "tokenAddress": "J9SXKctbZVws65vjBHL91mqStzq5an1xZxdi6a4h853o"
+    }
+  ]
+}

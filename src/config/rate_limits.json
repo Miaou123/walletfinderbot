@@ -1,6 +1,6 @@
 {
   "Rengon0x0:team": {
-    "count": 1,
+    "count": 2,
     "resetTime": 1728651553826
   },
   "loncapa:team": {
@@ -8,19 +8,23 @@
     "resetTime": 1728380337064
   },
   "Rengon0x0:scan": {
-    "count": 2,
+    "count": 8,
     "resetTime": 1728651561960
   },
   "Rengon0x0:eb": {
-    "count": 1,
-    "resetTime": 1728565157063
+    "count": 2,
+    "resetTime": 1728683781899
   },
   "Rengon0x0:bt": {
-    "count": 1,
-    "resetTime": 1728570038317
+    "count": 5,
+    "resetTime": 1728683485865
   },
   "Rengon0x0:cross": {
     "count": 1,
-    "resetTime": 1728570076366
+    "resetTime": 1728683501216
+  },
+  "Rengon0x0:th": {
+    "count": 4,
+    "resetTime": 1728683788165
   }
 }

@@ -15,12 +15,6 @@ async function getHolders(coinAddress, mainContext, subContext) {
 
     while (true) {
       const result = await solanaApi.getTokenAccounts(coinAddress, 1000, cursor, mainContext, subContext);
-
-      if (!result.token_accounts || result.token_accounts.length === 0) {
-        logger.info(`No more results or no token accounts found for coin address: ${coinAddress}`);
-        break;
-      }
-
       result.token_accounts.forEach((account) => {
         const balance = new BigNumber(account.amount).dividedBy(new BigNumber(10).pow(tokenDecimals));
         if (balance.isGreaterThanOrEqualTo(MIN_TOKEN_THRESHOLD)) {
@@ -35,7 +29,6 @@ async function getHolders(coinAddress, mainContext, subContext) {
       cursor = result.cursor;
 
       if (!cursor) {
-        logger.info(`Stopping pagination for coin address: ${coinAddress} - no more cursor`);
         break;
       }
     }
@@ -62,7 +55,6 @@ async function getTopHolders(coinAddress, count = 20, mainContext, subContext) {
       }
 
       topHolders = await Promise.all(result.value.map(async (account, index) => {
-        logger.info(`Processing account ${index + 1} for coin: ${coinAddress} - Address: ${account.address}`);
 
         const tokenAccountInfo = await solanaApi.getAccountInfo(account.address, { encoding: 'jsonParsed' }, mainContext, subContext);
         if (!isValidAccountInfo(tokenAccountInfo)) {

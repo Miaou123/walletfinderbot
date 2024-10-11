@@ -33,11 +33,10 @@ class DexScreenerApi {
     async getMultipleTokenPrices(tokenAddresses, mainContext = 'default', subContext = null) {
         ApiCallCounter.incrementCall('DexScreener', 'getMultipleTokenPrices', mainContext, subContext);
 
-        console.log(`getMultipleTokenPrices called with ${tokenAddresses.length} addresses`);
         this.validateTokenAddresses(tokenAddresses);
 
         try {
-            console.log(`Calling DexScreener API for addresses: ${tokenAddresses.join(',')}`);
+           // console.log(`Calling DexScreener API for addresses: ${tokenAddresses.join(',')}`);
             const response = await this.fetchDexScreenerData(`tokens/${tokenAddresses.join(',')}`);
 
             if (!response.data || !response.data.pairs) {
@@ -46,11 +45,9 @@ class DexScreenerApi {
             }
 
             const prices = this.extractTokenPrices(response.data.pairs);
-            console.log(`Processed prices:`, prices);
+          //  console.log(`Processed prices:`, prices);
             return prices;
         } catch (error) {
-            console.error('Error in getMultipleTokenPrices:', error);
-            console.error('Full error object:', JSON.stringify(error, Object.getOwnPropertyNames(error)));
             throw error;
         }
     }
