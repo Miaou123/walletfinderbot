@@ -4,11 +4,13 @@ const winston = require('winston');
 const fs = require('fs');
 const config = require('../config/config');
 const commandHandler = require('./commandHandler');
-const { parseCommand, validateArgs, commandConfigs, getCommandHelp } = require('./commandParser');
+const CommandHandlers = require('./commandHandlers/commandHandlers');
+const UserManager = require('./accessManager/userManager');
+const ActiveCommandsTracker = require('./commandsManager/activeCommandsTracker');
+const { parseCommand, validateArgs, commandConfigs, getCommandHelp } = require('./commandsManager/commandParser');
 const AccessControl = require('./accessManager/accessControl');
-const RateLimiter = require('./accessManager/commandRateLimiter');
-const CommandUsageTracker = require('./accessManager/commandUsageTracker');
-const ActiveCommandsTracker = require('./activeCommandsTracker');
+const RateLimiter = require('./commandsManager/commandRateLimiter');
+const CommandUsageTracker = require('./commandsManager/commandUsageTracker');
 
 // Constants
 const ONE_DAY_IN_MS = 24 * 60 * 60 * 1000;
@@ -17,6 +19,7 @@ const MAX_MESSAGE_LENGTH = 4096;
 // Path configurations
 const basePath = path.resolve(__dirname, '..');
 const configPath = path.join(basePath, 'config');
+const userFilePath = path.join(basePath, 'data', 'all_users.json');
 
 // Ensure config directory exists
 if (!fs.existsSync(configPath)) {
@@ -31,11 +34,11 @@ const logger = winston.createLogger({
 });
 
 // Initialize managers
+const userManagerInstance = new UserManager(userFilePath);
 const accessControl = new AccessControl(path.join(configPath, 'access.json'));
 const rateLimiter = new RateLimiter(path.join(configPath, 'rate_limits.json'));
 const usageTracker = new CommandUsageTracker(path.join(configPath, 'command_usage.json'));
-
-logger.info('Loaded admin users in telegramBot.js:', Array.from(accessControl.adminUsers));
+const commandHandlers = new CommandHandlers(userManagerInstance, accessControl);
 
 // Set rate limits for commands
 Object.entries(commandConfigs).forEach(([cmd, config]) => {
@@ -44,7 +47,7 @@ Object.entries(commandConfigs).forEach(([cmd, config]) => {
     }
 });
 
-// Utility functions
+// Utility function to split long messages
 function splitMessage(message) {
     if (typeof message !== 'string') {
         logger.error('Invalid message type:', typeof message);
@@ -68,6 +71,7 @@ function splitMessage(message) {
     return messages.filter(msg => msg.trim().length > 0);
 }
 
+// Function to send long messages
 async function sendLongMessage(bot, chatId, message, options = {}) {
     if (message === undefined || message === null) {
         logger.error('Message is undefined or null');
@@ -107,9 +111,34 @@ async function sendLongMessage(bot, chatId, message, options = {}) {
 const bot = new TelegramBot(config.TELEGRAM_TOKEN, { polling: true });
 bot.sendLongMessage = (chatId, message, options) => sendLongMessage(bot, chatId, message, options);
 
-commandHandler.initializeSupplyTracker(bot, accessControl);
+// Function to check users
+const checkUsers = () => {
+    console.log('Checking users before initializing CommandHandlers:');
+    userManagerInstance.debugUsers();
+};
 
-// Middleware
+// Bot initialization function
+const initBot = async () => {
+    try {
+        logger.info('Starting bot initialization...');
+        await userManagerInstance.loadUsers();
+        await commandHandler.initializeUserManager();
+        checkUsers();
+        await commandHandler.initializeSupplyTracker(bot, accessControl, userManagerInstance);
+        logger.info('Bot initialization completed successfully');
+    } catch (error) {
+        logger.error('Error during bot initialization:', error);
+        throw error; 
+    }
+};
+
+// Initialize the bot
+initBot().catch(error => {
+    logger.error('Fatal error during bot initialization:', error);
+    process.exit(1);
+});
+
+// Authentication middleware
 const authMiddleware = async (msg, command) => {
     const username = msg.from.username;
     if (!accessControl.isAllowed(username)) {
@@ -125,7 +154,7 @@ const authMiddleware = async (msg, command) => {
     return true;
 };
 
-// Command handlers
+// Help command handler
 const handleHelp = async (msg, args) => {
     if (args.length === 0) {
         const generalHelpMessage = `
@@ -165,56 +194,104 @@ If you have any questions, want to report a bug, or have any suggestions on new 
 
 // Main message handler
 bot.on('message', async (msg) => {
-    if (!msg.text || !msg.text.startsWith('/')) return;
-  
-    const { command, args } = parseCommand(msg.text);
-    if (!command) {
-      await bot.sendLongMessage(msg.chat.id, "Unknown command. Use /help to see available commands.");
-      return;
-    }
+    if (!msg.text) return;
 
-    // Vérifiez le nombre de commandes actives pour l'utilisateur
-    const userId = msg.from.id;
-    if (ActiveCommandsTracker.getActiveCommandCount(userId) >= 2) {
-        await bot.sendLongMessage(msg.chat.id, "You have reached the maximum number of concurrent commands. Please wait for one of your commands to finish before starting a new one.");
-        return;
-    }
+    if (msg.text.startsWith('/')) {
+        const { command, args } = parseCommand(msg.text);
+        const userId = msg.from.id;
 
-    // Direct execution for commands without arguments
-    if (args.length === 0) {
-        if (['start', 'ping', 'tracker', 'cancel'].includes(command)) {
-            await commandHandler[command](bot, msg, args);
+        logger.info(`Received command: ${command} with args: [${args}] from user: ${msg.from.username} (ID: ${userId})`);
+
+        if (!command) {
+            await bot.sendLongMessage(msg.chat.id, "Unknown command. Use /help to see available commands.");
             return;
         }
-    }
 
-    if (command === 'help') {
-        await handleHelp(msg, args);
-        return;
-    }
-  
-    const config = commandConfigs[command];
-    if (!config) {
-      await bot.sendLongMessage(msg.chat.id, "Unknown command. Use /help to see available commands.");
-      return;
-    }
-  
-    const validationErrors = validateArgs(command, args);
-    if (validationErrors.length > 0) {
-      await bot.sendLongMessage(msg.chat.id, validationErrors.join('\n\n'));
-      return;
-    }
-  
-    if (config.requiresAuth) {
-      const isAuthorized = await authMiddleware(msg, command);
-      if (!isAuthorized) return;
-    }
-  
-    try {
-      await commandHandler[command](bot, msg, args);
-    } catch (error) {
-        logger.error('Error in message handler:', error);
-        await bot.sendMessage(msg.chat.id, "An unexpected error occurred. Please try again later.");
+        const limitedCommands = ['scan', 'bundle', 'bt', 'th', 'cross', 'team', 'search', 'eb'];
+
+        // Gestion des commandes sans arguments comme start, ping, tracker, etc.
+        if (['start', 'ping', 'tracker', 'cancel', 'help'].includes(command)) {
+            try {
+                if (command === 'help') {
+                    await handleHelp(msg, args);
+                } else if (typeof commandHandler[command] === 'function') {
+                    logger.info(`Executing non-limited command: ${command} for user: ${msg.from.username} (ID: ${userId})`);
+                    await commandHandler[command](bot, msg, args);
+                } else {
+                    logger.error(`Command handler not found for command: ${command}`);
+                    await bot.sendLongMessage(msg.chat.id, "Command not found. Please use /help to see available commands.");
+                }
+            } catch (error) {
+                logger.error(`Error handling command ${command}:`, error);
+                await bot.sendLongMessage(msg.chat.id, "An unexpected error occurred. Please try again later.");
+            }
+            return;
+        }
+
+        // Récupération de la configuration de la commande
+        const config = commandConfigs[command];
+        if (!config) {
+            await bot.sendLongMessage(msg.chat.id, "Unknown command. Use /help to see available commands.");
+            return;
+        }
+
+        // Validation des arguments
+        const validationErrors = validateArgs(command, args);
+        if (validationErrors.length > 0) {
+            await bot.sendLongMessage(msg.chat.id, validationErrors.join('\n\n'));
+            return;
+        }
+
+        // Vérification de l'authentification si nécessaire
+        if (config.requiresAuth) {
+            const isAuthorized = await authMiddleware(msg, command);
+            if (!isAuthorized) return;
+        }
+
+        // Vérification du nombre maximum de commandes actives pour les commandes limitées
+        if (limitedCommands.includes(command)) {
+            if (!ActiveCommandsTracker.canAddCommand(userId, command)) {
+                logger.warn(`User ${userId} attempted to start command ${command} but has reached the limit.`);
+                await bot.sendLongMessage(msg.chat.id, "You have reached the maximum number of concurrent commands. Please wait for one of your commands to finish before starting a new one.");
+                return;
+            }
+
+            if (!ActiveCommandsTracker.addCommand(userId, command)) {
+                logger.warn(`Failed to add command ${command} for user ${userId}. Maximum limit reached.`);
+                await bot.sendLongMessage(msg.chat.id, "You have reached the maximum number of instances for this command. Please wait for one to finish before starting a new one.");
+                return;
+            }
+
+            logger.debug(`Added command ${command} for user ${userId}. New active count: ${ActiveCommandsTracker.getActiveCommandCount(userId)}`);
+        }
+
+        // Exécution de la commande
+        try {
+            if (typeof commandHandler[command] === 'function') {
+                logger.info(`Executing command: ${command} for user: ${msg.from.username} (ID: ${userId}) with args: [${args}]`);
+                await commandHandler[command](bot, msg, args);
+            } else {
+                logger.error(`Command handler not found for command: ${command}`);
+                await bot.sendLongMessage(msg.chat.id, "Command not found. Please use /help to see available commands.");
+            }
+        } catch (error) {
+            logger.error(`Error in command handler for command ${command}:`, error);
+            await bot.sendLongMessage(msg.chat.id, "An unexpected error occurred while processing the command. Please try again later.");
+        } finally {
+            // Supprimer la commande de la liste des commandes actives une fois terminée
+            if (limitedCommands.includes(command)) {
+                ActiveCommandsTracker.removeCommand(userId, command);
+                logger.debug(`Removed command ${command} for user ${userId}. New active count: ${ActiveCommandsTracker.getActiveCommandCount(userId)}`);
+            }
+        }
+    } else {
+        // Traitement des messages non-commandes (par exemple pour la gestion des états utilisateur)
+        try {
+            logger.info(`Handling non-command message from user: ${msg.from.username}`);
+            await commandHandler.handleMessage(bot, msg);
+        } catch (error) {
+            logger.error(`Error handling non-command message:`, error);
+        }
     }
 });
 
@@ -264,12 +341,17 @@ bot.onText(/\/removeuser (.+)/, async (msg, match) => {
         await accessControl.removeUser(userToRemove);
         bot.sendLongMessage(chatId, `User ${userToRemove} has been removed.`);
     } catch (error) {
-        logger.error('Error in adduser command:', error);
-        await bot.sendMessage(msg.chat.id, "An error occurred while adding the user.");
+        logger.error('Error in removeuser command:', error);
+        await bot.sendMessage(msg.chat.id, "An error occurred while removing the user.");
     }
 });
 
+bot.onText(/^\/broadcast/, async (msg) => {
+    await commandHandlers.broadcastHandler.handleBroadcastCommand(bot, msg);
+  });
+  
 
+// Usage stats command
 bot.onText(/\/usagestats/, async (msg) => {
     const chatId = msg.chat.id;
     const adminUsername = msg.from.username;
@@ -286,11 +368,10 @@ bot.onText(/\/usagestats/, async (msg) => {
         }
         bot.sendLongMessage(chatId, message);
     } catch (error) {
-        logger.error('Error in adduser command:', error);
-        await bot.sendMessage(msg.chat.id, "An error occurred while adding the user.");
+        logger.error('Error in usagestats command:', error);
+        await bot.sendMessage(msg.chat.id, "An error occurred while fetching usage statistics.");
     }
 });
-
 
 // Set bot commands
 const botCommands = Object.entries(commandConfigs).map(([command, config]) => ({

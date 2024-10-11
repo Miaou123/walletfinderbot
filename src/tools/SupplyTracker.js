@@ -2,7 +2,11 @@ const BigNumber = require('bignumber.js');
 const { getSolanaApi } = require('../integrations/solanaApi');
 const logger = require('../utils/logger'); 
 const solanaApi = getSolanaApi();
+const fs = require('fs').promises;
+const path = require('path');
+
 const CHECK_INTERVAL = 1 * 60 * 1000;
+const SAVE_INTERVAL = 0.5 * 60 * 1000;
 
 const wait = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -22,13 +26,72 @@ async function retryWithBackoff(operation, maxRetries = 5, initialDelay = 1000) 
     }
 }
 
-
-class SupplyTracker {
-    constructor(bot, accessControl) {
-        this.userTrackers = new Map();
-        this.bot = bot;
-        this.accessControl = accessControl;
-    }
+    class SupplyTracker {
+        constructor(bot, accessControl) {
+            this.userTrackers = new Map();
+            this.bot = bot;
+            this.accessControl = accessControl;
+            this.saveFilePath = path.join(__dirname, '../data/trackers.json');
+            this.saveInterval = setInterval(() => this.saveTrackers(), SAVE_INTERVAL);
+        }
+    
+        async init() {
+            await this.loadTrackers();
+            logger.info('SupplyTracker initialized and trackers loaded');
+        }
+    
+        async saveTrackers() {
+            const trackersData = {};
+            for (const [username, trackers] of this.userTrackers.entries()) {
+                trackersData[username] = Array.from(trackers.entries()).map(([trackerId, tracker]) => ({
+                    trackerId,
+                    chatId: tracker.chatId,
+                    wallets: tracker.wallets,
+                    initialSupplyPercentage: tracker.initialSupplyPercentage.toString(),
+                    currentSupplyPercentage: tracker.currentSupplyPercentage.toString(),
+                    totalSupply: tracker.totalSupply.toString(),
+                    significantChangeThreshold: tracker.significantChangeThreshold.toString(),
+                    ticker: tracker.ticker,
+                    decimals: tracker.decimals,
+                    trackType: tracker.trackType,
+                    tokenAddress: tracker.tokenAddress,
+                }));
+            }
+            try {
+                await fs.writeFile(this.saveFilePath, JSON.stringify(trackersData, null, 2));
+            } catch (error) {
+                logger.error('Error saving trackers:', error);
+            }
+        }
+    
+        async loadTrackers() {
+            try {
+                const data = await fs.readFile(this.saveFilePath, 'utf8');
+                const trackersData = JSON.parse(data);
+                for (const [username, trackers] of Object.entries(trackersData)) {
+                    const userTrackers = new Map();
+                    for (const tracker of trackers) {
+                        const restoredTracker = {
+                            ...tracker,
+                            initialSupplyPercentage: new BigNumber(tracker.initialSupplyPercentage),
+                            currentSupplyPercentage: new BigNumber(tracker.currentSupplyPercentage),
+                            totalSupply: new BigNumber(tracker.totalSupply),
+                            significantChangeThreshold: new BigNumber(tracker.significantChangeThreshold),
+                            intervalId: setInterval(() => this.checkSupply(username, tracker.trackerId), CHECK_INTERVAL)
+                        };
+                        userTrackers.set(tracker.trackerId, restoredTracker);
+                    }
+                    this.userTrackers.set(username, userTrackers);
+                }
+                logger.info('Trackers loaded successfully');
+            } catch (error) {
+                if (error.code === 'ENOENT') {
+                    logger.info('No saved trackers found. Starting with empty tracker list.');
+                } else {
+                    logger.error('Error loading trackers:', error);
+                }
+            }
+        }
 
     startTracking(tokenAddress, chatId, wallets, initialSupplyPercentage, totalSupply, significantChangeThreshold, ticker, decimals, trackType, username) {
         logger.info('SupplyTracker.startTracking called with params:', {
@@ -114,7 +177,8 @@ class SupplyTracker {
             tokenAddress: tracker.tokenAddress,
             ticker: tracker.ticker,
             currentSupplyPercentage: tracker.currentSupplyPercentage.toFixed(2),
-            trackType: tracker.trackType
+            trackType: tracker.trackType,
+            significantChangeThreshold: tracker.significantChangeThreshold.toFixed(2)
         }));
     }
 

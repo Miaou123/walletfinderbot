@@ -1,6 +1,6 @@
 const { MongoClient } = require('mongodb');
 const config = require('../config/config');
-const logger = require('../utils/logger');  // Assurez-vous que le chemin est correct
+const logger = require('../utils/logger'); 
 const { validateWallet } = require('./models/wallet');
 
 let uri = config.MONGODB_URI || process.env.MONGODB_URI;
@@ -17,7 +17,6 @@ if (!uri.startsWith('mongodb://') && !uri.startsWith('mongodb+srv://')) {
     throw new Error(`Invalid MongoDB URI: ${uri}. URI must start with mongodb:// or mongodb+srv://`);
 }
 
-logger.info('Cleaned MONGODB_URI:', uri);
 const client = new MongoClient(uri, {
     connectTimeoutMS: 5000,
     socketTimeoutMS: 30000,
