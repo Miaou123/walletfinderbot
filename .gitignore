@@ -1,7 +1,6 @@
 # .gitignore
 node_modules/
 .env
-src/utils/config.js
 mess/
 ApiCallRepôrts.txt
 architecturewBd.txtbeta_handle.txt
