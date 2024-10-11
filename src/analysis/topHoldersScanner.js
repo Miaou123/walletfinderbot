@@ -105,8 +105,13 @@ async function scanToken(tokenAddress, requestedHolders = 10, trackSupply = fals
 
   // 6. Process all wallets with walletChecker
   if (filteredWallets.length > 0) {
-    console.log(`Processing ${filteredWallets.length} wallets with walletChecker`);
-    await fetchMultipleWallets(filteredWallets.map(w => w.address), 5, mainContext, 'scanToken');
+    try {
+      console.log(`Processing ${filteredWallets.length} wallets with walletChecker`);
+      await fetchMultipleWallets(filteredWallets.map(w => w.address), 5, mainContext, 'scanToken');
+    } catch (error) {
+      console.error(`Error processing wallets with walletChecker: ${error.message}`);
+      // Continue with the available data
+    }
   }
 
   // 7. Calculer les statistiques globales

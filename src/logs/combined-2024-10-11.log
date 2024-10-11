@@ -945,3 +945,495 @@
 {"level":"debug","message":"Removed user 1718036512 from active commands tracking","service":"telegram-bot","timestamp":"2024-10-11T09:50:49.510Z"}
 {"level":"debug","message":"Attempting to remove command team for user 1718036512","service":"telegram-bot","timestamp":"2024-10-11T09:50:49.510Z"}
 {"level":"warn","message":"No active commands found for user 1718036512","service":"telegram-bot","timestamp":"2024-10-11T09:50:49.511Z"}
+{"level":"info","message":"Bot is starting...","service":"telegram-bot","timestamp":"2024-10-11T10:41:17.666Z"}
+{"level":"info","message":"Bot is running...","service":"telegram-bot","timestamp":"2024-10-11T10:41:17.667Z"}
+{"level":"info","message":"Access control configuration loaded successfully.","service":"telegram-bot","timestamp":"2024-10-11T10:41:17.693Z"}
+{"0":"rengon0x","level":"info","message":"Final admin users:","service":"telegram-bot","timestamp":"2024-10-11T10:41:17.694Z"}
+{"level":"info","message":"Command usage data loaded successfully.","service":"telegram-bot","timestamp":"2024-10-11T10:41:17.694Z"}
+{"level":"info","message":"Loaded 2 users","service":"telegram-bot","timestamp":"2024-10-11T10:41:17.697Z"}
+{"level":"info","message":"Rate limit usage data loaded successfully.","service":"telegram-bot","timestamp":"2024-10-11T10:41:17.697Z"}
+{"level":"info","message":"Loaded 2 users","service":"telegram-bot","timestamp":"2024-10-11T10:41:17.698Z"}
+{"level":"info","message":"Trackers loaded successfully","service":"telegram-bot","timestamp":"2024-10-11T10:41:17.700Z"}
+{"level":"info","message":"SupplyTracker initialized and trackers loaded","service":"telegram-bot","timestamp":"2024-10-11T10:41:17.700Z"}
+{"level":"info","message":"SupplyTracker initialized successfully","service":"telegram-bot","timestamp":"2024-10-11T10:41:17.701Z"}
+{"level":"info","message":"Tracked usage of command \"th\" for user \"Rengon0x\".","service":"telegram-bot","timestamp":"2024-10-11T10:41:30.345Z"}
+{"level":"debug","message":"Checking if command th can be added for user 1718036512","service":"telegram-bot","timestamp":"2024-10-11T10:41:30.346Z"}
+{"level":"debug","message":"User 1718036512 has 0 active commands","service":"telegram-bot","timestamp":"2024-10-11T10:41:30.347Z"}
+{"level":"debug","message":"Attempting to add command th for user 1718036512","service":"telegram-bot","timestamp":"2024-10-11T10:41:30.347Z"}
+{"level":"info","message":"Added command th for user 1718036512. Total active: 1","service":"telegram-bot","timestamp":"2024-10-11T10:41:30.347Z"}
+{"level":"debug","message":"Active command count for user 1718036512: 1","service":"telegram-bot","timestamp":"2024-10-11T10:41:30.347Z"}
+{"level":"info","message":"Starting TopHolders command for user Rengon0x","service":"telegram-bot","timestamp":"2024-10-11T10:41:30.348Z"}
+{"level":"info","message":"Command usage data saved successfully.","service":"telegram-bot","timestamp":"2024-10-11T10:41:30.349Z"}
+{"level":"info","message":"Getting top 20 holders for coin: 4HHeecDRA8rDkxjzyRn3QQwPEkxotZKKENJUFCsspump","service":"telegram-bot","timestamp":"2024-10-11T10:41:30.812Z"}
+{"level":"info","message":"Processing 19 wallets","service":"telegram-bot","timestamp":"2024-10-11T10:41:33.080Z"}
+{"level":"info","message":"Processing wallet: 5zw8jA6LxiQgSJpUSFvFEqvbsgh2J4iebNP6uaaD3mzm","service":"telegram-bot","timestamp":"2024-10-11T10:41:33.081Z"}
+{"level":"info","message":"Processing wallet: 77756yWGe3c64M9crc7UWS2zwJjezMPSkETvvPRX9xrn","service":"telegram-bot","timestamp":"2024-10-11T10:41:33.081Z"}
+{"level":"info","message":"Processing wallet: FW8keT2sJQo9PT9hDyyHZpvtLLZ6iR39v3NJMrZJMApH","service":"telegram-bot","timestamp":"2024-10-11T10:41:33.081Z"}
+{"level":"info","message":"Processing wallet: HzKsm4AtBAoEbVf739WtbFan2XZpxbPssa6DA1HR1dhT","service":"telegram-bot","timestamp":"2024-10-11T10:41:33.081Z"}
+{"level":"info","message":"Processing wallet: D2X5ejwZWR7VA8et4EwE48wYrAEavMiZi9X5tcHqgeXd","service":"telegram-bot","timestamp":"2024-10-11T10:41:33.081Z"}
+{"level":"info","message":"Processing wallet: EP5mSmShh7nCXoMQzkxnAyCM5BuUTkuVQEiwueTKsoAb","service":"telegram-bot","timestamp":"2024-10-11T10:41:33.082Z"}
+{"level":"info","message":"Processing wallet: 3sbnFJSSuhvpvNz5gyGWgbGm2a71kyfSiFzBMGQpvALB","service":"telegram-bot","timestamp":"2024-10-11T10:41:33.082Z"}
+{"level":"info","message":"Processing wallet: GBQUVVRLtc2moqhv2akvSdQpeafZxFqZkGSuxPHoqEj3","service":"telegram-bot","timestamp":"2024-10-11T10:41:33.082Z"}
+{"level":"info","message":"Processing wallet: 85rYt2zxXBsBiF79DPB3BgXPxKEqLovujJrptcmEKHtY","service":"telegram-bot","timestamp":"2024-10-11T10:41:33.082Z"}
+{"level":"info","message":"Processing wallet: 58AMuMujTtasD7NNBi8cfPU78J2V5RvXhhhsXQYxDhoR","service":"telegram-bot","timestamp":"2024-10-11T10:41:33.082Z"}
+{"level":"info","message":"Tracked usage of command \"th\" for user \"Rengon0x\".","service":"telegram-bot","timestamp":"2024-10-11T10:41:33.430Z"}
+{"level":"debug","message":"Checking if command th can be added for user 1718036512","service":"telegram-bot","timestamp":"2024-10-11T10:41:33.431Z"}
+{"level":"debug","message":"User 1718036512 has 1 active commands","service":"telegram-bot","timestamp":"2024-10-11T10:41:33.432Z"}
+{"level":"debug","message":"Attempting to add command th for user 1718036512","service":"telegram-bot","timestamp":"2024-10-11T10:41:33.432Z"}
+{"level":"info","message":"Added command th for user 1718036512. Total active: 2","service":"telegram-bot","timestamp":"2024-10-11T10:41:33.433Z"}
+{"level":"debug","message":"Active command count for user 1718036512: 2","service":"telegram-bot","timestamp":"2024-10-11T10:41:33.433Z"}
+{"level":"info","message":"Starting TopHolders command for user Rengon0x","service":"telegram-bot","timestamp":"2024-10-11T10:41:33.433Z"}
+{"level":"info","message":"Command usage data saved successfully.","service":"telegram-bot","timestamp":"2024-10-11T10:41:33.436Z"}
+{"level":"info","message":"Getting top 20 holders for coin: 4HHeecDRA8rDkxjzyRn3QQwPEkxotZKKENJUFCsspump","service":"telegram-bot","timestamp":"2024-10-11T10:41:33.669Z"}
+{"level":"info","message":"Tracked usage of command \"th\" for user \"Rengon0x\".","service":"telegram-bot","timestamp":"2024-10-11T10:41:33.824Z"}
+{"level":"debug","message":"Checking if command th can be added for user 1718036512","service":"telegram-bot","timestamp":"2024-10-11T10:41:33.825Z"}
+{"level":"debug","message":"User 1718036512 has 2 active commands","service":"telegram-bot","timestamp":"2024-10-11T10:41:33.825Z"}
+{"level":"info","message":"Command usage data saved successfully.","service":"telegram-bot","timestamp":"2024-10-11T10:41:33.826Z"}
+{"level":"info","message":"Tracked usage of command \"th\" for user \"Rengon0x\".","service":"telegram-bot","timestamp":"2024-10-11T10:41:34.195Z"}
+{"level":"debug","message":"Checking if command th can be added for user 1718036512","service":"telegram-bot","timestamp":"2024-10-11T10:41:34.195Z"}
+{"level":"debug","message":"User 1718036512 has 2 active commands","service":"telegram-bot","timestamp":"2024-10-11T10:41:34.196Z"}
+{"level":"info","message":"Command usage data saved successfully.","service":"telegram-bot","timestamp":"2024-10-11T10:41:34.197Z"}
+{"level":"info","message":"Tracked usage of command \"th\" for user \"Rengon0x\".","service":"telegram-bot","timestamp":"2024-10-11T10:41:34.566Z"}
+{"level":"debug","message":"Checking if command th can be added for user 1718036512","service":"telegram-bot","timestamp":"2024-10-11T10:41:34.566Z"}
+{"level":"debug","message":"User 1718036512 has 2 active commands","service":"telegram-bot","timestamp":"2024-10-11T10:41:34.566Z"}
+{"level":"info","message":"Command usage data saved successfully.","service":"telegram-bot","timestamp":"2024-10-11T10:41:34.568Z"}
+{"level":"info","message":"Processing 19 wallets","service":"telegram-bot","timestamp":"2024-10-11T10:41:35.548Z"}
+{"level":"info","message":"Processing wallet: 5zw8jA6LxiQgSJpUSFvFEqvbsgh2J4iebNP6uaaD3mzm","service":"telegram-bot","timestamp":"2024-10-11T10:41:35.548Z"}
+{"level":"info","message":"Processing wallet: 77756yWGe3c64M9crc7UWS2zwJjezMPSkETvvPRX9xrn","service":"telegram-bot","timestamp":"2024-10-11T10:41:35.548Z"}
+{"level":"info","message":"Processing wallet: FW8keT2sJQo9PT9hDyyHZpvtLLZ6iR39v3NJMrZJMApH","service":"telegram-bot","timestamp":"2024-10-11T10:41:35.548Z"}
+{"level":"info","message":"Processing wallet: HzKsm4AtBAoEbVf739WtbFan2XZpxbPssa6DA1HR1dhT","service":"telegram-bot","timestamp":"2024-10-11T10:41:35.548Z"}
+{"level":"info","message":"Processing wallet: D2X5ejwZWR7VA8et4EwE48wYrAEavMiZi9X5tcHqgeXd","service":"telegram-bot","timestamp":"2024-10-11T10:41:35.548Z"}
+{"level":"info","message":"Processing wallet: EP5mSmShh7nCXoMQzkxnAyCM5BuUTkuVQEiwueTKsoAb","service":"telegram-bot","timestamp":"2024-10-11T10:41:35.548Z"}
+{"level":"info","message":"Processing wallet: 3sbnFJSSuhvpvNz5gyGWgbGm2a71kyfSiFzBMGQpvALB","service":"telegram-bot","timestamp":"2024-10-11T10:41:35.549Z"}
+{"level":"info","message":"Processing wallet: GBQUVVRLtc2moqhv2akvSdQpeafZxFqZkGSuxPHoqEj3","service":"telegram-bot","timestamp":"2024-10-11T10:41:35.549Z"}
+{"level":"info","message":"Processing wallet: 85rYt2zxXBsBiF79DPB3BgXPxKEqLovujJrptcmEKHtY","service":"telegram-bot","timestamp":"2024-10-11T10:41:35.549Z"}
+{"level":"info","message":"Processing wallet: 58AMuMujTtasD7NNBi8cfPU78J2V5RvXhhhsXQYxDhoR","service":"telegram-bot","timestamp":"2024-10-11T10:41:35.549Z"}
+{"level":"info","message":"Processing wallet: 5hZc6esfu3v9d5jqYWe37FZohMKtUSqAYLfV1yutTS2n","service":"telegram-bot","timestamp":"2024-10-11T10:41:35.854Z"}
+{"level":"info","message":"Processing wallet: J31SLJBmXYQoh5JBAq1BMbvRizbCAhuyQhoFMKy2R1aW","service":"telegram-bot","timestamp":"2024-10-11T10:41:35.854Z"}
+{"level":"info","message":"Processing wallet: ANDhJc37Khjf7PKGofuXp2CD6aF3mXuhC31hkJsHVMtB","service":"telegram-bot","timestamp":"2024-10-11T10:41:35.854Z"}
+{"level":"info","message":"Processing wallet: 93UYzvqPpMEhD2mZJ33PpQaLAFrrX7A5hvYCDu5q3M2X","service":"telegram-bot","timestamp":"2024-10-11T10:41:35.855Z"}
+{"level":"info","message":"Processing wallet: AdQQeBJeA21c8v8wPnTCVynMKxe29QuUhE5vLtJhpM5R","service":"telegram-bot","timestamp":"2024-10-11T10:41:35.855Z"}
+{"level":"info","message":"Processing wallet: 9i1tph7tR94LL3yqazgkPKqE3hAbXo5ZSCyVWJYqmHzQ","service":"telegram-bot","timestamp":"2024-10-11T10:41:35.855Z"}
+{"level":"info","message":"Processing wallet: 7hTDqikzz4MMULi2bdttRMFCkyAWNrdbJ7mVUvdmvK6i","service":"telegram-bot","timestamp":"2024-10-11T10:41:35.855Z"}
+{"level":"info","message":"Processing wallet: 8URVmm2rzQL8qNssbwun2cgkyRn8zZMpooJNVrK5r6Pc","service":"telegram-bot","timestamp":"2024-10-11T10:41:35.855Z"}
+{"level":"info","message":"Processing wallet: AEKNoiX6mVFDKgdLfGxazisSuTcYiem3TiG97Mpt3q81","service":"telegram-bot","timestamp":"2024-10-11T10:41:35.855Z"}
+{"level":"info","message":"Processing wallet: 5hZc6esfu3v9d5jqYWe37FZohMKtUSqAYLfV1yutTS2n","service":"telegram-bot","timestamp":"2024-10-11T10:41:37.613Z"}
+{"level":"info","message":"Processing wallet: J31SLJBmXYQoh5JBAq1BMbvRizbCAhuyQhoFMKy2R1aW","service":"telegram-bot","timestamp":"2024-10-11T10:41:37.615Z"}
+{"level":"info","message":"Processing wallet: ANDhJc37Khjf7PKGofuXp2CD6aF3mXuhC31hkJsHVMtB","service":"telegram-bot","timestamp":"2024-10-11T10:41:37.616Z"}
+{"level":"info","message":"Processing wallet: 93UYzvqPpMEhD2mZJ33PpQaLAFrrX7A5hvYCDu5q3M2X","service":"telegram-bot","timestamp":"2024-10-11T10:41:37.616Z"}
+{"level":"info","message":"Processing wallet: AdQQeBJeA21c8v8wPnTCVynMKxe29QuUhE5vLtJhpM5R","service":"telegram-bot","timestamp":"2024-10-11T10:41:37.617Z"}
+{"level":"info","message":"Processing wallet: 9i1tph7tR94LL3yqazgkPKqE3hAbXo5ZSCyVWJYqmHzQ","service":"telegram-bot","timestamp":"2024-10-11T10:41:37.617Z"}
+{"level":"info","message":"Processing wallet: 7hTDqikzz4MMULi2bdttRMFCkyAWNrdbJ7mVUvdmvK6i","service":"telegram-bot","timestamp":"2024-10-11T10:41:37.617Z"}
+{"level":"info","message":"Processing wallet: 8URVmm2rzQL8qNssbwun2cgkyRn8zZMpooJNVrK5r6Pc","service":"telegram-bot","timestamp":"2024-10-11T10:41:37.618Z"}
+{"level":"info","message":"Processing wallet: AEKNoiX6mVFDKgdLfGxazisSuTcYiem3TiG97Mpt3q81","service":"telegram-bot","timestamp":"2024-10-11T10:41:37.618Z"}
+{"level":"info","message":"Fetching prices from DexScreener","service":"telegram-bot","timestamp":"2024-10-11T10:41:37.702Z"}
+{"level":"info","message":"Fetching prices from DexScreener","service":"telegram-bot","timestamp":"2024-10-11T10:41:38.588Z"}
+{"level":"info","message":"getAssetsForMultipleWallets completed","service":"telegram-bot","timestamp":"2024-10-11T10:41:41.694Z"}
+{"level":"info","message":"getAssetsForMultipleWallets completed","service":"telegram-bot","timestamp":"2024-10-11T10:41:42.656Z"}
+{"level":"info","message":"Connected to the database","service":"telegram-bot","timestamp":"2024-10-11T10:41:44.720Z"}
+{"0":"\"","1":"t","10":"i","11":"n","12":"d","13":"\"","14":" ","15":"i","16":"s","17":" ","18":"n","19":"o","2":"w","20":"t","21":" ","22":"a","23":"l","24":"l","25":"o","26":"w","27":"e","28":"d","3":"i","4":"t","5":"t","6":"e","7":"r","8":"_","9":"b","level":"error","message":"Invalid wallet data for address 3sbnFJSSuhvpvNz5gyGWgbGm2a71kyfSiFzBMGQpvALB:","service":"telegram-bot","timestamp":"2024-10-11T10:41:44.750Z"}
+{"0":"\"","1":"t","10":"i","11":"n","12":"d","13":"\"","14":" ","15":"i","16":"s","17":" ","18":"n","19":"o","2":"w","20":"t","21":" ","22":"a","23":"l","24":"l","25":"o","26":"w","27":"e","28":"d","3":"i","4":"t","5":"t","6":"e","7":"r","8":"_","9":"b","level":"error","message":"Invalid wallet data for address 3sbnFJSSuhvpvNz5gyGWgbGm2a71kyfSiFzBMGQpvALB:","service":"telegram-bot","timestamp":"2024-10-11T10:41:46.920Z"}
+{"level":"info","message":"Formatting early buyers message for KUROMI","service":"telegram-bot","timestamp":"2024-10-11T10:41:53.954Z"}
+{"level":"info","message":"Formatting early buyers message for KUROMI","service":"telegram-bot","timestamp":"2024-10-11T10:41:53.966Z"}
+{"level":"debug","message":"TopHolders command completed","service":"telegram-bot","timestamp":"2024-10-11T10:41:54.260Z"}
+{"level":"debug","message":"Attempting to remove command th for user 1718036512","service":"telegram-bot","timestamp":"2024-10-11T10:41:54.268Z"}
+{"level":"info","message":"Removed command th for user 1718036512. Remaining active: 1","service":"telegram-bot","timestamp":"2024-10-11T10:41:54.268Z"}
+{"level":"debug","message":"Attempting to remove command th for user 1718036512","service":"telegram-bot","timestamp":"2024-10-11T10:41:54.268Z"}
+{"level":"info","message":"Removed command th for user 1718036512. Remaining active: 0","service":"telegram-bot","timestamp":"2024-10-11T10:41:54.268Z"}
+{"level":"debug","message":"Removed user 1718036512 from active commands tracking","service":"telegram-bot","timestamp":"2024-10-11T10:41:54.268Z"}
+{"level":"debug","message":"TopHolders command completed","service":"telegram-bot","timestamp":"2024-10-11T10:41:54.334Z"}
+{"level":"debug","message":"Attempting to remove command th for user 1718036512","service":"telegram-bot","timestamp":"2024-10-11T10:41:54.335Z"}
+{"level":"warn","message":"No active commands found for user 1718036512","service":"telegram-bot","timestamp":"2024-10-11T10:41:54.335Z"}
+{"level":"debug","message":"Attempting to remove command th for user 1718036512","service":"telegram-bot","timestamp":"2024-10-11T10:41:54.335Z"}
+{"level":"warn","message":"No active commands found for user 1718036512","service":"telegram-bot","timestamp":"2024-10-11T10:41:54.335Z"}
+{"level":"info","message":"Tracked usage of command \"th\" for user \"Rengon0x\".","service":"telegram-bot","timestamp":"2024-10-11T10:42:06.526Z"}
+{"level":"debug","message":"Checking if command th can be added for user 1718036512","service":"telegram-bot","timestamp":"2024-10-11T10:42:06.527Z"}
+{"level":"debug","message":"User 1718036512 has 0 active commands","service":"telegram-bot","timestamp":"2024-10-11T10:42:06.527Z"}
+{"level":"debug","message":"Attempting to add command th for user 1718036512","service":"telegram-bot","timestamp":"2024-10-11T10:42:06.527Z"}
+{"level":"info","message":"Added command th for user 1718036512. Total active: 1","service":"telegram-bot","timestamp":"2024-10-11T10:42:06.527Z"}
+{"level":"debug","message":"Active command count for user 1718036512: 1","service":"telegram-bot","timestamp":"2024-10-11T10:42:06.527Z"}
+{"level":"info","message":"Starting TopHolders command for user Rengon0x","service":"telegram-bot","timestamp":"2024-10-11T10:42:06.527Z"}
+{"level":"info","message":"Command usage data saved successfully.","service":"telegram-bot","timestamp":"2024-10-11T10:42:06.529Z"}
+{"level":"info","message":"Getting top 20 holders for coin: 4HHeecDRA8rDkxjzyRn3QQwPEkxotZKKENJUFCsspump","service":"telegram-bot","timestamp":"2024-10-11T10:42:06.915Z"}
+{"level":"info","message":"Tracked usage of command \"th\" for user \"Rengon0x\".","service":"telegram-bot","timestamp":"2024-10-11T10:42:07.993Z"}
+{"level":"debug","message":"Checking if command th can be added for user 1718036512","service":"telegram-bot","timestamp":"2024-10-11T10:42:07.993Z"}
+{"level":"debug","message":"User 1718036512 has 1 active commands","service":"telegram-bot","timestamp":"2024-10-11T10:42:07.993Z"}
+{"level":"debug","message":"Attempting to add command th for user 1718036512","service":"telegram-bot","timestamp":"2024-10-11T10:42:07.993Z"}
+{"level":"info","message":"Added command th for user 1718036512. Total active: 2","service":"telegram-bot","timestamp":"2024-10-11T10:42:07.994Z"}
+{"level":"debug","message":"Active command count for user 1718036512: 2","service":"telegram-bot","timestamp":"2024-10-11T10:42:07.994Z"}
+{"level":"info","message":"Starting TopHolders command for user Rengon0x","service":"telegram-bot","timestamp":"2024-10-11T10:42:07.994Z"}
+{"level":"info","message":"Command usage data saved successfully.","service":"telegram-bot","timestamp":"2024-10-11T10:42:07.995Z"}
+{"level":"info","message":"Getting top 20 holders for coin: 4HHeecDRA8rDkxjzyRn3QQwPEkxotZKKENJUFCsspump","service":"telegram-bot","timestamp":"2024-10-11T10:42:08.486Z"}
+{"level":"info","message":"Processing 19 wallets","service":"telegram-bot","timestamp":"2024-10-11T10:42:08.502Z"}
+{"level":"info","message":"Processing wallet: 5zw8jA6LxiQgSJpUSFvFEqvbsgh2J4iebNP6uaaD3mzm","service":"telegram-bot","timestamp":"2024-10-11T10:42:08.503Z"}
+{"level":"info","message":"Processing wallet: 77756yWGe3c64M9crc7UWS2zwJjezMPSkETvvPRX9xrn","service":"telegram-bot","timestamp":"2024-10-11T10:42:08.503Z"}
+{"level":"info","message":"Processing wallet: FW8keT2sJQo9PT9hDyyHZpvtLLZ6iR39v3NJMrZJMApH","service":"telegram-bot","timestamp":"2024-10-11T10:42:08.504Z"}
+{"level":"info","message":"Processing wallet: HzKsm4AtBAoEbVf739WtbFan2XZpxbPssa6DA1HR1dhT","service":"telegram-bot","timestamp":"2024-10-11T10:42:08.504Z"}
+{"level":"info","message":"Processing wallet: D2X5ejwZWR7VA8et4EwE48wYrAEavMiZi9X5tcHqgeXd","service":"telegram-bot","timestamp":"2024-10-11T10:42:08.504Z"}
+{"level":"info","message":"Processing wallet: EP5mSmShh7nCXoMQzkxnAyCM5BuUTkuVQEiwueTKsoAb","service":"telegram-bot","timestamp":"2024-10-11T10:42:08.504Z"}
+{"level":"info","message":"Processing wallet: 3sbnFJSSuhvpvNz5gyGWgbGm2a71kyfSiFzBMGQpvALB","service":"telegram-bot","timestamp":"2024-10-11T10:42:08.505Z"}
+{"level":"info","message":"Processing wallet: GBQUVVRLtc2moqhv2akvSdQpeafZxFqZkGSuxPHoqEj3","service":"telegram-bot","timestamp":"2024-10-11T10:42:08.505Z"}
+{"level":"info","message":"Processing wallet: 85rYt2zxXBsBiF79DPB3BgXPxKEqLovujJrptcmEKHtY","service":"telegram-bot","timestamp":"2024-10-11T10:42:08.505Z"}
+{"level":"info","message":"Processing wallet: 58AMuMujTtasD7NNBi8cfPU78J2V5RvXhhhsXQYxDhoR","service":"telegram-bot","timestamp":"2024-10-11T10:42:08.505Z"}
+{"level":"info","message":"Processing 19 wallets","service":"telegram-bot","timestamp":"2024-10-11T10:42:10.571Z"}
+{"level":"info","message":"Processing wallet: 5zw8jA6LxiQgSJpUSFvFEqvbsgh2J4iebNP6uaaD3mzm","service":"telegram-bot","timestamp":"2024-10-11T10:42:10.572Z"}
+{"level":"info","message":"Processing wallet: 77756yWGe3c64M9crc7UWS2zwJjezMPSkETvvPRX9xrn","service":"telegram-bot","timestamp":"2024-10-11T10:42:10.572Z"}
+{"level":"info","message":"Processing wallet: FW8keT2sJQo9PT9hDyyHZpvtLLZ6iR39v3NJMrZJMApH","service":"telegram-bot","timestamp":"2024-10-11T10:42:10.573Z"}
+{"level":"info","message":"Processing wallet: HzKsm4AtBAoEbVf739WtbFan2XZpxbPssa6DA1HR1dhT","service":"telegram-bot","timestamp":"2024-10-11T10:42:10.573Z"}
+{"level":"info","message":"Processing wallet: D2X5ejwZWR7VA8et4EwE48wYrAEavMiZi9X5tcHqgeXd","service":"telegram-bot","timestamp":"2024-10-11T10:42:10.573Z"}
+{"level":"info","message":"Processing wallet: EP5mSmShh7nCXoMQzkxnAyCM5BuUTkuVQEiwueTKsoAb","service":"telegram-bot","timestamp":"2024-10-11T10:42:10.574Z"}
+{"level":"info","message":"Processing wallet: 3sbnFJSSuhvpvNz5gyGWgbGm2a71kyfSiFzBMGQpvALB","service":"telegram-bot","timestamp":"2024-10-11T10:42:10.574Z"}
+{"level":"info","message":"Processing wallet: GBQUVVRLtc2moqhv2akvSdQpeafZxFqZkGSuxPHoqEj3","service":"telegram-bot","timestamp":"2024-10-11T10:42:10.574Z"}
+{"level":"info","message":"Processing wallet: 85rYt2zxXBsBiF79DPB3BgXPxKEqLovujJrptcmEKHtY","service":"telegram-bot","timestamp":"2024-10-11T10:42:10.574Z"}
+{"level":"info","message":"Processing wallet: 58AMuMujTtasD7NNBi8cfPU78J2V5RvXhhhsXQYxDhoR","service":"telegram-bot","timestamp":"2024-10-11T10:42:10.575Z"}
+{"level":"info","message":"Processing wallet: 5hZc6esfu3v9d5jqYWe37FZohMKtUSqAYLfV1yutTS2n","service":"telegram-bot","timestamp":"2024-10-11T10:42:11.367Z"}
+{"level":"info","message":"Processing wallet: J31SLJBmXYQoh5JBAq1BMbvRizbCAhuyQhoFMKy2R1aW","service":"telegram-bot","timestamp":"2024-10-11T10:42:11.367Z"}
+{"level":"info","message":"Processing wallet: ANDhJc37Khjf7PKGofuXp2CD6aF3mXuhC31hkJsHVMtB","service":"telegram-bot","timestamp":"2024-10-11T10:42:11.367Z"}
+{"level":"info","message":"Processing wallet: 93UYzvqPpMEhD2mZJ33PpQaLAFrrX7A5hvYCDu5q3M2X","service":"telegram-bot","timestamp":"2024-10-11T10:42:11.367Z"}
+{"level":"info","message":"Processing wallet: AdQQeBJeA21c8v8wPnTCVynMKxe29QuUhE5vLtJhpM5R","service":"telegram-bot","timestamp":"2024-10-11T10:42:11.367Z"}
+{"level":"info","message":"Processing wallet: 9i1tph7tR94LL3yqazgkPKqE3hAbXo5ZSCyVWJYqmHzQ","service":"telegram-bot","timestamp":"2024-10-11T10:42:11.368Z"}
+{"level":"info","message":"Processing wallet: 7hTDqikzz4MMULi2bdttRMFCkyAWNrdbJ7mVUvdmvK6i","service":"telegram-bot","timestamp":"2024-10-11T10:42:11.368Z"}
+{"level":"info","message":"Processing wallet: 8URVmm2rzQL8qNssbwun2cgkyRn8zZMpooJNVrK5r6Pc","service":"telegram-bot","timestamp":"2024-10-11T10:42:11.368Z"}
+{"level":"info","message":"Processing wallet: AEKNoiX6mVFDKgdLfGxazisSuTcYiem3TiG97Mpt3q81","service":"telegram-bot","timestamp":"2024-10-11T10:42:11.368Z"}
+{"level":"info","message":"Fetching prices from DexScreener","service":"telegram-bot","timestamp":"2024-10-11T10:42:12.424Z"}
+{"level":"info","message":"Processing wallet: 5hZc6esfu3v9d5jqYWe37FZohMKtUSqAYLfV1yutTS2n","service":"telegram-bot","timestamp":"2024-10-11T10:42:12.750Z"}
+{"level":"info","message":"Processing wallet: J31SLJBmXYQoh5JBAq1BMbvRizbCAhuyQhoFMKy2R1aW","service":"telegram-bot","timestamp":"2024-10-11T10:42:12.750Z"}
+{"level":"info","message":"Processing wallet: ANDhJc37Khjf7PKGofuXp2CD6aF3mXuhC31hkJsHVMtB","service":"telegram-bot","timestamp":"2024-10-11T10:42:12.750Z"}
+{"level":"info","message":"Processing wallet: 93UYzvqPpMEhD2mZJ33PpQaLAFrrX7A5hvYCDu5q3M2X","service":"telegram-bot","timestamp":"2024-10-11T10:42:12.751Z"}
+{"level":"info","message":"Processing wallet: AdQQeBJeA21c8v8wPnTCVynMKxe29QuUhE5vLtJhpM5R","service":"telegram-bot","timestamp":"2024-10-11T10:42:12.751Z"}
+{"level":"info","message":"Processing wallet: 9i1tph7tR94LL3yqazgkPKqE3hAbXo5ZSCyVWJYqmHzQ","service":"telegram-bot","timestamp":"2024-10-11T10:42:12.751Z"}
+{"level":"info","message":"Processing wallet: 7hTDqikzz4MMULi2bdttRMFCkyAWNrdbJ7mVUvdmvK6i","service":"telegram-bot","timestamp":"2024-10-11T10:42:12.751Z"}
+{"level":"info","message":"Processing wallet: 8URVmm2rzQL8qNssbwun2cgkyRn8zZMpooJNVrK5r6Pc","service":"telegram-bot","timestamp":"2024-10-11T10:42:12.751Z"}
+{"level":"info","message":"Processing wallet: AEKNoiX6mVFDKgdLfGxazisSuTcYiem3TiG97Mpt3q81","service":"telegram-bot","timestamp":"2024-10-11T10:42:12.751Z"}
+{"level":"info","message":"Fetching prices from DexScreener","service":"telegram-bot","timestamp":"2024-10-11T10:42:13.753Z"}
+{"level":"debug","message":"Total controlled balance: 166565118.745361, Supply percentage: 16.65%","service":"telegram-bot","timestamp":"2024-10-11T10:42:18.162Z"}
+{"level":"info","message":"Check for J9SXKctbZVws65vjBHL91mqStzq5an1xZxdi6a4h853o (topHolders): Current supply: 16.65%, Initial: 16.64%, Change: 0.01%","service":"telegram-bot","timestamp":"2024-10-11T10:42:18.163Z"}
+{"level":"info","message":"getAssetsForMultipleWallets completed","service":"telegram-bot","timestamp":"2024-10-11T10:42:18.688Z"}
+{"level":"info","message":"getAssetsForMultipleWallets completed","service":"telegram-bot","timestamp":"2024-10-11T10:42:18.755Z"}
+{"0":"\"","1":"t","10":"i","11":"n","12":"d","13":"\"","14":" ","15":"i","16":"s","17":" ","18":"n","19":"o","2":"w","20":"t","21":" ","22":"a","23":"l","24":"l","25":"o","26":"w","27":"e","28":"d","3":"i","4":"t","5":"t","6":"e","7":"r","8":"_","9":"b","level":"error","message":"Invalid wallet data for address 3sbnFJSSuhvpvNz5gyGWgbGm2a71kyfSiFzBMGQpvALB:","service":"telegram-bot","timestamp":"2024-10-11T10:42:21.496Z"}
+{"0":"\"","1":"t","10":"i","11":"n","12":"d","13":"\"","14":" ","15":"i","16":"s","17":" ","18":"n","19":"o","2":"w","20":"t","21":" ","22":"a","23":"l","24":"l","25":"o","26":"w","27":"e","28":"d","3":"i","4":"t","5":"t","6":"e","7":"r","8":"_","9":"b","level":"error","message":"Invalid wallet data for address 3sbnFJSSuhvpvNz5gyGWgbGm2a71kyfSiFzBMGQpvALB:","service":"telegram-bot","timestamp":"2024-10-11T10:42:23.297Z"}
+{"level":"info","message":"Formatting early buyers message for KUROMI","service":"telegram-bot","timestamp":"2024-10-11T10:42:25.263Z"}
+{"level":"info","message":"Formatting early buyers message for KUROMI","service":"telegram-bot","timestamp":"2024-10-11T10:42:25.511Z"}
+{"level":"debug","message":"TopHolders command completed","service":"telegram-bot","timestamp":"2024-10-11T10:42:25.638Z"}
+{"level":"debug","message":"Attempting to remove command th for user 1718036512","service":"telegram-bot","timestamp":"2024-10-11T10:42:25.646Z"}
+{"level":"info","message":"Removed command th for user 1718036512. Remaining active: 1","service":"telegram-bot","timestamp":"2024-10-11T10:42:25.646Z"}
+{"level":"debug","message":"Attempting to remove command th for user 1718036512","service":"telegram-bot","timestamp":"2024-10-11T10:42:25.646Z"}
+{"level":"info","message":"Removed command th for user 1718036512. Remaining active: 0","service":"telegram-bot","timestamp":"2024-10-11T10:42:25.646Z"}
+{"level":"debug","message":"Removed user 1718036512 from active commands tracking","service":"telegram-bot","timestamp":"2024-10-11T10:42:25.647Z"}
+{"level":"debug","message":"TopHolders command completed","service":"telegram-bot","timestamp":"2024-10-11T10:42:25.909Z"}
+{"level":"debug","message":"Attempting to remove command th for user 1718036512","service":"telegram-bot","timestamp":"2024-10-11T10:42:25.911Z"}
+{"level":"warn","message":"No active commands found for user 1718036512","service":"telegram-bot","timestamp":"2024-10-11T10:42:25.911Z"}
+{"level":"debug","message":"Attempting to remove command th for user 1718036512","service":"telegram-bot","timestamp":"2024-10-11T10:42:25.911Z"}
+{"level":"warn","message":"No active commands found for user 1718036512","service":"telegram-bot","timestamp":"2024-10-11T10:42:25.911Z"}
+{"level":"debug","message":"Total controlled balance: 166565118.745361, Supply percentage: 16.65%","service":"telegram-bot","timestamp":"2024-10-11T10:43:18.296Z"}
+{"level":"info","message":"Check for J9SXKctbZVws65vjBHL91mqStzq5an1xZxdi6a4h853o (topHolders): Current supply: 16.65%, Initial: 16.64%, Change: 0.01%","service":"telegram-bot","timestamp":"2024-10-11T10:43:18.297Z"}
+{"level":"info","message":"Tracked usage of command \"bt\" for user \"Rengon0x\".","service":"telegram-bot","timestamp":"2024-10-11T10:43:49.790Z"}
+{"level":"debug","message":"Checking if command bt can be added for user 1718036512","service":"telegram-bot","timestamp":"2024-10-11T10:43:49.790Z"}
+{"level":"debug","message":"User 1718036512 has 0 active commands","service":"telegram-bot","timestamp":"2024-10-11T10:43:49.791Z"}
+{"level":"debug","message":"Attempting to add command bt for user 1718036512","service":"telegram-bot","timestamp":"2024-10-11T10:43:49.792Z"}
+{"level":"info","message":"Added command bt for user 1718036512. Total active: 1","service":"telegram-bot","timestamp":"2024-10-11T10:43:49.792Z"}
+{"level":"debug","message":"Active command count for user 1718036512: 1","service":"telegram-bot","timestamp":"2024-10-11T10:43:49.792Z"}
+{"level":"info","message":"Starting BestTrader command for user Rengon0x","service":"telegram-bot","timestamp":"2024-10-11T10:43:49.792Z"}
+{"level":"info","message":"Command usage data saved successfully.","service":"telegram-bot","timestamp":"2024-10-11T10:43:49.793Z"}
+{"level":"info","message":"Tracked usage of command \"bt\" for user \"Rengon0x\".","service":"telegram-bot","timestamp":"2024-10-11T10:43:51.392Z"}
+{"level":"debug","message":"Checking if command bt can be added for user 1718036512","service":"telegram-bot","timestamp":"2024-10-11T10:43:51.392Z"}
+{"level":"debug","message":"User 1718036512 has 1 active commands","service":"telegram-bot","timestamp":"2024-10-11T10:43:51.393Z"}
+{"level":"debug","message":"Attempting to add command bt for user 1718036512","service":"telegram-bot","timestamp":"2024-10-11T10:43:51.393Z"}
+{"level":"info","message":"Added command bt for user 1718036512. Total active: 2","service":"telegram-bot","timestamp":"2024-10-11T10:43:51.393Z"}
+{"level":"debug","message":"Active command count for user 1718036512: 2","service":"telegram-bot","timestamp":"2024-10-11T10:43:51.393Z"}
+{"level":"info","message":"Starting BestTrader command for user Rengon0x","service":"telegram-bot","timestamp":"2024-10-11T10:43:51.393Z"}
+{"level":"info","message":"Command usage data saved successfully.","service":"telegram-bot","timestamp":"2024-10-11T10:43:51.394Z"}
+{"level":"debug","message":"Total controlled balance: 166565118.745361, Supply percentage: 16.65%","service":"telegram-bot","timestamp":"2024-10-11T10:44:18.188Z"}
+{"level":"info","message":"Check for J9SXKctbZVws65vjBHL91mqStzq5an1xZxdi6a4h853o (topHolders): Current supply: 16.65%, Initial: 16.64%, Change: 0.01%","service":"telegram-bot","timestamp":"2024-10-11T10:44:18.188Z"}
+{"0":"\"","1":"t","10":"i","11":"n","12":"d","13":"\"","14":" ","15":"i","16":"s","17":" ","18":"n","19":"o","2":"w","20":"t","21":" ","22":"a","23":"l","24":"l","25":"o","26":"w","27":"e","28":"d","3":"i","4":"t","5":"t","6":"e","7":"r","8":"_","9":"b","level":"error","message":"Invalid wallet data for address 952nKaqEPaEiQrH4HqSnT5jki9Eh6bJvwvfwLk4LxuW6:","service":"telegram-bot","timestamp":"2024-10-11T10:45:06.734Z"}
+{"level":"info","message":"Formatted traders successfully.","service":"telegram-bot","timestamp":"2024-10-11T10:45:06.738Z"}
+{"level":"info","message":"Grouped traders into message blocks successfully.","service":"telegram-bot","timestamp":"2024-10-11T10:45:06.739Z"}
+{"0":"\"","1":"t","10":"i","11":"n","12":"d","13":"\"","14":" ","15":"i","16":"s","17":" ","18":"n","19":"o","2":"w","20":"t","21":" ","22":"a","23":"l","24":"l","25":"o","26":"w","27":"e","28":"d","3":"i","4":"t","5":"t","6":"e","7":"r","8":"_","9":"b","level":"error","message":"Invalid wallet data for address 9Ch2ftEdNyWmz99vEqEi9gKnaZEucTMruKVArhwS6HkP:","service":"telegram-bot","timestamp":"2024-10-11T10:45:06.740Z"}
+{"0":"\"","1":"t","10":"i","11":"n","12":"d","13":"\"","14":" ","15":"i","16":"s","17":" ","18":"n","19":"o","2":"w","20":"t","21":" ","22":"a","23":"l","24":"l","25":"o","26":"w","27":"e","28":"d","3":"i","4":"t","5":"t","6":"e","7":"r","8":"_","9":"b","level":"error","message":"Invalid wallet data for address 5aBUMhYe5r1mwVWLYPNawxHqmLypKPPfYr6DCn8MLEv5:","service":"telegram-bot","timestamp":"2024-10-11T10:45:06.742Z"}
+{"0":"\"","1":"t","10":"i","11":"n","12":"d","13":"\"","14":" ","15":"i","16":"s","17":" ","18":"n","19":"o","2":"w","20":"t","21":" ","22":"a","23":"l","24":"l","25":"o","26":"w","27":"e","28":"d","3":"i","4":"t","5":"t","6":"e","7":"r","8":"_","9":"b","level":"error","message":"Invalid wallet data for address DNfuF1L62WWyW3pNakVkyGGFzVVhj4Yr52jSmdTyeBHm:","service":"telegram-bot","timestamp":"2024-10-11T10:45:06.744Z"}
+{"0":"\"","1":"t","10":"i","11":"n","12":"d","13":"\"","14":" ","15":"i","16":"s","17":" ","18":"n","19":"o","2":"w","20":"t","21":" ","22":"a","23":"l","24":"l","25":"o","26":"w","27":"e","28":"d","3":"i","4":"t","5":"t","6":"e","7":"r","8":"_","9":"b","level":"error","message":"Invalid wallet data for address FfNe1R1iBfmd9dUQSJdYhbP2j2qFoc5phu6zdejzBxdX:","service":"telegram-bot","timestamp":"2024-10-11T10:45:06.745Z"}
+{"0":"\"","1":"t","10":"i","11":"n","12":"d","13":"\"","14":" ","15":"i","16":"s","17":" ","18":"n","19":"o","2":"w","20":"t","21":" ","22":"a","23":"l","24":"l","25":"o","26":"w","27":"e","28":"d","3":"i","4":"t","5":"t","6":"e","7":"r","8":"_","9":"b","level":"error","message":"Invalid wallet data for address 5q7Xwc2T57sK1DKU6zuwVXvMPsxqB2xrJ3T5AonFYtcY:","service":"telegram-bot","timestamp":"2024-10-11T10:45:06.746Z"}
+{"0":"\"","1":"t","10":"i","11":"n","12":"d","13":"\"","14":" ","15":"i","16":"s","17":" ","18":"n","19":"o","2":"w","20":"t","21":" ","22":"a","23":"l","24":"l","25":"o","26":"w","27":"e","28":"d","3":"i","4":"t","5":"t","6":"e","7":"r","8":"_","9":"b","level":"error","message":"Invalid wallet data for address GeXAHmmETnizW6af4E2e64ju8mTkLdEQzxUiAjJVo6NZ:","service":"telegram-bot","timestamp":"2024-10-11T10:45:06.748Z"}
+{"0":"\"","1":"t","10":"i","11":"n","12":"d","13":"\"","14":" ","15":"i","16":"s","17":" ","18":"n","19":"o","2":"w","20":"t","21":" ","22":"a","23":"l","24":"l","25":"o","26":"w","27":"e","28":"d","3":"i","4":"t","5":"t","6":"e","7":"r","8":"_","9":"b","level":"error","message":"Invalid wallet data for address 7at9Yr2isX5rKwkvZbsHEkv3cTKJsvmwZRouBuk7VRok:","service":"telegram-bot","timestamp":"2024-10-11T10:45:06.749Z"}
+{"0":"\"","1":"t","10":"i","11":"n","12":"d","13":"\"","14":" ","15":"i","16":"s","17":" ","18":"n","19":"o","2":"w","20":"t","21":" ","22":"a","23":"l","24":"l","25":"o","26":"w","27":"e","28":"d","3":"i","4":"t","5":"t","6":"e","7":"r","8":"_","9":"b","level":"error","message":"Invalid wallet data for address 3nkCYtwSoiUELm7ViTjHq7CDF1MWwuzzrtLiWBw9zswx:","service":"telegram-bot","timestamp":"2024-10-11T10:45:06.750Z"}
+{"0":"\"","1":"t","10":"i","11":"n","12":"d","13":"\"","14":" ","15":"i","16":"s","17":" ","18":"n","19":"o","2":"w","20":"t","21":" ","22":"a","23":"l","24":"l","25":"o","26":"w","27":"e","28":"d","3":"i","4":"t","5":"t","6":"e","7":"r","8":"_","9":"b","level":"error","message":"Invalid wallet data for address CgsM7KA8A5cuQ62zmWbCvnJLdXmS3P1rTZteho2i2PA8:","service":"telegram-bot","timestamp":"2024-10-11T10:45:06.752Z"}
+{"0":"\"","1":"t","10":"i","11":"n","12":"d","13":"\"","14":" ","15":"i","16":"s","17":" ","18":"n","19":"o","2":"w","20":"t","21":" ","22":"a","23":"l","24":"l","25":"o","26":"w","27":"e","28":"d","3":"i","4":"t","5":"t","6":"e","7":"r","8":"_","9":"b","level":"error","message":"Invalid wallet data for address 2Dr7TyDcwRBo6JvWMUXPn6Sb9R2JN3Z2tvbXT311wDHE:","service":"telegram-bot","timestamp":"2024-10-11T10:45:06.755Z"}
+{"0":"\"","1":"t","10":"i","11":"n","12":"d","13":"\"","14":" ","15":"i","16":"s","17":" ","18":"n","19":"o","2":"w","20":"t","21":" ","22":"a","23":"l","24":"l","25":"o","26":"w","27":"e","28":"d","3":"i","4":"t","5":"t","6":"e","7":"r","8":"_","9":"b","level":"error","message":"Invalid wallet data for address HW8vXb3KLiMVEiGLyHGs5H4cieaMqfBMbmDbUYCu9ris:","service":"telegram-bot","timestamp":"2024-10-11T10:45:06.757Z"}
+{"0":"\"","1":"t","10":"i","11":"n","12":"d","13":"\"","14":" ","15":"i","16":"s","17":" ","18":"n","19":"o","2":"w","20":"t","21":" ","22":"a","23":"l","24":"l","25":"o","26":"w","27":"e","28":"d","3":"i","4":"t","5":"t","6":"e","7":"r","8":"_","9":"b","level":"error","message":"Invalid wallet data for address 2iwsLRampx5krdYdyoAuXAaZtx5EjsgMizBHVDSbDkwe:","service":"telegram-bot","timestamp":"2024-10-11T10:45:06.760Z"}
+{"0":"\"","1":"t","10":"i","11":"n","12":"d","13":"\"","14":" ","15":"i","16":"s","17":" ","18":"n","19":"o","2":"w","20":"t","21":" ","22":"a","23":"l","24":"l","25":"o","26":"w","27":"e","28":"d","3":"i","4":"t","5":"t","6":"e","7":"r","8":"_","9":"b","level":"error","message":"Invalid wallet data for address EmkLihTVfQHxxCssg45bVwybpWzXkgEMVfHMWvuCcW71:","service":"telegram-bot","timestamp":"2024-10-11T10:45:06.762Z"}
+{"level":"debug","message":"bestTraders command completed","service":"telegram-bot","timestamp":"2024-10-11T10:45:07.007Z"}
+{"level":"debug","message":"Attempting to remove command bt for user 1718036512","service":"telegram-bot","timestamp":"2024-10-11T10:45:07.008Z"}
+{"level":"info","message":"Removed command bt for user 1718036512. Remaining active: 1","service":"telegram-bot","timestamp":"2024-10-11T10:45:07.008Z"}
+{"level":"debug","message":"Attempting to remove command bt for user 1718036512","service":"telegram-bot","timestamp":"2024-10-11T10:45:07.009Z"}
+{"level":"info","message":"Removed command bt for user 1718036512. Remaining active: 0","service":"telegram-bot","timestamp":"2024-10-11T10:45:07.009Z"}
+{"level":"debug","message":"Removed user 1718036512 from active commands tracking","service":"telegram-bot","timestamp":"2024-10-11T10:45:07.009Z"}
+{"0":"\"","1":"t","10":"i","11":"n","12":"d","13":"\"","14":" ","15":"i","16":"s","17":" ","18":"n","19":"o","2":"w","20":"t","21":" ","22":"a","23":"l","24":"l","25":"o","26":"w","27":"e","28":"d","3":"i","4":"t","5":"t","6":"e","7":"r","8":"_","9":"b","level":"error","message":"Invalid wallet data for address 952nKaqEPaEiQrH4HqSnT5jki9Eh6bJvwvfwLk4LxuW6:","service":"telegram-bot","timestamp":"2024-10-11T10:45:10.762Z"}
+{"level":"info","message":"Formatted traders successfully.","service":"telegram-bot","timestamp":"2024-10-11T10:45:10.764Z"}
+{"level":"info","message":"Grouped traders into message blocks successfully.","service":"telegram-bot","timestamp":"2024-10-11T10:45:10.765Z"}
+{"0":"\"","1":"t","10":"i","11":"n","12":"d","13":"\"","14":" ","15":"i","16":"s","17":" ","18":"n","19":"o","2":"w","20":"t","21":" ","22":"a","23":"l","24":"l","25":"o","26":"w","27":"e","28":"d","3":"i","4":"t","5":"t","6":"e","7":"r","8":"_","9":"b","level":"error","message":"Invalid wallet data for address 9Ch2ftEdNyWmz99vEqEi9gKnaZEucTMruKVArhwS6HkP:","service":"telegram-bot","timestamp":"2024-10-11T10:45:10.765Z"}
+{"0":"\"","1":"t","10":"i","11":"n","12":"d","13":"\"","14":" ","15":"i","16":"s","17":" ","18":"n","19":"o","2":"w","20":"t","21":" ","22":"a","23":"l","24":"l","25":"o","26":"w","27":"e","28":"d","3":"i","4":"t","5":"t","6":"e","7":"r","8":"_","9":"b","level":"error","message":"Invalid wallet data for address 5aBUMhYe5r1mwVWLYPNawxHqmLypKPPfYr6DCn8MLEv5:","service":"telegram-bot","timestamp":"2024-10-11T10:45:10.768Z"}
+{"0":"\"","1":"t","10":"i","11":"n","12":"d","13":"\"","14":" ","15":"i","16":"s","17":" ","18":"n","19":"o","2":"w","20":"t","21":" ","22":"a","23":"l","24":"l","25":"o","26":"w","27":"e","28":"d","3":"i","4":"t","5":"t","6":"e","7":"r","8":"_","9":"b","level":"error","message":"Invalid wallet data for address DNfuF1L62WWyW3pNakVkyGGFzVVhj4Yr52jSmdTyeBHm:","service":"telegram-bot","timestamp":"2024-10-11T10:45:10.770Z"}
+{"0":"\"","1":"t","10":"i","11":"n","12":"d","13":"\"","14":" ","15":"i","16":"s","17":" ","18":"n","19":"o","2":"w","20":"t","21":" ","22":"a","23":"l","24":"l","25":"o","26":"w","27":"e","28":"d","3":"i","4":"t","5":"t","6":"e","7":"r","8":"_","9":"b","level":"error","message":"Invalid wallet data for address FfNe1R1iBfmd9dUQSJdYhbP2j2qFoc5phu6zdejzBxdX:","service":"telegram-bot","timestamp":"2024-10-11T10:45:10.772Z"}
+{"0":"\"","1":"t","10":"i","11":"n","12":"d","13":"\"","14":" ","15":"i","16":"s","17":" ","18":"n","19":"o","2":"w","20":"t","21":" ","22":"a","23":"l","24":"l","25":"o","26":"w","27":"e","28":"d","3":"i","4":"t","5":"t","6":"e","7":"r","8":"_","9":"b","level":"error","message":"Invalid wallet data for address 5q7Xwc2T57sK1DKU6zuwVXvMPsxqB2xrJ3T5AonFYtcY:","service":"telegram-bot","timestamp":"2024-10-11T10:45:10.773Z"}
+{"0":"\"","1":"t","10":"i","11":"n","12":"d","13":"\"","14":" ","15":"i","16":"s","17":" ","18":"n","19":"o","2":"w","20":"t","21":" ","22":"a","23":"l","24":"l","25":"o","26":"w","27":"e","28":"d","3":"i","4":"t","5":"t","6":"e","7":"r","8":"_","9":"b","level":"error","message":"Invalid wallet data for address GeXAHmmETnizW6af4E2e64ju8mTkLdEQzxUiAjJVo6NZ:","service":"telegram-bot","timestamp":"2024-10-11T10:45:10.774Z"}
+{"0":"\"","1":"t","10":"i","11":"n","12":"d","13":"\"","14":" ","15":"i","16":"s","17":" ","18":"n","19":"o","2":"w","20":"t","21":" ","22":"a","23":"l","24":"l","25":"o","26":"w","27":"e","28":"d","3":"i","4":"t","5":"t","6":"e","7":"r","8":"_","9":"b","level":"error","message":"Invalid wallet data for address 7at9Yr2isX5rKwkvZbsHEkv3cTKJsvmwZRouBuk7VRok:","service":"telegram-bot","timestamp":"2024-10-11T10:45:10.774Z"}
+{"0":"\"","1":"t","10":"i","11":"n","12":"d","13":"\"","14":" ","15":"i","16":"s","17":" ","18":"n","19":"o","2":"w","20":"t","21":" ","22":"a","23":"l","24":"l","25":"o","26":"w","27":"e","28":"d","3":"i","4":"t","5":"t","6":"e","7":"r","8":"_","9":"b","level":"error","message":"Invalid wallet data for address 3nkCYtwSoiUELm7ViTjHq7CDF1MWwuzzrtLiWBw9zswx:","service":"telegram-bot","timestamp":"2024-10-11T10:45:10.776Z"}
+{"0":"\"","1":"t","10":"i","11":"n","12":"d","13":"\"","14":" ","15":"i","16":"s","17":" ","18":"n","19":"o","2":"w","20":"t","21":" ","22":"a","23":"l","24":"l","25":"o","26":"w","27":"e","28":"d","3":"i","4":"t","5":"t","6":"e","7":"r","8":"_","9":"b","level":"error","message":"Invalid wallet data for address CgsM7KA8A5cuQ62zmWbCvnJLdXmS3P1rTZteho2i2PA8:","service":"telegram-bot","timestamp":"2024-10-11T10:45:10.777Z"}
+{"0":"\"","1":"t","10":"i","11":"n","12":"d","13":"\"","14":" ","15":"i","16":"s","17":" ","18":"n","19":"o","2":"w","20":"t","21":" ","22":"a","23":"l","24":"l","25":"o","26":"w","27":"e","28":"d","3":"i","4":"t","5":"t","6":"e","7":"r","8":"_","9":"b","level":"error","message":"Invalid wallet data for address 2Dr7TyDcwRBo6JvWMUXPn6Sb9R2JN3Z2tvbXT311wDHE:","service":"telegram-bot","timestamp":"2024-10-11T10:45:10.781Z"}
+{"0":"\"","1":"t","10":"i","11":"n","12":"d","13":"\"","14":" ","15":"i","16":"s","17":" ","18":"n","19":"o","2":"w","20":"t","21":" ","22":"a","23":"l","24":"l","25":"o","26":"w","27":"e","28":"d","3":"i","4":"t","5":"t","6":"e","7":"r","8":"_","9":"b","level":"error","message":"Invalid wallet data for address HW8vXb3KLiMVEiGLyHGs5H4cieaMqfBMbmDbUYCu9ris:","service":"telegram-bot","timestamp":"2024-10-11T10:45:10.782Z"}
+{"0":"\"","1":"t","10":"i","11":"n","12":"d","13":"\"","14":" ","15":"i","16":"s","17":" ","18":"n","19":"o","2":"w","20":"t","21":" ","22":"a","23":"l","24":"l","25":"o","26":"w","27":"e","28":"d","3":"i","4":"t","5":"t","6":"e","7":"r","8":"_","9":"b","level":"error","message":"Invalid wallet data for address 2iwsLRampx5krdYdyoAuXAaZtx5EjsgMizBHVDSbDkwe:","service":"telegram-bot","timestamp":"2024-10-11T10:45:10.784Z"}
+{"0":"\"","1":"t","10":"i","11":"n","12":"d","13":"\"","14":" ","15":"i","16":"s","17":" ","18":"n","19":"o","2":"w","20":"t","21":" ","22":"a","23":"l","24":"l","25":"o","26":"w","27":"e","28":"d","3":"i","4":"t","5":"t","6":"e","7":"r","8":"_","9":"b","level":"error","message":"Invalid wallet data for address EmkLihTVfQHxxCssg45bVwybpWzXkgEMVfHMWvuCcW71:","service":"telegram-bot","timestamp":"2024-10-11T10:45:10.786Z"}
+{"level":"debug","message":"bestTraders command completed","service":"telegram-bot","timestamp":"2024-10-11T10:45:11.014Z"}
+{"level":"debug","message":"Attempting to remove command bt for user 1718036512","service":"telegram-bot","timestamp":"2024-10-11T10:45:11.016Z"}
+{"level":"warn","message":"No active commands found for user 1718036512","service":"telegram-bot","timestamp":"2024-10-11T10:45:11.017Z"}
+{"level":"debug","message":"Attempting to remove command bt for user 1718036512","service":"telegram-bot","timestamp":"2024-10-11T10:45:11.017Z"}
+{"level":"warn","message":"No active commands found for user 1718036512","service":"telegram-bot","timestamp":"2024-10-11T10:45:11.018Z"}
+{"level":"info","message":"Tracked usage of command \"scan\" for user \"Rengon0x\".","service":"telegram-bot","timestamp":"2024-10-11T10:45:11.679Z"}
+{"level":"debug","message":"Checking if command scan can be added for user 1718036512","service":"telegram-bot","timestamp":"2024-10-11T10:45:11.679Z"}
+{"level":"debug","message":"User 1718036512 has 0 active commands","service":"telegram-bot","timestamp":"2024-10-11T10:45:11.680Z"}
+{"level":"debug","message":"Attempting to add command scan for user 1718036512","service":"telegram-bot","timestamp":"2024-10-11T10:45:11.680Z"}
+{"level":"info","message":"Added command scan for user 1718036512. Total active: 1","service":"telegram-bot","timestamp":"2024-10-11T10:45:11.680Z"}
+{"level":"debug","message":"Active command count for user 1718036512: 1","service":"telegram-bot","timestamp":"2024-10-11T10:45:11.680Z"}
+{"level":"info","message":"Starting Scan command for user Rengon0x","service":"telegram-bot","timestamp":"2024-10-11T10:45:11.681Z"}
+{"level":"debug","message":"Attempting to add command scan for user 1718036512","service":"telegram-bot","timestamp":"2024-10-11T10:45:11.681Z"}
+{"level":"info","message":"Added command scan for user 1718036512. Total active: 2","service":"telegram-bot","timestamp":"2024-10-11T10:45:11.681Z"}
+{"level":"info","message":"Command usage data saved successfully.","service":"telegram-bot","timestamp":"2024-10-11T10:45:11.683Z"}
+{"level":"info","message":"Getting top 10 holders for coin: 6tVZVjcppH2BZ9Xj5yFU1Zt34m2rYcyDqqpSeMDZpump","service":"telegram-bot","timestamp":"2024-10-11T10:45:12.043Z"}
+{"level":"info","message":"Processing 9 wallets","service":"telegram-bot","timestamp":"2024-10-11T10:45:13.636Z"}
+{"level":"info","message":"Processing wallet: BywRgcUJy3awHrTRNssVpzQ2qFkRB1Zt1JSCejpB4PGJ","service":"telegram-bot","timestamp":"2024-10-11T10:45:13.637Z"}
+{"level":"info","message":"Processing wallet: 9CweCNj5tBswwvkLtvjwTLGEPKVqH8CSPbuxgX6oc25r","service":"telegram-bot","timestamp":"2024-10-11T10:45:13.637Z"}
+{"level":"info","message":"Processing wallet: Eu34DTAgq619e9JZbWrSgRSt1b7AyLD677MxD61CYYKx","service":"telegram-bot","timestamp":"2024-10-11T10:45:13.637Z"}
+{"level":"info","message":"Processing wallet: EzYFRDXEMvuvviQMjo8uPiHiowjCpGF9wUMVKuh3k4a","service":"telegram-bot","timestamp":"2024-10-11T10:45:13.637Z"}
+{"level":"info","message":"Processing wallet: 4dZ1CFq7xUiopjrMizZvbc2Nhmhf6EAwm8wCpYW4nzDh","service":"telegram-bot","timestamp":"2024-10-11T10:45:13.637Z"}
+{"level":"info","message":"Processing wallet: 7gZexLpt6DRnTxsb9H4PvdLkuNh6kbp5U95eabvGzZH1","service":"telegram-bot","timestamp":"2024-10-11T10:45:13.637Z"}
+{"level":"info","message":"Processing wallet: F8M7snTDaJFXSY5VfbHWsvyDEBt4do1DBKXcZxBAaTkt","service":"telegram-bot","timestamp":"2024-10-11T10:45:13.637Z"}
+{"level":"info","message":"Processing wallet: DBzhEXjxvuvpS9i9N8PhQXSqzkc8YPtKbfWLwcSmxZpp","service":"telegram-bot","timestamp":"2024-10-11T10:45:13.637Z"}
+{"level":"info","message":"Processing wallet: 3r4BpPbH32yaskw3qW5H4Nv3aQBTG4JGJ8e5dy4hdiFh","service":"telegram-bot","timestamp":"2024-10-11T10:45:13.637Z"}
+{"level":"info","message":"Fetching prices from DexScreener","service":"telegram-bot","timestamp":"2024-10-11T10:45:14.604Z"}
+{"level":"info","message":"getAssetsForMultipleWallets completed","service":"telegram-bot","timestamp":"2024-10-11T10:45:15.205Z"}
+{"level":"info","message":"Tracked usage of command \"scan\" for user \"Rengon0x\".","service":"telegram-bot","timestamp":"2024-10-11T10:45:16.497Z"}
+{"level":"debug","message":"Checking if command scan can be added for user 1718036512","service":"telegram-bot","timestamp":"2024-10-11T10:45:16.498Z"}
+{"level":"debug","message":"User 1718036512 has 2 active commands","service":"telegram-bot","timestamp":"2024-10-11T10:45:16.498Z"}
+{"level":"info","message":"Command usage data saved successfully.","service":"telegram-bot","timestamp":"2024-10-11T10:45:16.499Z"}
+{"level":"debug","message":"Total controlled balance: 166565118.745361, Supply percentage: 16.65%","service":"telegram-bot","timestamp":"2024-10-11T10:45:18.410Z"}
+{"level":"info","message":"Check for J9SXKctbZVws65vjBHL91mqStzq5an1xZxdi6a4h853o (topHolders): Current supply: 16.65%, Initial: 16.64%, Change: 0.01%","service":"telegram-bot","timestamp":"2024-10-11T10:45:18.410Z"}
+{"level":"debug","message":"Attempting to remove command scan for user 1718036512","service":"telegram-bot","timestamp":"2024-10-11T10:45:30.076Z"}
+{"level":"info","message":"Removed command scan for user 1718036512. Remaining active: 1","service":"telegram-bot","timestamp":"2024-10-11T10:45:30.077Z"}
+{"level":"debug","message":"Attempting to remove command scan for user 1718036512","service":"telegram-bot","timestamp":"2024-10-11T10:45:30.077Z"}
+{"level":"info","message":"Removed command scan for user 1718036512. Remaining active: 0","service":"telegram-bot","timestamp":"2024-10-11T10:45:30.077Z"}
+{"level":"debug","message":"Removed user 1718036512 from active commands tracking","service":"telegram-bot","timestamp":"2024-10-11T10:45:30.077Z"}
+{"level":"info","message":"Tracked usage of command \"scan\" for user \"Rengon0x\".","service":"telegram-bot","timestamp":"2024-10-11T10:45:31.650Z"}
+{"level":"debug","message":"Checking if command scan can be added for user 1718036512","service":"telegram-bot","timestamp":"2024-10-11T10:45:31.650Z"}
+{"level":"debug","message":"User 1718036512 has 0 active commands","service":"telegram-bot","timestamp":"2024-10-11T10:45:31.651Z"}
+{"level":"debug","message":"Attempting to add command scan for user 1718036512","service":"telegram-bot","timestamp":"2024-10-11T10:45:31.651Z"}
+{"level":"info","message":"Added command scan for user 1718036512. Total active: 1","service":"telegram-bot","timestamp":"2024-10-11T10:45:31.651Z"}
+{"level":"debug","message":"Active command count for user 1718036512: 1","service":"telegram-bot","timestamp":"2024-10-11T10:45:31.652Z"}
+{"level":"info","message":"Starting Scan command for user Rengon0x","service":"telegram-bot","timestamp":"2024-10-11T10:45:31.652Z"}
+{"level":"debug","message":"Attempting to add command scan for user 1718036512","service":"telegram-bot","timestamp":"2024-10-11T10:45:31.652Z"}
+{"level":"info","message":"Added command scan for user 1718036512. Total active: 2","service":"telegram-bot","timestamp":"2024-10-11T10:45:31.652Z"}
+{"level":"info","message":"Command usage data saved successfully.","service":"telegram-bot","timestamp":"2024-10-11T10:45:31.653Z"}
+{"level":"info","message":"Getting top 10 holders for coin: 6tVZVjcppH2BZ9Xj5yFU1Zt34m2rYcyDqqpSeMDZpump","service":"telegram-bot","timestamp":"2024-10-11T10:45:31.922Z"}
+{"level":"info","message":"Processing 9 wallets","service":"telegram-bot","timestamp":"2024-10-11T10:45:33.493Z"}
+{"level":"info","message":"Processing wallet: BywRgcUJy3awHrTRNssVpzQ2qFkRB1Zt1JSCejpB4PGJ","service":"telegram-bot","timestamp":"2024-10-11T10:45:33.493Z"}
+{"level":"info","message":"Processing wallet: 9CweCNj5tBswwvkLtvjwTLGEPKVqH8CSPbuxgX6oc25r","service":"telegram-bot","timestamp":"2024-10-11T10:45:33.493Z"}
+{"level":"info","message":"Processing wallet: Eu34DTAgq619e9JZbWrSgRSt1b7AyLD677MxD61CYYKx","service":"telegram-bot","timestamp":"2024-10-11T10:45:33.493Z"}
+{"level":"info","message":"Processing wallet: EzYFRDXEMvuvviQMjo8uPiHiowjCpGF9wUMVKuh3k4a","service":"telegram-bot","timestamp":"2024-10-11T10:45:33.493Z"}
+{"level":"info","message":"Processing wallet: 4dZ1CFq7xUiopjrMizZvbc2Nhmhf6EAwm8wCpYW4nzDh","service":"telegram-bot","timestamp":"2024-10-11T10:45:33.494Z"}
+{"level":"info","message":"Processing wallet: 7gZexLpt6DRnTxsb9H4PvdLkuNh6kbp5U95eabvGzZH1","service":"telegram-bot","timestamp":"2024-10-11T10:45:33.494Z"}
+{"level":"info","message":"Processing wallet: F8M7snTDaJFXSY5VfbHWsvyDEBt4do1DBKXcZxBAaTkt","service":"telegram-bot","timestamp":"2024-10-11T10:45:33.494Z"}
+{"level":"info","message":"Processing wallet: DBzhEXjxvuvpS9i9N8PhQXSqzkc8YPtKbfWLwcSmxZpp","service":"telegram-bot","timestamp":"2024-10-11T10:45:33.494Z"}
+{"level":"info","message":"Processing wallet: 3r4BpPbH32yaskw3qW5H4Nv3aQBTG4JGJ8e5dy4hdiFh","service":"telegram-bot","timestamp":"2024-10-11T10:45:33.494Z"}
+{"level":"info","message":"Tracked usage of command \"scan\" for user \"Rengon0x\".","service":"telegram-bot","timestamp":"2024-10-11T10:45:33.721Z"}
+{"level":"debug","message":"Checking if command scan can be added for user 1718036512","service":"telegram-bot","timestamp":"2024-10-11T10:45:33.721Z"}
+{"level":"debug","message":"User 1718036512 has 2 active commands","service":"telegram-bot","timestamp":"2024-10-11T10:45:33.721Z"}
+{"level":"info","message":"Command usage data saved successfully.","service":"telegram-bot","timestamp":"2024-10-11T10:45:33.722Z"}
+{"level":"info","message":"Fetching prices from DexScreener","service":"telegram-bot","timestamp":"2024-10-11T10:45:34.385Z"}
+{"level":"info","message":"getAssetsForMultipleWallets completed","service":"telegram-bot","timestamp":"2024-10-11T10:45:34.976Z"}
+{"level":"debug","message":"Attempting to remove command scan for user 1718036512","service":"telegram-bot","timestamp":"2024-10-11T10:45:44.179Z"}
+{"level":"info","message":"Removed command scan for user 1718036512. Remaining active: 1","service":"telegram-bot","timestamp":"2024-10-11T10:45:44.180Z"}
+{"level":"debug","message":"Attempting to remove command scan for user 1718036512","service":"telegram-bot","timestamp":"2024-10-11T10:45:44.180Z"}
+{"level":"info","message":"Removed command scan for user 1718036512. Remaining active: 0","service":"telegram-bot","timestamp":"2024-10-11T10:45:44.180Z"}
+{"level":"debug","message":"Removed user 1718036512 from active commands tracking","service":"telegram-bot","timestamp":"2024-10-11T10:45:44.180Z"}
+{"level":"info","message":"Tracked usage of command \"scan\" for user \"Rengon0x\".","service":"telegram-bot","timestamp":"2024-10-11T10:46:01.171Z"}
+{"level":"debug","message":"Checking if command scan can be added for user 1718036512","service":"telegram-bot","timestamp":"2024-10-11T10:46:01.171Z"}
+{"level":"debug","message":"User 1718036512 has 0 active commands","service":"telegram-bot","timestamp":"2024-10-11T10:46:01.172Z"}
+{"level":"debug","message":"Attempting to add command scan for user 1718036512","service":"telegram-bot","timestamp":"2024-10-11T10:46:01.172Z"}
+{"level":"info","message":"Added command scan for user 1718036512. Total active: 1","service":"telegram-bot","timestamp":"2024-10-11T10:46:01.172Z"}
+{"level":"debug","message":"Active command count for user 1718036512: 1","service":"telegram-bot","timestamp":"2024-10-11T10:46:01.172Z"}
+{"level":"info","message":"Starting Scan command for user Rengon0x","service":"telegram-bot","timestamp":"2024-10-11T10:46:01.172Z"}
+{"level":"debug","message":"Attempting to add command scan for user 1718036512","service":"telegram-bot","timestamp":"2024-10-11T10:46:01.172Z"}
+{"level":"info","message":"Added command scan for user 1718036512. Total active: 2","service":"telegram-bot","timestamp":"2024-10-11T10:46:01.172Z"}
+{"level":"info","message":"Command usage data saved successfully.","service":"telegram-bot","timestamp":"2024-10-11T10:46:01.173Z"}
+{"level":"info","message":"Getting top 10 holders for coin: 6tVZVjcppH2BZ9Xj5yFU1Zt34m2rYcyDqqpSeMDZpump","service":"telegram-bot","timestamp":"2024-10-11T10:46:01.369Z"}
+{"level":"info","message":"Processing 9 wallets","service":"telegram-bot","timestamp":"2024-10-11T10:46:03.060Z"}
+{"level":"info","message":"Processing wallet: BywRgcUJy3awHrTRNssVpzQ2qFkRB1Zt1JSCejpB4PGJ","service":"telegram-bot","timestamp":"2024-10-11T10:46:03.061Z"}
+{"level":"info","message":"Processing wallet: 9CweCNj5tBswwvkLtvjwTLGEPKVqH8CSPbuxgX6oc25r","service":"telegram-bot","timestamp":"2024-10-11T10:46:03.061Z"}
+{"level":"info","message":"Processing wallet: Eu34DTAgq619e9JZbWrSgRSt1b7AyLD677MxD61CYYKx","service":"telegram-bot","timestamp":"2024-10-11T10:46:03.061Z"}
+{"level":"info","message":"Processing wallet: EzYFRDXEMvuvviQMjo8uPiHiowjCpGF9wUMVKuh3k4a","service":"telegram-bot","timestamp":"2024-10-11T10:46:03.061Z"}
+{"level":"info","message":"Processing wallet: 4dZ1CFq7xUiopjrMizZvbc2Nhmhf6EAwm8wCpYW4nzDh","service":"telegram-bot","timestamp":"2024-10-11T10:46:03.061Z"}
+{"level":"info","message":"Processing wallet: 7gZexLpt6DRnTxsb9H4PvdLkuNh6kbp5U95eabvGzZH1","service":"telegram-bot","timestamp":"2024-10-11T10:46:03.061Z"}
+{"level":"info","message":"Processing wallet: F8M7snTDaJFXSY5VfbHWsvyDEBt4do1DBKXcZxBAaTkt","service":"telegram-bot","timestamp":"2024-10-11T10:46:03.062Z"}
+{"level":"info","message":"Processing wallet: DBzhEXjxvuvpS9i9N8PhQXSqzkc8YPtKbfWLwcSmxZpp","service":"telegram-bot","timestamp":"2024-10-11T10:46:03.062Z"}
+{"level":"info","message":"Processing wallet: 3r4BpPbH32yaskw3qW5H4Nv3aQBTG4JGJ8e5dy4hdiFh","service":"telegram-bot","timestamp":"2024-10-11T10:46:03.062Z"}
+{"level":"info","message":"Fetching prices from DexScreener","service":"telegram-bot","timestamp":"2024-10-11T10:46:03.957Z"}
+{"level":"info","message":"getAssetsForMultipleWallets completed","service":"telegram-bot","timestamp":"2024-10-11T10:46:04.636Z"}
+{"level":"debug","message":"Attempting to remove command scan for user 1718036512","service":"telegram-bot","timestamp":"2024-10-11T10:46:13.288Z"}
+{"level":"info","message":"Removed command scan for user 1718036512. Remaining active: 1","service":"telegram-bot","timestamp":"2024-10-11T10:46:13.288Z"}
+{"level":"debug","message":"Attempting to remove command scan for user 1718036512","service":"telegram-bot","timestamp":"2024-10-11T10:46:13.288Z"}
+{"level":"info","message":"Removed command scan for user 1718036512. Remaining active: 0","service":"telegram-bot","timestamp":"2024-10-11T10:46:13.289Z"}
+{"level":"debug","message":"Removed user 1718036512 from active commands tracking","service":"telegram-bot","timestamp":"2024-10-11T10:46:13.289Z"}
+{"level":"debug","message":"Total controlled balance: 166565118.745361, Supply percentage: 16.65%","service":"telegram-bot","timestamp":"2024-10-11T10:46:18.248Z"}
+{"level":"info","message":"Check for J9SXKctbZVws65vjBHL91mqStzq5an1xZxdi6a4h853o (topHolders): Current supply: 16.65%, Initial: 16.64%, Change: 0.01%","service":"telegram-bot","timestamp":"2024-10-11T10:46:18.249Z"}
+{"level":"info","message":"Tracked usage of command \"bt\" for user \"Rengon0x\".","service":"telegram-bot","timestamp":"2024-10-11T10:46:36.645Z"}
+{"level":"debug","message":"Checking if command bt can be added for user 1718036512","service":"telegram-bot","timestamp":"2024-10-11T10:46:36.645Z"}
+{"level":"debug","message":"User 1718036512 has 0 active commands","service":"telegram-bot","timestamp":"2024-10-11T10:46:36.646Z"}
+{"level":"debug","message":"Attempting to add command bt for user 1718036512","service":"telegram-bot","timestamp":"2024-10-11T10:46:36.646Z"}
+{"level":"info","message":"Added command bt for user 1718036512. Total active: 1","service":"telegram-bot","timestamp":"2024-10-11T10:46:36.646Z"}
+{"level":"debug","message":"Active command count for user 1718036512: 1","service":"telegram-bot","timestamp":"2024-10-11T10:46:36.646Z"}
+{"level":"info","message":"Starting BestTrader command for user Rengon0x","service":"telegram-bot","timestamp":"2024-10-11T10:46:36.646Z"}
+{"level":"info","message":"Command usage data saved successfully.","service":"telegram-bot","timestamp":"2024-10-11T10:46:36.647Z"}
+{"level":"info","message":"Tracked usage of command \"scan\" for user \"Rengon0x\".","service":"telegram-bot","timestamp":"2024-10-11T10:46:43.101Z"}
+{"level":"debug","message":"Checking if command scan can be added for user 1718036512","service":"telegram-bot","timestamp":"2024-10-11T10:46:43.101Z"}
+{"level":"debug","message":"User 1718036512 has 1 active commands","service":"telegram-bot","timestamp":"2024-10-11T10:46:43.102Z"}
+{"level":"debug","message":"Attempting to add command scan for user 1718036512","service":"telegram-bot","timestamp":"2024-10-11T10:46:43.102Z"}
+{"level":"info","message":"Added command scan for user 1718036512. Total active: 2","service":"telegram-bot","timestamp":"2024-10-11T10:46:43.102Z"}
+{"level":"debug","message":"Active command count for user 1718036512: 2","service":"telegram-bot","timestamp":"2024-10-11T10:46:43.102Z"}
+{"level":"info","message":"Starting Scan command for user Rengon0x","service":"telegram-bot","timestamp":"2024-10-11T10:46:43.102Z"}
+{"level":"debug","message":"Attempting to add command scan for user 1718036512","service":"telegram-bot","timestamp":"2024-10-11T10:46:43.103Z"}
+{"level":"info","message":"Added command scan for user 1718036512. Total active: 3","service":"telegram-bot","timestamp":"2024-10-11T10:46:43.103Z"}
+{"level":"info","message":"Command usage data saved successfully.","service":"telegram-bot","timestamp":"2024-10-11T10:46:43.104Z"}
+{"level":"info","message":"Getting top 10 holders for coin: 6tVZVjcppH2BZ9Xj5yFU1Zt34m2rYcyDqqpSeMDZpump","service":"telegram-bot","timestamp":"2024-10-11T10:46:44.126Z"}
+{"level":"info","message":"Processing 9 wallets","service":"telegram-bot","timestamp":"2024-10-11T10:46:45.714Z"}
+{"level":"info","message":"Processing wallet: BywRgcUJy3awHrTRNssVpzQ2qFkRB1Zt1JSCejpB4PGJ","service":"telegram-bot","timestamp":"2024-10-11T10:46:45.714Z"}
+{"level":"info","message":"Processing wallet: 9CweCNj5tBswwvkLtvjwTLGEPKVqH8CSPbuxgX6oc25r","service":"telegram-bot","timestamp":"2024-10-11T10:46:45.714Z"}
+{"level":"info","message":"Processing wallet: Eu34DTAgq619e9JZbWrSgRSt1b7AyLD677MxD61CYYKx","service":"telegram-bot","timestamp":"2024-10-11T10:46:45.714Z"}
+{"level":"info","message":"Processing wallet: EzYFRDXEMvuvviQMjo8uPiHiowjCpGF9wUMVKuh3k4a","service":"telegram-bot","timestamp":"2024-10-11T10:46:45.715Z"}
+{"level":"info","message":"Processing wallet: 4dZ1CFq7xUiopjrMizZvbc2Nhmhf6EAwm8wCpYW4nzDh","service":"telegram-bot","timestamp":"2024-10-11T10:46:45.715Z"}
+{"level":"info","message":"Processing wallet: 7gZexLpt6DRnTxsb9H4PvdLkuNh6kbp5U95eabvGzZH1","service":"telegram-bot","timestamp":"2024-10-11T10:46:45.715Z"}
+{"level":"info","message":"Processing wallet: F8M7snTDaJFXSY5VfbHWsvyDEBt4do1DBKXcZxBAaTkt","service":"telegram-bot","timestamp":"2024-10-11T10:46:45.715Z"}
+{"level":"info","message":"Processing wallet: DBzhEXjxvuvpS9i9N8PhQXSqzkc8YPtKbfWLwcSmxZpp","service":"telegram-bot","timestamp":"2024-10-11T10:46:45.715Z"}
+{"level":"info","message":"Processing wallet: 3r4BpPbH32yaskw3qW5H4Nv3aQBTG4JGJ8e5dy4hdiFh","service":"telegram-bot","timestamp":"2024-10-11T10:46:45.715Z"}
+{"level":"info","message":"Fetching prices from DexScreener","service":"telegram-bot","timestamp":"2024-10-11T10:46:46.543Z"}
+{"level":"info","message":"getAssetsForMultipleWallets completed","service":"telegram-bot","timestamp":"2024-10-11T10:46:47.084Z"}
+{"level":"debug","message":"Attempting to remove command scan for user 1718036512","service":"telegram-bot","timestamp":"2024-10-11T10:47:03.480Z"}
+{"level":"info","message":"Removed command scan for user 1718036512. Remaining active: 2","service":"telegram-bot","timestamp":"2024-10-11T10:47:03.480Z"}
+{"level":"debug","message":"Attempting to remove command scan for user 1718036512","service":"telegram-bot","timestamp":"2024-10-11T10:47:03.481Z"}
+{"level":"info","message":"Removed command scan for user 1718036512. Remaining active: 1","service":"telegram-bot","timestamp":"2024-10-11T10:47:03.481Z"}
+{"level":"debug","message":"Active command count for user 1718036512: 1","service":"telegram-bot","timestamp":"2024-10-11T10:47:03.481Z"}
+{"level":"debug","message":"Total controlled balance: 166565118.745361, Supply percentage: 16.65%","service":"telegram-bot","timestamp":"2024-10-11T10:47:18.644Z"}
+{"level":"info","message":"Check for J9SXKctbZVws65vjBHL91mqStzq5an1xZxdi6a4h853o (topHolders): Current supply: 16.65%, Initial: 16.64%, Change: 0.01%","service":"telegram-bot","timestamp":"2024-10-11T10:47:18.644Z"}
+{"0":"\"","1":"t","10":"i","11":"n","12":"d","13":"\"","14":" ","15":"i","16":"s","17":" ","18":"n","19":"o","2":"w","20":"t","21":" ","22":"a","23":"l","24":"l","25":"o","26":"w","27":"e","28":"d","3":"i","4":"t","5":"t","6":"e","7":"r","8":"_","9":"b","level":"error","message":"Invalid wallet data for address 952nKaqEPaEiQrH4HqSnT5jki9Eh6bJvwvfwLk4LxuW6:","service":"telegram-bot","timestamp":"2024-10-11T10:47:27.542Z"}
+{"level":"info","message":"Formatted traders successfully.","service":"telegram-bot","timestamp":"2024-10-11T10:47:27.544Z"}
+{"level":"info","message":"Grouped traders into message blocks successfully.","service":"telegram-bot","timestamp":"2024-10-11T10:47:27.544Z"}
+{"0":"\"","1":"t","10":"i","11":"n","12":"d","13":"\"","14":" ","15":"i","16":"s","17":" ","18":"n","19":"o","2":"w","20":"t","21":" ","22":"a","23":"l","24":"l","25":"o","26":"w","27":"e","28":"d","3":"i","4":"t","5":"t","6":"e","7":"r","8":"_","9":"b","level":"error","message":"Invalid wallet data for address 9Ch2ftEdNyWmz99vEqEi9gKnaZEucTMruKVArhwS6HkP:","service":"telegram-bot","timestamp":"2024-10-11T10:47:27.544Z"}
+{"0":"\"","1":"t","10":"i","11":"n","12":"d","13":"\"","14":" ","15":"i","16":"s","17":" ","18":"n","19":"o","2":"w","20":"t","21":" ","22":"a","23":"l","24":"l","25":"o","26":"w","27":"e","28":"d","3":"i","4":"t","5":"t","6":"e","7":"r","8":"_","9":"b","level":"error","message":"Invalid wallet data for address 5aBUMhYe5r1mwVWLYPNawxHqmLypKPPfYr6DCn8MLEv5:","service":"telegram-bot","timestamp":"2024-10-11T10:47:27.546Z"}
+{"0":"\"","1":"t","10":"i","11":"n","12":"d","13":"\"","14":" ","15":"i","16":"s","17":" ","18":"n","19":"o","2":"w","20":"t","21":" ","22":"a","23":"l","24":"l","25":"o","26":"w","27":"e","28":"d","3":"i","4":"t","5":"t","6":"e","7":"r","8":"_","9":"b","level":"error","message":"Invalid wallet data for address DNfuF1L62WWyW3pNakVkyGGFzVVhj4Yr52jSmdTyeBHm:","service":"telegram-bot","timestamp":"2024-10-11T10:47:27.547Z"}
+{"0":"\"","1":"t","10":"i","11":"n","12":"d","13":"\"","14":" ","15":"i","16":"s","17":" ","18":"n","19":"o","2":"w","20":"t","21":" ","22":"a","23":"l","24":"l","25":"o","26":"w","27":"e","28":"d","3":"i","4":"t","5":"t","6":"e","7":"r","8":"_","9":"b","level":"error","message":"Invalid wallet data for address FfNe1R1iBfmd9dUQSJdYhbP2j2qFoc5phu6zdejzBxdX:","service":"telegram-bot","timestamp":"2024-10-11T10:47:27.548Z"}
+{"0":"\"","1":"t","10":"i","11":"n","12":"d","13":"\"","14":" ","15":"i","16":"s","17":" ","18":"n","19":"o","2":"w","20":"t","21":" ","22":"a","23":"l","24":"l","25":"o","26":"w","27":"e","28":"d","3":"i","4":"t","5":"t","6":"e","7":"r","8":"_","9":"b","level":"error","message":"Invalid wallet data for address 5q7Xwc2T57sK1DKU6zuwVXvMPsxqB2xrJ3T5AonFYtcY:","service":"telegram-bot","timestamp":"2024-10-11T10:47:27.548Z"}
+{"0":"\"","1":"t","10":"i","11":"n","12":"d","13":"\"","14":" ","15":"i","16":"s","17":" ","18":"n","19":"o","2":"w","20":"t","21":" ","22":"a","23":"l","24":"l","25":"o","26":"w","27":"e","28":"d","3":"i","4":"t","5":"t","6":"e","7":"r","8":"_","9":"b","level":"error","message":"Invalid wallet data for address GeXAHmmETnizW6af4E2e64ju8mTkLdEQzxUiAjJVo6NZ:","service":"telegram-bot","timestamp":"2024-10-11T10:47:27.549Z"}
+{"0":"\"","1":"t","10":"i","11":"n","12":"d","13":"\"","14":" ","15":"i","16":"s","17":" ","18":"n","19":"o","2":"w","20":"t","21":" ","22":"a","23":"l","24":"l","25":"o","26":"w","27":"e","28":"d","3":"i","4":"t","5":"t","6":"e","7":"r","8":"_","9":"b","level":"error","message":"Invalid wallet data for address 7at9Yr2isX5rKwkvZbsHEkv3cTKJsvmwZRouBuk7VRok:","service":"telegram-bot","timestamp":"2024-10-11T10:47:27.549Z"}
+{"0":"\"","1":"t","10":"i","11":"n","12":"d","13":"\"","14":" ","15":"i","16":"s","17":" ","18":"n","19":"o","2":"w","20":"t","21":" ","22":"a","23":"l","24":"l","25":"o","26":"w","27":"e","28":"d","3":"i","4":"t","5":"t","6":"e","7":"r","8":"_","9":"b","level":"error","message":"Invalid wallet data for address 3nkCYtwSoiUELm7ViTjHq7CDF1MWwuzzrtLiWBw9zswx:","service":"telegram-bot","timestamp":"2024-10-11T10:47:27.550Z"}
+{"0":"\"","1":"t","10":"i","11":"n","12":"d","13":"\"","14":" ","15":"i","16":"s","17":" ","18":"n","19":"o","2":"w","20":"t","21":" ","22":"a","23":"l","24":"l","25":"o","26":"w","27":"e","28":"d","3":"i","4":"t","5":"t","6":"e","7":"r","8":"_","9":"b","level":"error","message":"Invalid wallet data for address CgsM7KA8A5cuQ62zmWbCvnJLdXmS3P1rTZteho2i2PA8:","service":"telegram-bot","timestamp":"2024-10-11T10:47:27.551Z"}
+{"0":"\"","1":"t","10":"i","11":"n","12":"d","13":"\"","14":" ","15":"i","16":"s","17":" ","18":"n","19":"o","2":"w","20":"t","21":" ","22":"a","23":"l","24":"l","25":"o","26":"w","27":"e","28":"d","3":"i","4":"t","5":"t","6":"e","7":"r","8":"_","9":"b","level":"error","message":"Invalid wallet data for address 2Dr7TyDcwRBo6JvWMUXPn6Sb9R2JN3Z2tvbXT311wDHE:","service":"telegram-bot","timestamp":"2024-10-11T10:47:27.554Z"}
+{"0":"\"","1":"t","10":"i","11":"n","12":"d","13":"\"","14":" ","15":"i","16":"s","17":" ","18":"n","19":"o","2":"w","20":"t","21":" ","22":"a","23":"l","24":"l","25":"o","26":"w","27":"e","28":"d","3":"i","4":"t","5":"t","6":"e","7":"r","8":"_","9":"b","level":"error","message":"Invalid wallet data for address HW8vXb3KLiMVEiGLyHGs5H4cieaMqfBMbmDbUYCu9ris:","service":"telegram-bot","timestamp":"2024-10-11T10:47:27.556Z"}
+{"0":"\"","1":"t","10":"i","11":"n","12":"d","13":"\"","14":" ","15":"i","16":"s","17":" ","18":"n","19":"o","2":"w","20":"t","21":" ","22":"a","23":"l","24":"l","25":"o","26":"w","27":"e","28":"d","3":"i","4":"t","5":"t","6":"e","7":"r","8":"_","9":"b","level":"error","message":"Invalid wallet data for address 2iwsLRampx5krdYdyoAuXAaZtx5EjsgMizBHVDSbDkwe:","service":"telegram-bot","timestamp":"2024-10-11T10:47:27.557Z"}
+{"0":"\"","1":"t","10":"i","11":"n","12":"d","13":"\"","14":" ","15":"i","16":"s","17":" ","18":"n","19":"o","2":"w","20":"t","21":" ","22":"a","23":"l","24":"l","25":"o","26":"w","27":"e","28":"d","3":"i","4":"t","5":"t","6":"e","7":"r","8":"_","9":"b","level":"error","message":"Invalid wallet data for address EmkLihTVfQHxxCssg45bVwybpWzXkgEMVfHMWvuCcW71:","service":"telegram-bot","timestamp":"2024-10-11T10:47:27.558Z"}
+{"level":"debug","message":"bestTraders command completed","service":"telegram-bot","timestamp":"2024-10-11T10:47:28.480Z"}
+{"level":"debug","message":"Attempting to remove command bt for user 1718036512","service":"telegram-bot","timestamp":"2024-10-11T10:47:28.482Z"}
+{"level":"info","message":"Removed command bt for user 1718036512. Remaining active: 0","service":"telegram-bot","timestamp":"2024-10-11T10:47:28.483Z"}
+{"level":"debug","message":"Removed user 1718036512 from active commands tracking","service":"telegram-bot","timestamp":"2024-10-11T10:47:28.483Z"}
+{"level":"debug","message":"Attempting to remove command bt for user 1718036512","service":"telegram-bot","timestamp":"2024-10-11T10:47:28.483Z"}
+{"level":"warn","message":"No active commands found for user 1718036512","service":"telegram-bot","timestamp":"2024-10-11T10:47:28.483Z"}
+{"level":"debug","message":"Total controlled balance: 166565118.745361, Supply percentage: 16.65%","service":"telegram-bot","timestamp":"2024-10-11T10:48:18.333Z"}
+{"level":"info","message":"Check for J9SXKctbZVws65vjBHL91mqStzq5an1xZxdi6a4h853o (topHolders): Current supply: 16.65%, Initial: 16.64%, Change: 0.01%","service":"telegram-bot","timestamp":"2024-10-11T10:48:18.333Z"}
+{"level":"debug","message":"Total controlled balance: 166565118.745361, Supply percentage: 16.65%","service":"telegram-bot","timestamp":"2024-10-11T10:49:18.301Z"}
+{"level":"info","message":"Check for J9SXKctbZVws65vjBHL91mqStzq5an1xZxdi6a4h853o (topHolders): Current supply: 16.65%, Initial: 16.64%, Change: 0.01%","service":"telegram-bot","timestamp":"2024-10-11T10:49:18.301Z"}
+{"level":"debug","message":"Total controlled balance: 166565118.745361, Supply percentage: 16.65%","service":"telegram-bot","timestamp":"2024-10-11T10:50:18.815Z"}
+{"level":"info","message":"Check for J9SXKctbZVws65vjBHL91mqStzq5an1xZxdi6a4h853o (topHolders): Current supply: 16.65%, Initial: 16.64%, Change: 0.01%","service":"telegram-bot","timestamp":"2024-10-11T10:50:18.815Z"}
+{"level":"info","message":"Tracked usage of command \"bt\" for user \"Rengon0x\".","service":"telegram-bot","timestamp":"2024-10-11T10:50:34.562Z"}
+{"level":"debug","message":"Checking if command bt can be added for user 1718036512","service":"telegram-bot","timestamp":"2024-10-11T10:50:34.562Z"}
+{"level":"debug","message":"User 1718036512 has 0 active commands","service":"telegram-bot","timestamp":"2024-10-11T10:50:34.562Z"}
+{"level":"debug","message":"Attempting to add command bt for user 1718036512","service":"telegram-bot","timestamp":"2024-10-11T10:50:34.563Z"}
+{"level":"info","message":"Added command bt for user 1718036512. Total active: 1","service":"telegram-bot","timestamp":"2024-10-11T10:50:34.563Z"}
+{"level":"debug","message":"Active command count for user 1718036512: 1","service":"telegram-bot","timestamp":"2024-10-11T10:50:34.563Z"}
+{"level":"info","message":"Starting BestTrader command for user Rengon0x","service":"telegram-bot","timestamp":"2024-10-11T10:50:34.563Z"}
+{"level":"info","message":"Command usage data saved successfully.","service":"telegram-bot","timestamp":"2024-10-11T10:50:34.564Z"}
+{"level":"info","message":"Tracked usage of command \"bt\" for user \"Rengon0x\".","service":"telegram-bot","timestamp":"2024-10-11T10:50:35.293Z"}
+{"level":"debug","message":"Checking if command bt can be added for user 1718036512","service":"telegram-bot","timestamp":"2024-10-11T10:50:35.293Z"}
+{"level":"debug","message":"User 1718036512 has 1 active commands","service":"telegram-bot","timestamp":"2024-10-11T10:50:35.293Z"}
+{"level":"debug","message":"Attempting to add command bt for user 1718036512","service":"telegram-bot","timestamp":"2024-10-11T10:50:35.293Z"}
+{"level":"info","message":"Added command bt for user 1718036512. Total active: 2","service":"telegram-bot","timestamp":"2024-10-11T10:50:35.294Z"}
+{"level":"debug","message":"Active command count for user 1718036512: 2","service":"telegram-bot","timestamp":"2024-10-11T10:50:35.294Z"}
+{"level":"info","message":"Starting BestTrader command for user Rengon0x","service":"telegram-bot","timestamp":"2024-10-11T10:50:35.294Z"}
+{"level":"info","message":"Command usage data saved successfully.","service":"telegram-bot","timestamp":"2024-10-11T10:50:35.295Z"}
+{"level":"debug","message":"Total controlled balance: 166565118.745361, Supply percentage: 16.65%","service":"telegram-bot","timestamp":"2024-10-11T10:51:18.393Z"}
+{"level":"info","message":"Check for J9SXKctbZVws65vjBHL91mqStzq5an1xZxdi6a4h853o (topHolders): Current supply: 16.65%, Initial: 16.64%, Change: 0.01%","service":"telegram-bot","timestamp":"2024-10-11T10:51:18.393Z"}
+{"level":"info","message":"Starting Tracker command for user Rengon0x","service":"telegram-bot","timestamp":"2024-10-11T10:51:28.456Z"}
+{"level":"info","message":"Stopped tracking J9SXKctbZVws65vjBHL91mqStzq5an1xZxdi6a4h853o_topHolders for user Rengon0x.","service":"telegram-bot","timestamp":"2024-10-11T10:51:29.768Z"}
+{"0":"\"","1":"t","10":"i","11":"n","12":"d","13":"\"","14":" ","15":"i","16":"s","17":" ","18":"n","19":"o","2":"w","20":"t","21":" ","22":"a","23":"l","24":"l","25":"o","26":"w","27":"e","28":"d","3":"i","4":"t","5":"t","6":"e","7":"r","8":"_","9":"b","level":"error","message":"Invalid wallet data for address CEhGej562DmqFuPhLURy6sKqojyAvP3fLP9nvNQqjEQc:","service":"telegram-bot","timestamp":"2024-10-11T10:51:54.321Z"}
+{"level":"info","message":"Formatted traders successfully.","service":"telegram-bot","timestamp":"2024-10-11T10:51:54.327Z"}
+{"level":"info","message":"Grouped traders into message blocks successfully.","service":"telegram-bot","timestamp":"2024-10-11T10:51:54.327Z"}
+{"0":"\"","1":"t","10":"i","11":"n","12":"d","13":"\"","14":" ","15":"i","16":"s","17":" ","18":"n","19":"o","2":"w","20":"t","21":" ","22":"a","23":"l","24":"l","25":"o","26":"w","27":"e","28":"d","3":"i","4":"t","5":"t","6":"e","7":"r","8":"_","9":"b","level":"error","message":"Invalid wallet data for address EtCvfhUw8tSjHTCTJ5WzpKitHVRkPW13xpC9qHPjEGxj:","service":"telegram-bot","timestamp":"2024-10-11T10:51:54.328Z"}
+{"0":"\"","1":"t","10":"i","11":"n","12":"d","13":"\"","14":" ","15":"i","16":"s","17":" ","18":"n","19":"o","2":"w","20":"t","21":" ","22":"a","23":"l","24":"l","25":"o","26":"w","27":"e","28":"d","3":"i","4":"t","5":"t","6":"e","7":"r","8":"_","9":"b","level":"error","message":"Invalid wallet data for address 8RsEqeoKcCxp1Ld1oy6Cpp4pfiBw6JQ63ifLnyEXSCbH:","service":"telegram-bot","timestamp":"2024-10-11T10:51:54.330Z"}
+{"0":"\"","1":"t","10":"i","11":"n","12":"d","13":"\"","14":" ","15":"i","16":"s","17":" ","18":"n","19":"o","2":"w","20":"t","21":" ","22":"a","23":"l","24":"l","25":"o","26":"w","27":"e","28":"d","3":"i","4":"t","5":"t","6":"e","7":"r","8":"_","9":"b","level":"error","message":"Invalid wallet data for address 9TF6MxJx8E3fSyutrjZ92F521D5yQ7ZbEfNVGMXuFD3J:","service":"telegram-bot","timestamp":"2024-10-11T10:51:54.331Z"}
+{"0":"\"","1":"t","10":"i","11":"n","12":"d","13":"\"","14":" ","15":"i","16":"s","17":" ","18":"n","19":"o","2":"w","20":"t","21":" ","22":"a","23":"l","24":"l","25":"o","26":"w","27":"e","28":"d","3":"i","4":"t","5":"t","6":"e","7":"r","8":"_","9":"b","level":"error","message":"Invalid wallet data for address GFLuWeCWcpgpmQcuT9N3jeaC42Dc6CCDHvfTBbXozjrB:","service":"telegram-bot","timestamp":"2024-10-11T10:51:54.332Z"}
+{"0":"\"","1":"t","10":"i","11":"n","12":"d","13":"\"","14":" ","15":"i","16":"s","17":" ","18":"n","19":"o","2":"w","20":"t","21":" ","22":"a","23":"l","24":"l","25":"o","26":"w","27":"e","28":"d","3":"i","4":"t","5":"t","6":"e","7":"r","8":"_","9":"b","level":"error","message":"Invalid wallet data for address 5fWkLJfoDsRAaXhPJcJY19qNtDDQ5h6q1SPzsAPRrUNG:","service":"telegram-bot","timestamp":"2024-10-11T10:51:54.333Z"}
+{"0":"\"","1":"t","10":"i","11":"n","12":"d","13":"\"","14":" ","15":"i","16":"s","17":" ","18":"n","19":"o","2":"w","20":"t","21":" ","22":"a","23":"l","24":"l","25":"o","26":"w","27":"e","28":"d","3":"i","4":"t","5":"t","6":"e","7":"r","8":"_","9":"b","level":"error","message":"Invalid wallet data for address 3pGJqpp3HMbPzDZn2Z2eoY66k3thT7z5xdTVoZDecKjb:","service":"telegram-bot","timestamp":"2024-10-11T10:51:54.336Z"}
+{"0":"\"","1":"t","10":"i","11":"n","12":"d","13":"\"","14":" ","15":"i","16":"s","17":" ","18":"n","19":"o","2":"w","20":"t","21":" ","22":"a","23":"l","24":"l","25":"o","26":"w","27":"e","28":"d","3":"i","4":"t","5":"t","6":"e","7":"r","8":"_","9":"b","level":"error","message":"Invalid wallet data for address 8qtodX9ACyMQra1cGFX7ZbyZFQSJEQURukdRSDbG3pt7:","service":"telegram-bot","timestamp":"2024-10-11T10:51:54.343Z"}
+{"0":"\"","1":"t","10":"i","11":"n","12":"d","13":"\"","14":" ","15":"i","16":"s","17":" ","18":"n","19":"o","2":"w","20":"t","21":" ","22":"a","23":"l","24":"l","25":"o","26":"w","27":"e","28":"d","3":"i","4":"t","5":"t","6":"e","7":"r","8":"_","9":"b","level":"error","message":"Invalid wallet data for address w42Xw3htsBCy2pTNd7HZHo7pAVX3qWR4fbmBkMkRHYQ:","service":"telegram-bot","timestamp":"2024-10-11T10:51:54.346Z"}
+{"0":"\"","1":"t","10":"i","11":"n","12":"d","13":"\"","14":" ","15":"i","16":"s","17":" ","18":"n","19":"o","2":"w","20":"t","21":" ","22":"a","23":"l","24":"l","25":"o","26":"w","27":"e","28":"d","3":"i","4":"t","5":"t","6":"e","7":"r","8":"_","9":"b","level":"error","message":"Invalid wallet data for address B3VZk8zMKKPhrfA4AA2ZyX8CTXUMKNMiz7846jPjgCju:","service":"telegram-bot","timestamp":"2024-10-11T10:51:54.348Z"}
+{"level":"debug","message":"bestTraders command completed","service":"telegram-bot","timestamp":"2024-10-11T10:51:54.693Z"}
+{"level":"debug","message":"Attempting to remove command bt for user 1718036512","service":"telegram-bot","timestamp":"2024-10-11T10:51:54.695Z"}
+{"level":"info","message":"Removed command bt for user 1718036512. Remaining active: 1","service":"telegram-bot","timestamp":"2024-10-11T10:51:54.695Z"}
+{"level":"debug","message":"Attempting to remove command bt for user 1718036512","service":"telegram-bot","timestamp":"2024-10-11T10:51:54.695Z"}
+{"level":"info","message":"Removed command bt for user 1718036512. Remaining active: 0","service":"telegram-bot","timestamp":"2024-10-11T10:51:54.695Z"}
+{"level":"debug","message":"Removed user 1718036512 from active commands tracking","service":"telegram-bot","timestamp":"2024-10-11T10:51:54.695Z"}
+{"0":"\"","1":"t","10":"i","11":"n","12":"d","13":"\"","14":" ","15":"i","16":"s","17":" ","18":"n","19":"o","2":"w","20":"t","21":" ","22":"a","23":"l","24":"l","25":"o","26":"w","27":"e","28":"d","3":"i","4":"t","5":"t","6":"e","7":"r","8":"_","9":"b","level":"error","message":"Invalid wallet data for address CEhGej562DmqFuPhLURy6sKqojyAvP3fLP9nvNQqjEQc:","service":"telegram-bot","timestamp":"2024-10-11T10:51:57.469Z"}
+{"level":"info","message":"Formatted traders successfully.","service":"telegram-bot","timestamp":"2024-10-11T10:51:57.472Z"}
+{"level":"info","message":"Grouped traders into message blocks successfully.","service":"telegram-bot","timestamp":"2024-10-11T10:51:57.473Z"}
+{"0":"\"","1":"t","10":"i","11":"n","12":"d","13":"\"","14":" ","15":"i","16":"s","17":" ","18":"n","19":"o","2":"w","20":"t","21":" ","22":"a","23":"l","24":"l","25":"o","26":"w","27":"e","28":"d","3":"i","4":"t","5":"t","6":"e","7":"r","8":"_","9":"b","level":"error","message":"Invalid wallet data for address EtCvfhUw8tSjHTCTJ5WzpKitHVRkPW13xpC9qHPjEGxj:","service":"telegram-bot","timestamp":"2024-10-11T10:51:57.474Z"}
+{"0":"\"","1":"t","10":"i","11":"n","12":"d","13":"\"","14":" ","15":"i","16":"s","17":" ","18":"n","19":"o","2":"w","20":"t","21":" ","22":"a","23":"l","24":"l","25":"o","26":"w","27":"e","28":"d","3":"i","4":"t","5":"t","6":"e","7":"r","8":"_","9":"b","level":"error","message":"Invalid wallet data for address 8RsEqeoKcCxp1Ld1oy6Cpp4pfiBw6JQ63ifLnyEXSCbH:","service":"telegram-bot","timestamp":"2024-10-11T10:51:57.475Z"}
+{"0":"\"","1":"t","10":"i","11":"n","12":"d","13":"\"","14":" ","15":"i","16":"s","17":" ","18":"n","19":"o","2":"w","20":"t","21":" ","22":"a","23":"l","24":"l","25":"o","26":"w","27":"e","28":"d","3":"i","4":"t","5":"t","6":"e","7":"r","8":"_","9":"b","level":"error","message":"Invalid wallet data for address 9TF6MxJx8E3fSyutrjZ92F521D5yQ7ZbEfNVGMXuFD3J:","service":"telegram-bot","timestamp":"2024-10-11T10:51:57.476Z"}
+{"0":"\"","1":"t","10":"i","11":"n","12":"d","13":"\"","14":" ","15":"i","16":"s","17":" ","18":"n","19":"o","2":"w","20":"t","21":" ","22":"a","23":"l","24":"l","25":"o","26":"w","27":"e","28":"d","3":"i","4":"t","5":"t","6":"e","7":"r","8":"_","9":"b","level":"error","message":"Invalid wallet data for address GFLuWeCWcpgpmQcuT9N3jeaC42Dc6CCDHvfTBbXozjrB:","service":"telegram-bot","timestamp":"2024-10-11T10:51:57.477Z"}
+{"0":"\"","1":"t","10":"i","11":"n","12":"d","13":"\"","14":" ","15":"i","16":"s","17":" ","18":"n","19":"o","2":"w","20":"t","21":" ","22":"a","23":"l","24":"l","25":"o","26":"w","27":"e","28":"d","3":"i","4":"t","5":"t","6":"e","7":"r","8":"_","9":"b","level":"error","message":"Invalid wallet data for address 5fWkLJfoDsRAaXhPJcJY19qNtDDQ5h6q1SPzsAPRrUNG:","service":"telegram-bot","timestamp":"2024-10-11T10:51:57.478Z"}
+{"0":"\"","1":"t","10":"i","11":"n","12":"d","13":"\"","14":" ","15":"i","16":"s","17":" ","18":"n","19":"o","2":"w","20":"t","21":" ","22":"a","23":"l","24":"l","25":"o","26":"w","27":"e","28":"d","3":"i","4":"t","5":"t","6":"e","7":"r","8":"_","9":"b","level":"error","message":"Invalid wallet data for address 3pGJqpp3HMbPzDZn2Z2eoY66k3thT7z5xdTVoZDecKjb:","service":"telegram-bot","timestamp":"2024-10-11T10:51:57.481Z"}
+{"0":"\"","1":"t","10":"i","11":"n","12":"d","13":"\"","14":" ","15":"i","16":"s","17":" ","18":"n","19":"o","2":"w","20":"t","21":" ","22":"a","23":"l","24":"l","25":"o","26":"w","27":"e","28":"d","3":"i","4":"t","5":"t","6":"e","7":"r","8":"_","9":"b","level":"error","message":"Invalid wallet data for address 8qtodX9ACyMQra1cGFX7ZbyZFQSJEQURukdRSDbG3pt7:","service":"telegram-bot","timestamp":"2024-10-11T10:51:57.486Z"}
+{"0":"\"","1":"t","10":"i","11":"n","12":"d","13":"\"","14":" ","15":"i","16":"s","17":" ","18":"n","19":"o","2":"w","20":"t","21":" ","22":"a","23":"l","24":"l","25":"o","26":"w","27":"e","28":"d","3":"i","4":"t","5":"t","6":"e","7":"r","8":"_","9":"b","level":"error","message":"Invalid wallet data for address w42Xw3htsBCy2pTNd7HZHo7pAVX3qWR4fbmBkMkRHYQ:","service":"telegram-bot","timestamp":"2024-10-11T10:51:57.489Z"}
+{"0":"\"","1":"t","10":"i","11":"n","12":"d","13":"\"","14":" ","15":"i","16":"s","17":" ","18":"n","19":"o","2":"w","20":"t","21":" ","22":"a","23":"l","24":"l","25":"o","26":"w","27":"e","28":"d","3":"i","4":"t","5":"t","6":"e","7":"r","8":"_","9":"b","level":"error","message":"Invalid wallet data for address B3VZk8zMKKPhrfA4AA2ZyX8CTXUMKNMiz7846jPjgCju:","service":"telegram-bot","timestamp":"2024-10-11T10:51:57.491Z"}
+{"level":"debug","message":"bestTraders command completed","service":"telegram-bot","timestamp":"2024-10-11T10:51:57.853Z"}
+{"level":"debug","message":"Attempting to remove command bt for user 1718036512","service":"telegram-bot","timestamp":"2024-10-11T10:51:57.854Z"}
+{"level":"warn","message":"No active commands found for user 1718036512","service":"telegram-bot","timestamp":"2024-10-11T10:51:57.854Z"}
+{"level":"debug","message":"Attempting to remove command bt for user 1718036512","service":"telegram-bot","timestamp":"2024-10-11T10:51:57.855Z"}
+{"level":"warn","message":"No active commands found for user 1718036512","service":"telegram-bot","timestamp":"2024-10-11T10:51:57.855Z"}
+{"level":"info","message":"Tracked usage of command \"scan\" for user \"Rengon0x\".","service":"telegram-bot","timestamp":"2024-10-11T10:54:16.489Z"}
+{"level":"debug","message":"Checking if command scan can be added for user 1718036512","service":"telegram-bot","timestamp":"2024-10-11T10:54:16.489Z"}
+{"level":"debug","message":"User 1718036512 has 0 active commands","service":"telegram-bot","timestamp":"2024-10-11T10:54:16.490Z"}
+{"level":"debug","message":"Attempting to add command scan for user 1718036512","service":"telegram-bot","timestamp":"2024-10-11T10:54:16.490Z"}
+{"level":"info","message":"Added command scan for user 1718036512. Total active: 1","service":"telegram-bot","timestamp":"2024-10-11T10:54:16.490Z"}
+{"level":"debug","message":"Active command count for user 1718036512: 1","service":"telegram-bot","timestamp":"2024-10-11T10:54:16.490Z"}
+{"level":"info","message":"Starting Scan command for user Rengon0x","service":"telegram-bot","timestamp":"2024-10-11T10:54:16.491Z"}
+{"level":"debug","message":"Attempting to add command scan for user 1718036512","service":"telegram-bot","timestamp":"2024-10-11T10:54:16.491Z"}
+{"level":"info","message":"Added command scan for user 1718036512. Total active: 2","service":"telegram-bot","timestamp":"2024-10-11T10:54:16.491Z"}
+{"level":"info","message":"Command usage data saved successfully.","service":"telegram-bot","timestamp":"2024-10-11T10:54:16.492Z"}
+{"level":"info","message":"Getting top 10 holders for coin: J9SXKctbZVws65vjBHL91mqStzq5an1xZxdi6a4h853o","service":"telegram-bot","timestamp":"2024-10-11T10:54:16.808Z"}
+{"level":"info","message":"Tracked usage of command \"scan\" for user \"Rengon0x\".","service":"telegram-bot","timestamp":"2024-10-11T10:54:18.433Z"}
+{"level":"debug","message":"Checking if command scan can be added for user 1718036512","service":"telegram-bot","timestamp":"2024-10-11T10:54:18.433Z"}
+{"level":"debug","message":"User 1718036512 has 2 active commands","service":"telegram-bot","timestamp":"2024-10-11T10:54:18.434Z"}
+{"level":"info","message":"Command usage data saved successfully.","service":"telegram-bot","timestamp":"2024-10-11T10:54:18.435Z"}
+{"level":"info","message":"Processing 9 wallets","service":"telegram-bot","timestamp":"2024-10-11T10:54:18.472Z"}
+{"level":"info","message":"Processing wallet: 3Kn7r5C8qGBbXfNaDhR23ZJd4cfepSkEG87GapoScees","service":"telegram-bot","timestamp":"2024-10-11T10:54:18.472Z"}
+{"level":"info","message":"Processing wallet: 7odCEtcoFfXVGcc5vkDXzyYkzgW2iD5AWfybgSzysM5J","service":"telegram-bot","timestamp":"2024-10-11T10:54:18.473Z"}
+{"level":"info","message":"Processing wallet: D4zVhwuUsFbcaty7wJhNEZ7VEwPHXQ5d2heXPxM5yWhL","service":"telegram-bot","timestamp":"2024-10-11T10:54:18.473Z"}
+{"level":"info","message":"Processing wallet: BMMFwQoE9ZGEm5n6XhVDvKnuRUutg9mGHXqmDQ5FWRjD","service":"telegram-bot","timestamp":"2024-10-11T10:54:18.473Z"}
+{"level":"info","message":"Processing wallet: AjwVNpX7UNpvrm65pYcLdhzGCJekfB3Kjt2wBLQWtXEj","service":"telegram-bot","timestamp":"2024-10-11T10:54:18.473Z"}
+{"level":"info","message":"Processing wallet: JCfk3uWPY4MkHcqRZPR4bqgjLHJuiCH5Q2HHPm6fuiX7","service":"telegram-bot","timestamp":"2024-10-11T10:54:18.474Z"}
+{"level":"info","message":"Processing wallet: H3ZLcBH4YjJCxzNu14URJe72NbU84STScns2m8XDipwE","service":"telegram-bot","timestamp":"2024-10-11T10:54:18.474Z"}
+{"level":"info","message":"Processing wallet: 5bo21nNfs37Gwm25PeTmSfxbdevSBMJHqfrwPohv1nw4","service":"telegram-bot","timestamp":"2024-10-11T10:54:18.474Z"}
+{"level":"info","message":"Processing wallet: EBuzHh8BxwktRAhEi9Vj3CL5FATCMWdy7iiGTSVjswXG","service":"telegram-bot","timestamp":"2024-10-11T10:54:18.474Z"}
+{"level":"info","message":"Fetching prices from DexScreener","service":"telegram-bot","timestamp":"2024-10-11T10:54:21.055Z"}
+{"level":"info","message":"getAssetsForMultipleWallets completed","service":"telegram-bot","timestamp":"2024-10-11T10:54:22.700Z"}
+{"level":"debug","message":"Attempting to remove command scan for user 1718036512","service":"telegram-bot","timestamp":"2024-10-11T10:54:31.871Z"}
+{"level":"info","message":"Removed command scan for user 1718036512. Remaining active: 1","service":"telegram-bot","timestamp":"2024-10-11T10:54:31.871Z"}
+{"level":"debug","message":"Attempting to remove command scan for user 1718036512","service":"telegram-bot","timestamp":"2024-10-11T10:54:31.871Z"}
+{"level":"info","message":"Removed command scan for user 1718036512. Remaining active: 0","service":"telegram-bot","timestamp":"2024-10-11T10:54:31.871Z"}
+{"level":"debug","message":"Removed user 1718036512 from active commands tracking","service":"telegram-bot","timestamp":"2024-10-11T10:54:31.871Z"}

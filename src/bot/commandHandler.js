@@ -125,23 +125,31 @@ const handlePingCommand = async (bot, msg, args) => {
 
 
 const handleScanCommand = async (bot, msg, args) => {
+  const userId = msg.from.id;
+  const chatId = msg.chat.id;
   logger.info(`Starting Scan command for user ${msg.from.username}`);
-  const userId = msg.from.id; 
+
   try {
+
     const [tokenAddress, numberOfHoldersStr] = args;
     const numberOfHolders = numberOfHoldersStr ? parseInt(numberOfHoldersStr) : 10;
 
     // Validation du nombre de détenteurs
     if (isNaN(numberOfHolders) || numberOfHolders < 1 || numberOfHolders > 100) {
-      await bot.sendLongMessage(msg.chat.id, "Invalid number of holders. Please provide a number between 1 and 100.");
+      await bot.sendLongMessage(chatId, "Invalid number of holders. Please provide a number between 1 and 100.");
       return;
     }
 
-    await bot.sendLongMessage(msg.chat.id, `Starting scan for token: ${tokenAddress}\nAnalyzing top ${numberOfHolders} holders. This may take a few minutes...`);
+    await bot.sendLongMessage(chatId, `Starting scan for token: ${tokenAddress}\nAnalyzing top ${numberOfHolders} holders. This may take a few minutes...`);
 
     const scanResult = await scanToken(tokenAddress, numberOfHolders, true, 'scan');
+
+    if (!scanResult || !scanResult.formattedResult) {
+      throw new Error("Scan result is incomplete or invalid.");
+    }
+
     // Envoyer le résultat formaté
-    await bot.sendLongMessage(msg.chat.id, scanResult.formattedResult, { 
+    await bot.sendLongMessage(chatId, scanResult.formattedResult, { 
       parse_mode: 'HTML', 
       disable_web_page_preview: true,
       reply_markup: {
@@ -154,26 +162,38 @@ const handleScanCommand = async (bot, msg, args) => {
     });
 
     // Harmoniser lastAnalysisResults
-    lastAnalysisResults[msg.chat.id] = {
-      tokenAddress: scanResult.trackingInfo.tokenAddress,
-      tokenInfo: {
-        symbol: scanResult.trackingInfo.tokenSymbol,
-        totalSupply: scanResult.trackingInfo.totalSupply,
-        decimals: scanResult.trackingInfo.decimals,
-      },
-      totalSupplyControlled: scanResult.trackingInfo.totalSupplyControlled,
-      initialSupplyPercentage: scanResult.trackingInfo.totalSupplyControlled,
-      topHoldersWallets: scanResult.trackingInfo.topHoldersWallets,
-      teamWallets: [], // Vide pour la commande scan
-      allWalletsDetails: scanResult.allAnalyzedWallets,
-      analysisType: 'tokenScanner',
-      trackType: 'topHolders',
-      username: msg.from.username,
-    };
+    if (scanResult.trackingInfo) {
+      lastAnalysisResults[chatId] = {
+        tokenAddress: scanResult.trackingInfo.tokenAddress,
+        tokenInfo: {
+          symbol: scanResult.trackingInfo.tokenSymbol,
+          totalSupply: scanResult.trackingInfo.totalSupply,
+          decimals: scanResult.trackingInfo.decimals,
+        },
+        totalSupplyControlled: scanResult.trackingInfo.totalSupplyControlled,
+        initialSupplyPercentage: scanResult.trackingInfo.totalSupplyControlled,
+        topHoldersWallets: scanResult.trackingInfo.topHoldersWallets,
+        teamWallets: [], // Vide pour la commande scan
+        allWalletsDetails: scanResult.allAnalyzedWallets,
+        analysisType: 'tokenScanner',
+        trackType: 'topHolders',
+        username: msg.from.username,
+      };
+    } else {
+      logger.warn(`Incomplete tracking info for token ${tokenAddress}`);
+    }
 
   } catch (error) {
-    console.error('Error in handleScanCommand:', error);
-    await bot.sendLongMessage(msg.chat.id, `An error occurred during the token scan: ${error.message}`);
+    logger.error('Error in handleScanCommand:', error);
+    let errorMessage = `An error occurred during the token scan: ${error.message}`;
+    
+    if (error.message.includes("Unexpected token")) {
+      errorMessage += "\nThere might be an issue with the API response. Please try again later.";
+    } else if (error.message.includes("timeout")) {
+      errorMessage += "\nThe request timed out. The server might be busy. Please try again in a few minutes.";
+    }
+
+    await bot.sendLongMessage(chatId, errorMessage);
   } finally {
     ApiCallCounter.logApiCalls('scan');
     ActiveCommandsTracker.removeCommand(userId, 'scan');
