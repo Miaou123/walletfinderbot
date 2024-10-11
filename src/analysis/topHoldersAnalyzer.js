@@ -4,7 +4,7 @@ const { checkInactivityPeriod } = require('../tools/inactivityPeriod');
 const { getAssetsForMultipleWallets } = require('../tools/walletValueCalculator');
 const { getTopHolders } = require('../tools/getHolders');
 const { fetchMultipleWallets } = require('../tools/walletChecker');
-const config = require('../config/config');
+const config = require('../utils/config');
 const BigNumber = require('bignumber.js');
 
 async function analyzeToken(coinAddress, count, mainContext = 'default') {

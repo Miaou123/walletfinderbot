@@ -1,5 +1,5 @@
 const { Connection, PublicKey } = require('@solana/web3.js');
-const config = require('../config/config');
+const config = require('../utils/config');
 const HeliusRateLimiter = require('../utils/rateLimiters/heliusRateLimiter');
 const ApiCallCounter = require('../utils/ApiCallCounter');
 
