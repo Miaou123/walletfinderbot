@@ -11,10 +11,11 @@ class GmgnRateLimiter {
     });
 
     this.retryOptions = {
-      retries: 3,
+      retries: 5,
       initialDelay: 1000,
       backoffFactor: 2,
-      maxDelay: 10000, // Maximum delay of 10 seconds
+      maxDelay: 30000, // Maximum delay of 30 seconds
+      timeout: 300000, // 5 minutes timeout
     };
   }
 
@@ -22,14 +23,21 @@ class GmgnRateLimiter {
     const task = async () => {
       let retries = this.retryOptions.retries;
       let delay = this.retryOptions.initialDelay;
+      const startTime = Date.now();
 
       while (true) {
         try {
-          return await requestFunction();
+          const result = await Promise.race([
+            requestFunction(),
+            new Promise((_, reject) => 
+              setTimeout(() => reject(new Error('Request timeout')), this.retryOptions.timeout)
+            )
+          ]);
+          return result;
         } catch (error) {
           retries -= 1;
-          if (retries <= 0) {
-            console.error(`Task failed after all retries: ${error.message}`);
+          if (retries <= 0 || Date.now() - startTime > this.retryOptions.timeout) {
+            console.error(`Task failed after all retries or timeout: ${error.message}`);
             throw error;
           }
           console.warn(`Task failed: ${error.message}. Retrying in ${delay}ms...`);
