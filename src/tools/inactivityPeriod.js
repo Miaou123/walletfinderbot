@@ -1,4 +1,4 @@
-const config = require('../config/config');
+const config = require('../utils/config');
 const { getSolanaApi } = require('../integrations/solanaApi');
 const logger = require('../utils/logger');
 

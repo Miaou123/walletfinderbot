@@ -1,5 +1,5 @@
 const { MongoClient } = require('mongodb');
-const config = require('../config/config');
+const config = require('../utils/config');
 const logger = require('../utils/logger'); 
 const { validateWallet } = require('./models/wallet');
 
