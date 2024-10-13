@@ -15,17 +15,14 @@ const BATCH_SIZE = 20;
  * @returns {Array} - List of wallets with analyzed funding data.
  */
 async function analyzeFunding(wallets, mainContext, subContext) {
-  logger.info(`Starting funding analysis for ${wallets.length} wallets`);
 
   const analyzedWallets = [];
   for (let i = 0; i < wallets.length; i += BATCH_SIZE) {
     const batch = wallets.slice(i, i + BATCH_SIZE);
-    logger.info(`Analyzing batch ${i / BATCH_SIZE + 1} of ${Math.ceil(wallets.length / BATCH_SIZE)}`);
     const batchResults = await Promise.all(batch.map(wallet => analyzeWalletFunding(wallet, mainContext, subContext)));
     analyzedWallets.push(...batchResults);
   }
 
-  logger.info(`Funding analysis completed for ${analyzedWallets.length} wallets`);
   return analyzedWallets;
 }
 
@@ -38,11 +35,9 @@ async function analyzeFunding(wallets, mainContext, subContext) {
  */
 async function analyzeWalletFunding(wallet, mainContext, subContext) {
   const { address } = wallet;
-  logger.info(`Analyzing funding for wallet: ${address}`);
 
   try {
     const funderAddress = await getFunderAddress(address, mainContext, subContext);
-    logger.info(`Funder found for wallet ${address}: ${funderAddress || 'None'}`);
     return { ...wallet, funderAddress };
   } catch (error) {
     logger.error(`Error analyzing funding for wallet ${address}`, { error });
@@ -58,7 +53,6 @@ async function analyzeWalletFunding(wallet, mainContext, subContext) {
  * @returns {string|null} - Funder address or null if not found.
  */
 async function getFunderAddress(recipientAddress, mainContext, subContext) {
-  logger.info(`Analyzing funding transactions for ${recipientAddress}`);
 
   try {
     const signatures = await solanaApi.getSignaturesForAddress(recipientAddress, { limit: MAX_SIGNATURES }, mainContext, subContext);
@@ -73,12 +67,10 @@ async function getFunderAddress(recipientAddress, mainContext, subContext) {
       const funderAddress = analyzeTxForFunder(txDetails, recipientAddress);
 
       if (funderAddress) {
-        logger.info(`Funder found for recipient ${recipientAddress}: ${funderAddress}`);
         return funderAddress;
       }
     }
 
-    logger.info(`No funder found for recipient ${recipientAddress}`);
     return null;
   } catch (error) {
     logger.error(`Error finding funder for ${recipientAddress}`, { error });
@@ -105,7 +97,6 @@ function analyzeTxForFunder(txDetails, recipientAddress) {
   for (const instruction of instructions) {
     if (isSystemTransferToRecipient(instruction, recipientAddress)) {
       const funderAddress = instruction.parsed.info.source;
-      logger.info(`System transfer found: ${funderAddress} -> ${recipientAddress}`);
       return funderAddress;
     }
   }
@@ -114,7 +105,6 @@ function analyzeTxForFunder(txDetails, recipientAddress) {
     return detectFunderByBalanceChange(meta, accountKeys, recipientAddress);
   }
 
-  logger.info(`No relevant transfer or balance change found in transaction for ${recipientAddress}`);
   return null;
 }
 

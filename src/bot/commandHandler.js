@@ -329,10 +329,10 @@ const handleCrossCommand = async (bot, msg, args) => {
 
     await bot.sendLongMessage(msg.chat.id, `Starting cross-analysis for ${contractAddresses.length} coins with minimum combined value of $${minCombinedValue}...`);
 
-    const filteredHolders = await crossAnalyze(contractAddresses, minCombinedValue, 'crossWallet');
-
-    if (!Array.isArray(filteredHolders) || filteredHolders.length === 0) {
-      await bot.sendLongMessage(msg.chat.id, "No common holders found matching the criteria.");
+    const relevantHolders = await crossAnalyze(contractAddresses, minCombinedValue, 'crossWallet');
+  
+    if (!Array.isArray(relevantHolders) || relevantHolders.length === 0) {
+      await bot.sendLongMessage(msg.chat.id, "No relevant holders found matching the criteria.");
       return;
     }
 
@@ -354,7 +354,7 @@ const handleCrossCommand = async (bot, msg, args) => {
       }
     }));
 
-    await sendFormattedCrossAnalysisMessage(bot, msg.chat.id, filteredHolders, contractAddresses, tokenInfos);
+    await sendFormattedCrossAnalysisMessage(bot, msg.chat.id, relevantHolders, contractAddresses, tokenInfos);
 
   } catch (error) {
     logger.error('Error in handleCrossCommand:', error);

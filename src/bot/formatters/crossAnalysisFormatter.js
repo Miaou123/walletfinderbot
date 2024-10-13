@@ -39,6 +39,7 @@ const formatCrossAnalysisWallet = (wallet, contractAddresses, tokenInfos, rank) 
         const pnlEmoji = getEmojiForPnl(wallet.walletCheckerData?.total_value || 0);
 
         let result = `${rank}. <a href="https://solscan.io/account/${wallet.address}">${shortAddress}</a> ${pnlEmoji} <a href="https://gmgn.ai/sol/address/${wallet.address}">gmgn</a>/<a href="https://app.cielo.finance/profile/${wallet.address}/pnl/tokens">cielo</a>\n`;
+        result += `├ 🪙 Tokens held: ${wallet.tokensHeld.size}/${contractAddresses.length}\n`;
 
         if (wallet.walletCheckerData) {
             const { total_value, sol_balance, realized_profit_30d, unrealized_profit, winrate } = wallet.walletCheckerData;
@@ -53,8 +54,11 @@ const formatCrossAnalysisWallet = (wallet, contractAddresses, tokenInfos, rank) 
         result += contractAddresses.map(address => {
             const tokenInfo = tokenInfos.find(t => t.address === address);
             const value = wallet[`value_${address}`] || 0;
-            return `${tokenInfo.symbol}: $${formatNumber(value)}`;
-        }).join(', ');
+            if (value > 0) {
+                return `${tokenInfo.symbol}: $${formatNumber(value)}`;
+            }
+            return null;
+        }).filter(Boolean).join(', ');
         result += ')\n';
 
         return result;

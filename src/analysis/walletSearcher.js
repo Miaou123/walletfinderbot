@@ -1,7 +1,7 @@
 const { getAssetsForMultipleWallets } = require('../tools/walletValueCalculator');
 const { formatNumber } = require('../bot/formatters/generalFormatters');
 const { getHolders } = require('../tools/getHolders');
-const logger = require('../utils/logger'); // Assurez-vous d'avoir un fichier de logger configuré
+const logger = require('../utils/logger'); 
 
 /**
  * Recherche des portefeuilles en fonction de l'adresse du token et des critères de recherche.
@@ -12,12 +12,9 @@ const logger = require('../utils/logger'); // Assurez-vous d'avoir un fichier de
  */
 const searchWallets = async (coinAddress, searchCriteria, mainContext = 'default') => {
   try {
-    logger.info(`Starting wallet search for token: ${coinAddress} with criteria: ${searchCriteria.join(', ')}`, { context: mainContext });
     const holders = await getHolders(coinAddress, mainContext, 'getHolders');
-    logger.info(`Found ${holders.length} holders for token: ${coinAddress}`, { context: mainContext });
 
     const matchingWallets = holders.filter(holder => matchesCriteriaMultiple(holder.address, searchCriteria));
-    logger.info(`Matching wallets count: ${matchingWallets.length}`, { context: mainContext });
 
     const walletAddresses = matchingWallets.map(wallet => wallet.address);
     const assetsData = await getAssetsForMultipleWallets(walletAddresses, mainContext, 'getAssets');
@@ -27,7 +24,6 @@ const searchWallets = async (coinAddress, searchCriteria, mainContext = 'default
     );
 
     const validResults = formattedResults.filter(result => result !== null);
-    logger.info(`Formatting complete. Valid results count: ${validResults.length}`, { context: mainContext });
     return validResults;
 
   } catch (error) {

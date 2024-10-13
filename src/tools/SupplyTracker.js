@@ -36,9 +36,13 @@ async function retryWithBackoff(operation, maxRetries = 5, initialDelay = 1000) 
         }
     
         async init() {
-            await this.loadTrackers();
-            logger.info('SupplyTracker initialized and trackers loaded');
-        }
+            try {
+                await this.loadTrackers();
+            } catch (error) {
+                logger.error('Failed to initialize SupplyTracker:', error);
+                throw new Error('SupplyTracker initialization failed');
+            }
+        }    
     
         async saveTrackers() {
             const trackersData = {};
@@ -83,10 +87,10 @@ async function retryWithBackoff(operation, maxRetries = 5, initialDelay = 1000) 
                     }
                     this.userTrackers.set(username, userTrackers);
                 }
-                logger.info('Trackers loaded successfully');
+                logger.debug('Trackers loaded successfully');
             } catch (error) {
                 if (error.code === 'ENOENT') {
-                    logger.info('No saved trackers found. Starting with empty tracker list.');
+                    logger.debug('No saved trackers found. Starting with empty tracker list.');
                 } else {
                     logger.error('Error loading trackers:', error);
                 }
@@ -94,11 +98,6 @@ async function retryWithBackoff(operation, maxRetries = 5, initialDelay = 1000) 
         }
 
     startTracking(tokenAddress, chatId, wallets, initialSupplyPercentage, totalSupply, significantChangeThreshold, ticker, decimals, trackType, username) {
-        logger.info('SupplyTracker.startTracking called with params:', {
-            tokenAddress, chatId, wallets, initialSupplyPercentage, totalSupply,
-            significantChangeThreshold, ticker, decimals, trackType, username
-        });
-
         if (!this.userTrackers.has(username)) {
             this.userTrackers.set(username, new Map());
         }
@@ -147,15 +146,20 @@ async function retryWithBackoff(operation, maxRetries = 5, initialDelay = 1000) 
         };
 
         userTrackers.set(trackerId, tracker);
-        logger.info(`Started ${trackType} tracking for ${tokenAddress} by user ${username}. Initial supply: ${initialSupplyPercentage}%, Threshold: ${significantChangeThreshold}%, Wallets count: ${tracker.wallets.length}`);
     }
 
     stopTracking(username, trackerId) {
         const userTrackers = this.userTrackers.get(username);
-        if (!userTrackers) return false;
+        if (!userTrackers) {
+            logger.debug(`No trackers found for user ${username}`);
+            return false;
+        }
 
         const tracker = userTrackers.get(trackerId);
-        if (!tracker) return false;
+        if (!tracker) {
+            logger.debug(`No tracker found for ID ${trackerId} of user ${username}`);
+            return false;
+        }
 
         clearInterval(tracker.intervalId);
         userTrackers.delete(trackerId);
@@ -164,13 +168,15 @@ async function retryWithBackoff(operation, maxRetries = 5, initialDelay = 1000) 
             this.userTrackers.delete(username);
         }
 
-        logger.info(`Stopped tracking ${trackerId} for user ${username}.`);
         return true;
     }
 
     getTrackedSuppliesByUser(username) {
         const userTrackers = this.userTrackers.get(username);
-        if (!userTrackers) return [];
+        if (!userTrackers) {
+            logger.debug(`No trackers found for user ${username}`);
+            return [];
+        }
 
         return Array.from(userTrackers.entries()).map(([trackerId, tracker]) => ({
             trackerId,
@@ -185,13 +191,13 @@ async function retryWithBackoff(operation, maxRetries = 5, initialDelay = 1000) 
     async checkSupply(username, trackerId) {
         const userTrackers = this.userTrackers.get(username);
         if (!userTrackers) {
-            logger.warn(`No trackers found for user ${username}`);
+            logger.debug(`No trackers found for user ${username}`);
             return;
         }
 
         const tracker = userTrackers.get(trackerId);
         if (!tracker) {
-            logger.warn(`No tracker found for ID ${trackerId} of user ${username}`);
+            logger.debug(`No tracker found for ID ${trackerId} of user ${username}`);
             return;
         }
 
@@ -210,12 +216,9 @@ async function retryWithBackoff(operation, maxRetries = 5, initialDelay = 1000) 
 
                 const change = newSupplyPercentage.minus(tracker.initialSupplyPercentage);
 
-                logger.info(`Check for ${tracker.tokenAddress} (${tracker.trackType}): Current supply: ${newSupplyPercentage.toFixed(2)}%, Initial: ${tracker.initialSupplyPercentage.toFixed(2)}%, Change: ${change.toFixed(2)}%`);
-
                 if (change.abs().isGreaterThanOrEqualTo(tracker.significantChangeThreshold)) {
                     await this.notifyChange(tracker, newSupplyPercentage, change);
                     tracker.initialSupplyPercentage = newSupplyPercentage;
-                    logger.info(`Significant change detected for ${tracker.trackType}. New initial supply set to: ${newSupplyPercentage.toFixed(2)}%`);
                 }
 
                 tracker.currentSupplyPercentage = newSupplyPercentage;
@@ -297,9 +300,22 @@ async function retryWithBackoff(operation, maxRetries = 5, initialDelay = 1000) 
         const message = `⚠️ Significant change detected in ${tracker.trackType} supply for ${tracker.ticker}\n\n` +
                         `${tracker.trackType === 'team' ? 'Team' : 'Top holders'} now hold ${newPercentage.toFixed(2)}% (previously ${tracker.initialSupplyPercentage.toFixed(2)}%)\n\n` +
                         `${emoji} ${change.isGreaterThan(0) ? '+' : ''}${change.toFixed(2)}%`;
-        
-        await this.bot.sendMessage(tracker.chatId, message);
-        logger.info(`Notification sent for ${tracker.trackType} of ${tracker.ticker}: ${message}`);
+        try {
+            await this.bot.sendMessage(tracker.chatId, message);
+        } catch (error) {
+            logger.error(`Failed to send notification for ${tracker.ticker}:`, error);
+        }
+    }
+
+    async notifyError(tracker, error) {
+        const errorMessage = `⚠️ Error occurred while tracking ${tracker.trackType} supply for ${tracker.ticker}\n\n` +
+                             `Error: ${error.message}\n\n` +
+                             `Tracking will continue, but you may want to check the tracked supply again.`;
+        try {
+            await this.bot.sendMessage(tracker.chatId, errorMessage);
+        } catch (sendError) {
+            logger.error(`Failed to send error notification for ${tracker.ticker}:`, sendError);
+        }
     }
 }
 
