@@ -6,8 +6,10 @@ const { getHolders, getTopHolders } = require('../tools/getHolders');
 const { fetchMultipleWallets } = require('../tools/walletChecker');
 const config = require('../utils/config');
 const BigNumber = require('bignumber.js');
+const logger = require('../utils/logger');
 
 async function scanToken(tokenAddress, requestedHolders = 10, trackSupply = false, mainContext = 'default') {
+  logger.debug(`Starting scan for token ${tokenAddress}`, { requestedHolders, trackSupply, mainContext });
 
   const tokenInfo = await dexScreenerApi.getTokenInfo(tokenAddress, mainContext);
   const topHolders = await getTopHolders(tokenAddress, requestedHolders, mainContext, 'getTopHolders');
@@ -123,7 +125,7 @@ async function scanToken(tokenAddress, requestedHolders = 10, trackSupply = fals
       }
     };
   }  
-
+  logger.debug(`Scan result for ${tokenAddress}:`, result);
   return result;
 }
 

@@ -98,6 +98,8 @@ async function retryWithBackoff(operation, maxRetries = 5, initialDelay = 1000) 
         }
 
     startTracking(tokenAddress, chatId, wallets, initialSupplyPercentage, totalSupply, significantChangeThreshold, ticker, decimals, trackType, username) {
+
+        logger.debug(`Starting tracking for user ${username}:`, { tokenAddress, chatId, wallets, initialSupplyPercentage, totalSupply, significantChangeThreshold, ticker, decimals, trackType });
         if (!this.userTrackers.has(username)) {
             this.userTrackers.set(username, new Map());
         }
@@ -189,6 +191,7 @@ async function retryWithBackoff(operation, maxRetries = 5, initialDelay = 1000) 
     }
 
     async checkSupply(username, trackerId) {
+        logger.debug(`Checking supply for ${username}, trackerId: ${trackerId}`);
         const userTrackers = this.userTrackers.get(username);
         if (!userTrackers) {
             logger.debug(`No trackers found for user ${username}`);
@@ -196,6 +199,7 @@ async function retryWithBackoff(operation, maxRetries = 5, initialDelay = 1000) 
         }
 
         const tracker = userTrackers.get(trackerId);
+        logger.debug(`Current tracker info:`, tracker);
         if (!tracker) {
             logger.debug(`No tracker found for ID ${trackerId} of user ${username}`);
             return;
@@ -259,6 +263,7 @@ async function retryWithBackoff(operation, maxRetries = 5, initialDelay = 1000) 
 
 
     async getControlledSupply(controllingWallets, tokenAddress, totalSupply, decimals, mainContext, subContext) {
+        logger.debug(`Calculating controlled supply for ${tokenAddress}:`, { wallets: controllingWallets, totalSupply, decimals });
         if (!controllingWallets || controllingWallets.length === 0) {
             logger.warn(`No controlling wallets found for ${tokenAddress}. Returning 0.`);
             return new BigNumber(0);
@@ -283,6 +288,7 @@ async function retryWithBackoff(operation, maxRetries = 5, initialDelay = 1000) 
     }
     
     async getTeamSupply(teamWallets, tokenAddress, totalSupply, decimals, mainContext, subContext) {
+        logger.debug(`Calculating team supply for ${tokenAddress}:`, { wallets: teamWallets, totalSupply, decimals });
         if (!teamWallets || teamWallets.length === 0) {
             logger.warn(`No team wallets found for ${tokenAddress}. Returning 0.`);
             return new BigNumber(0);

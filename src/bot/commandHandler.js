@@ -155,7 +155,7 @@ const handleScanCommand = async (bot, msg, args) => {
       reply_markup: {
         inline_keyboard: [
           [
-            { text: "Track Supply", callback_data: `track_total_${tokenAddress}` },
+            { text: "Track Supply", callback_data: `track_${tokenAddress}` },
           ]
         ]
       }
@@ -163,6 +163,7 @@ const handleScanCommand = async (bot, msg, args) => {
 
     // Harmoniser lastAnalysisResults
     if (scanResult.trackingInfo) {
+      lastAnalysisResults[chatId] = null; 
       lastAnalysisResults[chatId] = {
         tokenAddress: scanResult.trackingInfo.tokenAddress,
         tokenInfo: {
@@ -179,6 +180,8 @@ const handleScanCommand = async (bot, msg, args) => {
         trackType: 'topHolders',
         username: msg.from.username,
       };
+      logger.debug(`Scan result received for ${tokenAddress}:`, scanResult);
+      logger.debug(`Setting lastAnalysisResults for chatId ${chatId}:`, lastAnalysisResults[chatId]);
     } else {
       logger.warn(`Incomplete tracking info for token ${tokenAddress}`);
     }
@@ -386,6 +389,7 @@ const handleTeamSupplyCommand = async (bot, msg, args) => {
 
     const initialSupplyPercentage = parseFloat(formattedResults.match(/Supply Controlled by team\/insiders: ([\d.]+)%/)[1]);
 
+    lastAnalysisResults[msg.chat.id] = null;
     lastAnalysisResults[msg.chat.id] = { 
       tokenAddress,
       tokenInfo: {
@@ -406,8 +410,8 @@ const handleTeamSupplyCommand = async (bot, msg, args) => {
       reply_markup: {
         inline_keyboard: [
           [
-            { text: "Track Team Wallets", callback_data: `track_team_${tokenAddress.substring(0, 20)}` },
-            { text: "Show Team Wallets Details", callback_data: `details_${tokenAddress.substring(0, 20)}` }
+            { text: "Track Team Wallets", callback_data: `track_${tokenAddress}_team` },
+            { text: "Show Team Wallets Details", callback_data: `details_${tokenAddress}` }
           ]
         ]
       },
@@ -607,30 +611,79 @@ const handleCallbackQuery = async (bot, callbackQuery) => {
   const username = callbackQuery.from.username;
 
   try {
-    let [actionType, tokenAddress, param] = action.split('_');
+    const [actionType, ...params] = action.split('_');
+    let tokenAddress, threshold, trackType;
+
+    logger.debug(`Callback query: actionType=${actionType}, params=${params}`);
+
+    switch (actionType) {
+      case 'track':
+        tokenAddress = params[0];
+        trackType = params[1] || 'topHolders';
+        break;
+      case 'st':
+      case 'sd':
+      case 'sc':
+        tokenAddress = params[0];
+        if (actionType === 'st') {
+          threshold = parseFloat(params[1]);
+        }
+        break;
+      case 'stop':
+        tokenAddress = params[0];
+        trackType = params[1];
+        break;
+    }
+
+    logger.debug(`Processed callback data: actionType=${actionType}, tokenAddress=${tokenAddress}, threshold=${threshold}, trackType=${trackType}`);
 
     const trackingId = `${chatId}_${tokenAddress}`;
     let trackingInfo = pendingTracking.get(trackingId) || lastAnalysisResults[chatId];
 
+    if (trackingInfo && trackingInfo.tokenAddress !== tokenAddress) {
+      logger.warn(`Mismatch in token addresses. Callback: ${tokenAddress}, Tracking: ${trackingInfo.tokenAddress}`);
+      trackingInfo = null; 
+    }
+
     switch (actionType) {
       case 'track':
+        if (!trackingInfo) {
+          await bot.answerCallbackQuery(callbackQuery.id, { 
+            text: "Tracking information is outdated. Please run the scan again.", 
+            show_alert: true 
+          });
+          return;
+        }
         return await handleTrackAction(bot, chatId, tokenAddress, trackingInfo);
+
       case 'details':
         if (!trackingInfo || !trackingInfo.allWalletsDetails || !trackingInfo.tokenInfo) {
           throw new Error("No wallet details or token information found. Please run the analysis again.");
         }
         return await sendWalletDetails(bot, chatId, trackingInfo.allWalletsDetails, trackingInfo.tokenInfo);
+
       case 'sd':
         await handleSetDefaultThreshold(bot, chatId, trackingInfo, trackingId);
         break;
+
       case 'sc':
         await handleSetCustomThreshold(bot, chatId, trackingInfo, trackingId);
         break;
+
       case 'st':
-        await handleStartTracking(bot, chatId, trackingInfo, parseFloat(param) || 1);
+        if (!trackingInfo) {
+          await bot.answerCallbackQuery(callbackQuery.id, { 
+            text: "Tracking information is outdated. Please run the scan again.", 
+            show_alert: true 
+          });
+          return;
+        }
+        await handleStartTracking(bot, chatId, trackingInfo, threshold);
         break;
+
       case 'stop':
-        const trackerId = `${tokenAddress}_${param}`;
+        const trackerId = `${tokenAddress}_${trackType}`;
+        logger.debug(`Attempting to stop tracking for trackerId: ${trackerId}`);
         const success = supplyTrackerInstance.stopTracking(username, trackerId);
         if (success) {
           await bot.answerCallbackQuery(callbackQuery.id, { text: "Tracking stopped successfully." });
@@ -642,6 +695,7 @@ const handleCallbackQuery = async (bot, callbackQuery) => {
           await bot.answerCallbackQuery(callbackQuery.id, { text: "Failed to stop tracking. Tracker not found." });
         }
         break;
+
       default:
         throw new Error(`Unknown action type: ${actionType}`);
     }
@@ -659,19 +713,19 @@ const handleCallbackQuery = async (bot, callbackQuery) => {
   }
 };
 
-const handleTrackAction = async (bot, chatId, tokenAddress, trackingInfo) => {
-  logger.info(`Starting track action for token: ${tokenAddress}, chatId: ${chatId}`);
-
+const handleTrackAction = async (bot, chatId, tokenAddress, trackingInfo, trackType) => {
+  logger.debug(`Starting handleTrackAction for token: ${tokenAddress}, chatId: ${chatId}, trackType: ${trackType}`);
+  logger.debug(`Current trackingInfo:`, trackingInfo);
   try {
-    if (!trackingInfo || !trackingInfo.tokenInfo) {
-      throw new Error('Invalid tracking info');
+    if (!trackingInfo || !trackingInfo.tokenInfo || trackingInfo.tokenAddress !== tokenAddress) {
+      logger.error(`Mismatch in token addresses. Received: ${tokenAddress}, Expected: ${trackingInfo ? trackingInfo.tokenAddress : 'undefined'}`);
+      throw new Error('Invalid or outdated tracking info');
     }
 
     const totalSupply = trackingInfo.tokenInfo.totalSupply;
     const decimals = trackingInfo.tokenInfo.decimals || 6;
     const ticker = trackingInfo.tokenInfo.symbol || 'Unknown';
     const initialSupplyPercentage = trackingInfo.totalSupplyControlled || trackingInfo.initialSupplyPercentage || 0;
-    const trackType = trackingInfo.analysisType === 'tokenScanner' ? 'topHolders' : 'team';
     const username = trackingInfo.username;
     const supplyType = trackType === 'team' ? 'team supply' : 'total supply';
 
@@ -697,6 +751,7 @@ const handleTrackAction = async (bot, chatId, tokenAddress, trackingInfo) => {
     // Use bot.sendMessage to get the sentMessage object with message_id
     const sentMessage = await bot.sendMessage(chatId, message, { reply_markup: keyboard, parse_mode: 'HTML' });
     trackingInfo.messageId = sentMessage.message_id;
+    trackingInfo.trackType = trackType;  // Add this line to ensure trackType is saved
 
     // Update lastAnalysisResults and pendingTracking
     lastAnalysisResults[chatId] = trackingInfo;
@@ -771,6 +826,8 @@ const handleStartTracking = async (bot, chatId, trackingInfo, threshold) => {
   const { tokenAddress, teamWallets, topHoldersWallets, initialSupplyPercentage, tokenInfo, username, analysisType } = trackingInfo;
   const trackType = trackingInfo.trackType || (trackingInfo.analysisType === 'tokenScanner' ? 'topHolders' : 'team');
   const totalSupply = tokenInfo.totalSupply;
+
+  logger.debug(`Starting tracking for ${tokenAddress}`, { trackType, initialSupplyPercentage, totalSupply, threshold, username });
 
   logger.debug('Extracted info for Handle tracking:', { trackType, tokenAddress, teamWallets, topHoldersWallets, initialSupplyPercentage, totalSupply, tokenInfo, username });
 
