@@ -4,6 +4,8 @@ node_modules/
 mess/
 journal.txt
 OpAdressList.txt
+beta_handle.txt
+gmgn_endpoints.txt
 gmgn_endpoints/
 tests/
 src/logs/
