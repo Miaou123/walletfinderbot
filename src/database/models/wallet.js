@@ -11,6 +11,8 @@ const walletSchema = Joi.object({
     token_sold_avg_profit: Joi.number().required(),
     pnl_2x_5x_num: Joi.number().integer().min(0).required(),
     pnl_gt_5x_num: Joi.number().integer().min(0).required(),
+    twitter_bind: Joi.string().allow(null, '').optional(),
+    refresh_date: Joi.date().required(),
     lastUpdated: Joi.date().required()
 });
 

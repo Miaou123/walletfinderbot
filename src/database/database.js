@@ -51,13 +51,23 @@ async function getDatabase() {
     return db;
 }
 
+
 async function saveInterestingWallet(address, walletData) {
     const database = await getDatabase();
     const collection = database.collection("wallets");
+    const existingWallet = await collection.findOne({ address });
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
     
+    if (existingWallet && existingWallet.refresh_date > sevenDaysAgo) {
+        logger.debug(`Wallet ${address} was refreshed recently. Skipping update.`);
+        return null;
+    }
+
     const walletToSave = {
         address,
         ...walletData,
+        twitter_bind: walletData.twitter_bind || null,
+        refresh_date: new Date(),
         lastUpdated: new Date()
     };
 

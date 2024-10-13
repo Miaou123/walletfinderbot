@@ -44,8 +44,12 @@ async function processWallets(wallets) {
 
         if (isWalletInteresting(wallet.data)) {
             try {
-                await saveInterestingWallet(wallet.wallet, wallet.data.data);
-                console.log(`Wallet ${wallet.wallet} is interesting and saved to database`);
+                const result = await saveInterestingWallet(wallet.wallet, wallet.data.data);
+                if (result) {
+                    console.log(`Wallet ${wallet.wallet} is interesting and saved/updated in database`);
+                } else {
+                    console.log(`Wallet ${wallet.wallet} is interesting but was recently updated. Skipped.`);
+                }
             } catch (error) {
                 console.error(`Error saving wallet ${wallet.wallet} to database:`, error);
             }
