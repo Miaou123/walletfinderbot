@@ -1,6 +1,27 @@
 const { formatNumber, getEmojiForPnl } = require('./generalFormatters');
 const logger = require('../../utils/logger');
 
+const calculateHolderStats = (filteredHolders, tokenInfos) => {
+    const stats = {
+        total: filteredHolders.length,
+        combinations: {}
+    };
+
+    tokenInfos.forEach((token, i) => {
+        tokenInfos.slice(i + 1).forEach((otherToken, j) => {
+            const key = `${token.symbol}/${otherToken.symbol}`;
+            stats.combinations[key] = filteredHolders.filter(h => 
+                h.tokensHeld.has(i) && h.tokensHeld.has(i + j + 1)
+            ).length;
+        });
+    });
+
+    const allTokensKey = tokenInfos.map(t => t.symbol).join('/');
+    stats.combinations[allTokensKey] = filteredHolders.filter(h => h.tokensHeld.size === tokenInfos.length).length;
+
+    return stats;
+};
+
 const sendFormattedCrossAnalysisMessage = async (bot, chatId, filteredHolders, contractAddresses, tokenInfos) => {
     try {
         if (!Array.isArray(filteredHolders) || filteredHolders.length === 0) {
@@ -9,9 +30,19 @@ const sendFormattedCrossAnalysisMessage = async (bot, chatId, filteredHolders, c
             return;
         }
 
+        const holderStats = calculateHolderStats(filteredHolders, tokenInfos);
+
         let message = `<b>Cross-Analysis Results</b>\n\n`;
-        message += `Analyzed tokens:\n${tokenInfos.map(t => `${t.symbol} (${t.address})`).join('\n')}\n\n`;
-        message += `Total common holders: ${filteredHolders.length}\n\n`;
+        message += `Total common holders: ${holderStats.total}\n\n`;
+
+        // Add combination statistics
+        Object.entries(holderStats.combinations)
+            .sort((a, b) => b[1] - a[1])
+            .forEach(([combination, count]) => {
+                message += `${combination}: ${count}\n`;
+            });
+
+        message += `\n`;
 
         const walletMessages = filteredHolders.map((wallet, index) => 
             formatCrossAnalysisWallet(wallet, contractAddresses, tokenInfos, index + 1)
