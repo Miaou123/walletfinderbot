@@ -21,7 +21,6 @@ const filterSignificantHolders = (allHolders, totalSupply) => {
         const percentage = balance.dividedBy(totalSupply);
         return percentage.isGreaterThanOrEqualTo(SUPPLY_THRESHOLD);
     });
-    console.log(`Total holders: ${allHolders.length}, Significant holders: ${significantHolders.length}`);
     return significantHolders;
 };
 
@@ -43,7 +42,6 @@ const analyzeTeamSupply = async (tokenAddress, mainContext = 'default') => {
         const allHolders = await getHolders(tokenAddress, mainContext, 'getHolders');
         const significantHolders = filterSignificantHolders(allHolders, totalSupply, tokenInfo);
         const analyzedWallets = await analyzeWallets(significantHolders, tokenAddress, mainContext);
-        console.log(`Analyzed wallets: ${analyzedWallets.length}`);
 
         const { message, allWalletsDetails } = formatResults(analyzedWallets, tokenInfo);
         const allTeamWallets = analyzedWallets
@@ -64,7 +62,6 @@ const analyzeTeamSupply = async (tokenAddress, mainContext = 'default') => {
 };
 
 const analyzeWallets = async (wallets, tokenAddress, mainContext) => {
-    console.log(`Analyzing ${wallets.length} wallets...`);
     const analyzeWallet = async (wallet) => {
         let category = 'Unknown';
         let daysSinceLastActivity = null;
@@ -84,8 +81,6 @@ const analyzeWallets = async (wallets, tokenAddress, mainContext) => {
                 category = 'Teambot';
             }
         }
-
-        console.log(`Wallet ${wallet.address.slice(0, 6)}... category: ${category}`);
         return { ...wallet, category, daysSinceLastActivity };
     };
 

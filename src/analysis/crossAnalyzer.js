@@ -14,44 +14,7 @@ async function fetchHoldersAndPrices(contractAddresses, mainContext) {
     ]);
 }
 
-function filterCommonHolders(holdersLists) {
-    let commonHolders = holdersLists[0]
-        .filter(holder => holder.balance >= MIN_TOKEN_THRESHOLD && !isExcludedAddress(holder.address));
-
-    for (let i = 1; i < holdersLists.length; i++) {
-        const currentHoldersSet = new Set(
-            holdersLists[i]
-                .filter(h => h.balance >= MIN_TOKEN_THRESHOLD && !isExcludedAddress(h.address))
-                .map(h => h.address)
-        );
-        commonHolders = commonHolders.filter(holder => currentHoldersSet.has(holder.address));
-    }
-
-    return commonHolders;
-}
-
-function calculateHolderValues(commonHolders, holdersLists, contractAddresses, tokenPrices) {
-    return commonHolders.map(holder => {
-        let combinedValue = 0;
-        for (let i = 0; i < contractAddresses.length; i++) {
-            const address = contractAddresses[i];
-            const price = tokenPrices[i]?.data?.usd_price || 0;
-            const holderData = holdersLists[i].find(h => h.address === holder.address);
-            const balance = holderData ? holderData.balance : 0;
-            const value = balance * price;
-
-            holder[`balance_${address}`] = balance;
-            holder[`value_${address}`] = value;
-            combinedValue += value;
-        }
-        holder.combinedValue = combinedValue;
-        return holder;
-    });
-}
-
 async function crossAnalyze(contractAddresses, minCombinedValue = 1000, mainContext = 'default') {
-    console.log(`Starting cross-analysis for ${contractAddresses.length} contracts with min combined value of $${minCombinedValue} context: ${mainContext}`);
-
     try {
         const uniqueContractAddresses = [...new Set(contractAddresses)];
         if (uniqueContractAddresses.length !== contractAddresses.length) {
@@ -61,35 +24,60 @@ async function crossAnalyze(contractAddresses, minCombinedValue = 1000, mainCont
 
         const [holdersLists, tokenPrices] = await fetchHoldersAndPrices(contractAddresses, mainContext);
 
-        console.log('Token prices retrieved:', tokenPrices);
-        console.log('All holders lists retrieved. Starting comparison...');
+        // Create a map of all holders
+        const allHoldersMap = new Map();
 
-        holdersLists.forEach((holders, index) => {
-            console.log(`Holders list for contract ${contractAddresses[index]} has ${holders.length} holders.`);
+        holdersLists.forEach((holdersList, index) => {
+            holdersList.forEach(holder => {
+                if (holder.balance >= MIN_TOKEN_THRESHOLD && !isExcludedAddress(holder.address)) {
+                    if (!allHoldersMap.has(holder.address)) {
+                        allHoldersMap.set(holder.address, {
+                            address: holder.address,
+                            tokensHeld: new Set(),
+                            combinedValue: 0
+                        });
+                    }
+                    allHoldersMap.get(holder.address).tokensHeld.add(index);
+                }
+            });
         });
 
-        let commonHolders = filterCommonHolders(holdersLists);
+        // Calculate values and filter holders
+        const relevantHolders = Array.from(allHoldersMap.values())
+            .filter(holder => holder.tokensHeld.size >= 2)
+            .map(holder => {
+                let combinedValue = 0;
+                contractAddresses.forEach((address, index) => {
+                    const price = tokenPrices[index]?.data?.usd_price || 0;
+                    const holderData = holdersLists[index].find(h => h.address === holder.address);
+                    const balance = holderData ? holderData.balance : 0;
+                    const value = balance * price;
 
-        console.log(`${commonHolders.length} holders have all ${contractAddresses.length} coins above the threshold (excluding undesired addresses)`);
-
-        commonHolders = calculateHolderValues(commonHolders, holdersLists, contractAddresses, tokenPrices);
-
-        commonHolders = commonHolders
+                    holder[`balance_${address}`] = balance;
+                    holder[`value_${address}`] = value;
+                    combinedValue += value;
+                });
+                holder.combinedValue = combinedValue;
+                return holder;
+            })
             .filter(holder => holder.combinedValue >= minCombinedValue)
-            .sort((a, b) => b.combinedValue - a.combinedValue);
+            .sort((a, b) => {
+                if (b.tokensHeld.size !== a.tokensHeld.size) {
+                    return b.tokensHeld.size - a.tokensHeld.size;
+                }
+                return b.combinedValue - a.combinedValue;
+            });
 
-        console.log(`${commonHolders.length} holders have a combined value of $${minCombinedValue} or more`);
+        if (relevantHolders.length > 0) {
+            const walletCheckerData = await fetchMultipleWallets(relevantHolders.map(h => h.address), 5, mainContext, 'walletChecker');
 
-        if (commonHolders.length > 0) {
-            const walletCheckerData = await fetchMultipleWallets(commonHolders.map(h => h.address), 5, mainContext, 'walletChecker');
-
-            return commonHolders.map(holder => ({
+            return relevantHolders.map(holder => ({
                 ...holder,
                 walletCheckerData: walletCheckerData.find(w => w.wallet === holder.address)?.data?.data || null
             }));
         }
 
-        return commonHolders;
+        return relevantHolders;
     } catch (error) {
         console.error('Error in crossAnalyze:', error);
         throw error;

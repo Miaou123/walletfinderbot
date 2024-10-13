@@ -14,14 +14,12 @@ class DefinedApi {
     
         const requestFunction = async () => {
             try {
-                console.log(`Sending request to Defined API (${methodName}):`, JSON.stringify({ query, variables }, null, 2));
                 const response = await axios.post(this.baseUrl, { query, variables }, {
                     headers: {
                         'Content-Type': 'application/json',
                         'Authorization': this.apiKey,
                     },
                 });
-                console.log('Response received:', JSON.stringify(response.data, null, 2));
                 if (response.data.errors) {
                     throw new Error(JSON.stringify(response.data.errors));
                 }

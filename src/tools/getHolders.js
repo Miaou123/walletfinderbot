@@ -45,7 +45,6 @@ async function getTopHolders(coinAddress, count = 20, mainContext, subContext) {
   try {
     let topHolders;
 
-    logger.info(`Getting top ${count} holders for coin: ${coinAddress}`);
     if (count <= 20) {
       const result = await solanaApi.getTokenLargestAccounts(coinAddress, mainContext, subContext);
 
@@ -77,7 +76,6 @@ async function getTopHolders(coinAddress, count = 20, mainContext, subContext) {
       topHolders = topHolders.slice(0, count);
 
     } else {
-      logger.info(`Fetching all holders for token: ${coinAddress}`);
       const allHolders = await getHolders(coinAddress, mainContext, subContext);
       topHolders = allHolders
         .sort((a, b) => b.balance - a.balance)

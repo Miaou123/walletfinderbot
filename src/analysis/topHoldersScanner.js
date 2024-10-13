@@ -8,25 +8,11 @@ const config = require('../utils/config');
 const BigNumber = require('bignumber.js');
 
 async function scanToken(tokenAddress, requestedHolders = 10, trackSupply = false, mainContext = 'default') {
-  console.log(`Scanning token: ${tokenAddress}, requested holders: ${requestedHolders}, context: ${mainContext}`);
 
-  // 1. Récupérer les informations du token
   const tokenInfo = await dexScreenerApi.getTokenInfo(tokenAddress, mainContext);
-
-  // Afficher les informations du token de manière structurée
-  console.log('Token Information:');
-  console.log(JSON.stringify(tokenInfo, null, 2));
-
-  // 2. Récupérer les détenteurs demandés
-  console.log(`Fetching top ${requestedHolders} holders`);
   const topHolders = await getTopHolders(tokenAddress, requestedHolders, mainContext, 'getTopHolders');
-  console.log(`Received ${topHolders.length} top holders`);
-
-  // 3. Analyser les portefeuilles
   const walletAddresses = topHolders.map(holder => holder.address);
   const assetsData = await getAssetsForMultipleWallets(walletAddresses, mainContext, 'getAssets');
-
-  // 4. Analyser chaque portefeuille
   const analyzedWallets = await Promise.all(topHolders.map(async (holder, index) => {
     try {
       const walletData = assetsData[holder.address] || {};
@@ -36,9 +22,7 @@ async function scanToken(tokenAddress, requestedHolders = 10, trackSupply = fals
       const tokenBalance = tokenBalanceRaw.dividedBy(new BigNumber(10).pow(decimals));
       const supplyPercentage = totalSupply.isGreaterThan(0) ? 
         tokenBalance.dividedBy(totalSupply).multipliedBy(100).toFixed(2) : '0';
-    
 
-      // Trouver le token analysé dans les données du portefeuille
       const analyzedTokenInfo = walletData.tokenInfos && walletData.tokenInfos.find(t => t.mint === tokenAddress) || {};
       const tokenValue = new BigNumber(analyzedTokenInfo.value || 0);
 
@@ -101,12 +85,10 @@ async function scanToken(tokenAddress, requestedHolders = 10, trackSupply = fals
     const hasValidValue = new BigNumber(wallet.portfolioValue).isGreaterThan(0);
     return isNotPoolOrBot && hasValidValue;
   });
-  console.log(`Filtered wallets: ${filteredWallets.length}`);
 
   // 6. Process all wallets with walletChecker
   if (filteredWallets.length > 0) {
     try {
-      console.log(`Processing ${filteredWallets.length} wallets with walletChecker`);
       await fetchMultipleWallets(filteredWallets.map(w => w.address), 5, mainContext, 'scanToken');
     } catch (error) {
       console.error(`Error processing wallets with walletChecker: ${error.message}`);

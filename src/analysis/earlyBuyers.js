@@ -73,21 +73,14 @@ const processEvents = (events, endTimestamp, earlyBuyers, tokenInfo) => {
 };
 
 const analyzeEarlyBuyers = async (tokenAddress, minPercentage = 1, timeFrameHours = 1, mainContext = 'default') => {
-    console.log(`Starting analysis for ${tokenAddress}`);
 
     try {
         const tokenInfo = await dexScreenerApi.getTokenInfo(tokenAddress, mainContext);
-        console.log(`Token info retrieved for ${tokenAddress}:`, JSON.stringify(tokenInfo, null, 2));
 
         const creationTimestamp = Math.floor(tokenInfo.pairCreatedAt / 1000);
         const endTimestamp = creationTimestamp + (timeFrameHours * 3600);
-
-        console.log(`Pair creation: ${new Date(creationTimestamp * 1000).toISOString()}`);
-        console.log(`End time: ${new Date(endTimestamp * 1000).toISOString()}`);
-
         const totalSupply = Math.floor(parseFloat(tokenInfo.totalSupply) * Math.pow(10, tokenInfo.decimals));
         const minAmountRaw = (totalSupply * minPercentage) / 100;
-        console.log(`Minimum amount (raw): ${minAmountRaw}`);
 
         let cursor = null;
         let hasMoreEvents = true;
@@ -97,7 +90,6 @@ const analyzeEarlyBuyers = async (tokenAddress, minPercentage = 1, timeFrameHour
 
         while (hasMoreEvents) {
             try {
-                console.log(`Fetching events with cursor: ${cursor}`);
                 const eventsResponse = await definedApi.getTokenEvents(
                     tokenAddress,
                     creationTimestamp,
@@ -109,7 +101,6 @@ const analyzeEarlyBuyers = async (tokenAddress, minPercentage = 1, timeFrameHour
                 );
                 
                 const events = eventsResponse.data.getTokenEvents;
-                console.log(`Received ${events.items.length} events`);
 
                 if (!events || !events.items || events.items.length === 0) {
                     console.log("No more events to process");
@@ -119,7 +110,6 @@ const analyzeEarlyBuyers = async (tokenAddress, minPercentage = 1, timeFrameHour
                 hasMoreEvents = processEvents(events, endTimestamp, earlyBuyers, tokenInfo);
                 cursor = events.cursor;
                 hasMoreEvents = hasMoreEvents && cursor !== null && events.items.length === limit;
-                console.log(`Next cursor: ${cursor}, Has more events: ${hasMoreEvents}`);
             } catch (error) {
                 console.error('Error fetching token events:', error);
                 break;
@@ -130,10 +120,7 @@ const analyzeEarlyBuyers = async (tokenAddress, minPercentage = 1, timeFrameHour
             Array.from(earlyBuyers.entries()).filter(([_, data]) => data.amount >= minAmountRaw)
         );
 
-        console.log(`Detected ${qualifiedEarlyBuyers.size} potential early buyers`);
-
         const walletAddresses = Array.from(qualifiedEarlyBuyers.keys());
-        console.log(`Fetching wallet data for ${walletAddresses.length} addresses`);
         const walletAnalysis = await fetchMultipleWallets(walletAddresses, 5, mainContext, 'fetchEarlyBuyers');
 
         const filteredEarlyBuyers = new Map();
@@ -150,8 +137,6 @@ const analyzeEarlyBuyers = async (tokenAddress, minPercentage = 1, timeFrameHour
                 console.log(`Excluded bot wallet: ${buyer}`);
             }
         }
-
-        console.log(`Analysis complete. Returning results for ${filteredEarlyBuyers.size} early buyers`);
 
         return { 
             earlyBuyers: Array.from(filteredEarlyBuyers.values()),

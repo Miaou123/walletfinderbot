@@ -1,12 +1,6 @@
 const gmgnApi = require('../integrations/gmgnApi');
 const { fetchMultipleWallets } = require('../tools/walletChecker');
-const winston = require('winston');
-
-const logger = winston.createLogger({
-  level: 'info',
-  format: winston.format.simple(),
-  transports: [new winston.transports.Console()]
-});
+const logger = require('../utils/logger'); 
 
 const SORT_OPTIONS = {
   PNL: 'pnl',

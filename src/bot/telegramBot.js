@@ -174,7 +174,8 @@ Available commands:
 /tracker - Show tracked supplies
 /cancel - Cancel the current active command
 
-You can use /[command] for a full detail on how the command work.
+You can use "/help [command]", "[command] help" or /[command] for a full detail on how the command work.
+For example "/help /eb", "/eb help" or "/eb" with no other arguments will give you a full explanation on how the early buyers command works.
 
 For more information on how to use each command and how they work, please consult our <a href="https://smp-team.gitbook.io/noesis-bot">documentation</a>.
 
