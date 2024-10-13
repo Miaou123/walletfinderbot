@@ -55,6 +55,8 @@ async function getDatabase() {
 async function saveInterestingWallet(address, walletData) {
     const database = await getDatabase();
     const collection = database.collection("wallets");
+    
+    // Vérifier si le wallet existe déjà et si sa refresh_date est plus récente que 7 jours
     const existingWallet = await collection.findOne({ address });
     const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
     
@@ -63,9 +65,18 @@ async function saveInterestingWallet(address, walletData) {
         return null;
     }
 
+    // Créer un objet avec seulement les champs définis dans le schéma
     const walletToSave = {
         address,
-        ...walletData,
+        balance: walletData.balance,
+        total_value: walletData.total_value,
+        realized_profit_30d: walletData.realized_profit_30d,
+        winrate: walletData.winrate,
+        buy_30d: walletData.buy_30d,
+        token_avg_cost: walletData.token_avg_cost,
+        token_sold_avg_profit: walletData.token_sold_avg_profit,
+        pnl_2x_5x_num: walletData.pnl_2x_5x_num,
+        pnl_gt_5x_num: walletData.pnl_gt_5x_num,
         twitter_bind: walletData.twitter_bind || null,
         refresh_date: new Date(),
         lastUpdated: new Date()

@@ -7,15 +7,15 @@ class GmgnRateLimiter {
       reservoirRefreshAmount: maxRequestsPerSecond,
       reservoirRefreshInterval: 1000,
       maxConcurrent: 5,
-      minTime: 0,
+      minTime: 10,
     });
 
     this.retryOptions = {
       retries: 5,
       initialDelay: 1000,
       backoffFactor: 2,
-      maxDelay: 30000, // Maximum delay of 30 seconds
-      timeout: 300000, // 5 minutes timeout
+      maxDelay: 30000, 
+      timeout: 300000, 
     };
   }
 
@@ -51,4 +51,4 @@ class GmgnRateLimiter {
   }
 }
 
-module.exports = new GmgnRateLimiter(30);
+module.exports = new GmgnRateLimiter(20);
