@@ -4,9 +4,9 @@ const { getEmojiForPnl, truncateAddress } = require('./generalFormatters');
 
 const MINIMUM_PORT_SIZE = 1000;
 
-const formatEarlyBuyersMessage = (earlyBuyers, tokenInfo, hours, coinAddress) => {
+const formatEarlyBuyersMessage = async (earlyBuyers, tokenInfo, hours, coinAddress) => {
   logger.info(`Formatting early buyers message for ${tokenInfo.symbol}`);
-  
+
   try {
     if (!Array.isArray(earlyBuyers)) {
       throw new Error('Invalid earlyBuyers data: expected an array');
@@ -49,25 +49,35 @@ const formatEarlyBuyersMessage = (earlyBuyers, tokenInfo, hours, coinAddress) =>
 const formatSingleWallet = (buyer, index, tokenInfo, coinAddress) => {
   try {
     const rank = index + 1;
-    const truncatedWallet = buyer.walletAddress ? truncateAddress(buyer.walletAddress) : 'Unknown Address';
-    const amountFormatted = formatNumber(Number(buyer.amount) / Math.pow(10, tokenInfo.decimals));
-    
+    const truncatedWallet = buyer.wallet ? truncateAddress(buyer.wallet) : 'Unknown Address';
+
+    // Ajouter l'emoji 💊 si dex est 'pumpfun'
+    const dexEmoji = buyer.dex === 'pumpfun' ? '💊' : '';
+
     let pnlEmoji = '❓';
     if (buyer.walletInfo && buyer.walletInfo.total_value) {
       pnlEmoji = getEmojiForPnl(buyer.walletInfo.total_value);
     }
 
-    let result = `${rank}. <a href="https://solscan.io/account/${buyer.walletAddress}">${truncatedWallet}</a> ${pnlEmoji} `;
-    result += `<a href="https://gmgn.ai/sol/address/${buyer.walletAddress}">gmgn</a>/`;
-    result += `<a href="https://app.cielo.finance/profile/${buyer.walletAddress}/pnl/tokens">cielo</a>\n`;
-    
-    result += `├ 🪙 Total Amount: ${amountFormatted} ${tokenInfo.symbol}\n`;
+    let result = `${rank}. ${dexEmoji} <a href="https://solscan.io/account/${buyer.wallet}">${truncatedWallet}</a> ${pnlEmoji} `;
+    result += `<a href="https://gmgn.ai/sol/address/${buyer.wallet}">gmgn</a>/`;
+    result += `<a href="https://app.cielo.finance/profile/${buyer.wallet}/pnl/tokens">cielo</a>\n`;
+
+    // Afficher les montants totaux achetés et vendus en tokens et en USD
+    const totalBoughtAmount = formatNumber(buyer.bought_amount_token, 2);
+    const totalSoldAmount = formatNumber(buyer.sold_amount_token, 2);
+
+    const totalBoughtUsd = formatNumber(buyer.bought_amount_usd, 2);
+    const totalSoldUsd = formatNumber(buyer.sold_amount_usd, 2);
+
+    result += `├ 🪙 Total Amount bought: ${totalBoughtAmount} ${tokenInfo.symbol} ($${totalBoughtUsd})\n`;
+    result += `├ 🧻 Total Amount sold: ${totalSoldAmount} ${tokenInfo.symbol} ($${totalSoldUsd})\n`;
 
     if (buyer.walletInfo) {
       const walletData = buyer.walletInfo;
-      
+
       if (walletData.total_value) {
-        const solBalance = walletData.sol_balance ? ` ( Sol: ${formatNumber(walletData.sol_balance, 2)} )` : '';
+        const solBalance = walletData.sol_balance ? ` (Sol: ${formatNumber(walletData.sol_balance, 2)})` : '';
         result += `├ 💼 Port: $${formatNumber(walletData.total_value, 0)}${solBalance}\n`;
       }
 
@@ -86,7 +96,7 @@ const formatSingleWallet = (buyer, index, tokenInfo, coinAddress) => {
     return result + '\n\n';
   } catch (error) {
     logger.error(`Error formatting single wallet: ${error.message}`);
-    return `Error formatting wallet ${buyer.walletAddress || 'Unknown'}\n\n`;
+    return `Error formatting wallet ${buyer.wallet || 'Unknown'}\n\n`;
   }
 };
 

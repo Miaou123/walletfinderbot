@@ -1,11 +1,11 @@
 const Bottleneck = require('bottleneck');
 
-class GmgnRateLimiter {
+class PumpfunRateLimiter {
   constructor(maxRequestsPerSecond) {
     this.limiter = new Bottleneck({
       reservoir: maxRequestsPerSecond,
       reservoirRefreshAmount: maxRequestsPerSecond,
-      reservoirRefreshInterval: 1000, maxConcurrent: 5,
+      reservoirRefreshInterval: 1000,
       maxConcurrent: 3,
       minTime: 10,
     });
@@ -14,8 +14,8 @@ class GmgnRateLimiter {
       retries: 5,
       initialDelay: 1000,
       backoffFactor: 2,
-      maxDelay: 30000, 
-      timeout: 300000, 
+      maxDelay: 30000, // Maximum delay of 30 seconds
+      timeout: 300000, // 5 minutes timeout
     };
   }
 
@@ -51,4 +51,4 @@ class GmgnRateLimiter {
   }
 }
 
-module.exports = new GmgnRateLimiter(20);
+module.exports = new PumpfunRateLimiter(20);

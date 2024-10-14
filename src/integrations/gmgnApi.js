@@ -74,10 +74,13 @@ class GmgnApi {
         return this.fetchData(url, 'getTopTraders', mainContext, subContext);
     }
 
-    async getAllTransactions(contractAddress, mainContext = 'default', subContext = null, cursor = null, limit = 1000) {
+    async getAllTransactions(contractAddress, mainContext = 'default', subContext = null, cursor = null, limit = 100, revert = false) {
         let url = `${this.baseUrl}/trades/sol/${contractAddress}?limit=${limit}`;
         if (cursor) {
             url += `&cursor=${cursor}`;
+        }
+        if (revert) {
+            url += '&revert=true';
         }
         return this.fetchData(url, 'getAllTransactions', mainContext, subContext);
     }

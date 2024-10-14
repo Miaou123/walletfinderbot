@@ -8,8 +8,6 @@ class DexScreenerApi {
         this.solanaApi = getSolanaApi();
     }
 
-    //test123
-
     async getTokenInfo(tokenAddress, mainContext = 'default', subContext = null) {
         ApiCallCounter.incrementCall('DexScreener', 'getTokenInfo', mainContext, subContext);
 
