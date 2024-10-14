@@ -279,7 +279,7 @@ const handleEarlyBuyersCommand = async (bot, msg, args) => {
       throw new Error("Invalid result from analyzeEarlyBuyers");
     }
 
-    let formattedMessage = formatEarlyBuyersMessage(result.earlyBuyers, tokenInfo, hours, coinAddress);
+    let formattedMessage = await formatEarlyBuyersMessage(result.earlyBuyers, tokenInfo, hours, coinAddress);
     if (!formattedMessage || formattedMessage.length === 0) {
       formattedMessage = "No early buyers found or error in formatting the message.";
     }

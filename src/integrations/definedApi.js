@@ -41,22 +41,68 @@ class DefinedApi {
     async getTokenEvents(address, fromTimestamp, toTimestamp, cursor = null, limit = 100, mainContext = 'default', subContext = null) {
         const maxAllowedLimit = 100;
         limit = Math.min(limit, maxAllowedLimit);
-
+    
         const query = `
             query GetTokenEvents($cursor: String, $direction: RankingDirection, $limit: Int, $query: EventsQueryInput!) {
                 getTokenEvents(cursor: $cursor, direction: $direction, limit: $limit, query: $query) {
                     cursor
                     items {
+                        address
+                        baseTokenPrice
+                        blockNumber
+                        eventDisplayType
+                        eventType
+                        id
+                        liquidityToken
+                        logIndex
                         maker
-                        transactionHash
                         timestamp
-                        token0PoolValueUsd
                         token0SwapValueUsd
                         token0ValueBase
-                        token1PoolValueUsd
                         token1SwapValueUsd
                         token1ValueBase
-                        eventDisplayType
+                        transactionHash
+                        labels {
+                            sandwich {
+                                label
+                                sandwichType
+                                token0DrainedAmount
+                                token1DrainedAmount
+                            }
+                        }
+                        transactionIndex
+                        quoteToken
+                        data {
+                            __typename
+                            ... on SwapEventData {
+                                amount0In
+                                amount0Out
+                                amount1In
+                                amount1Out
+                                amount0
+                                amount1
+                                amountNonLiquidityToken
+                                priceUsd
+                                priceUsdTotal
+                                priceBaseToken
+                                priceBaseTokenTotal
+                                type
+                            }
+                            ... on BurnEventData {
+                                amount0
+                                amount1
+                                amount0Shifted
+                                amount1Shifted
+                                type
+                            }
+                            ... on MintEventData {
+                                amount0
+                                amount1
+                                amount0Shifted
+                                amount1Shifted
+                                type
+                            }
+                        }
                     }
                 }
             }
@@ -70,14 +116,15 @@ class DefinedApi {
                 address,
                 networkId: this.solanaNetworkId,
                 timestamp: { from: fromTimestamp, to: toTimestamp },
-                eventDisplayType: ["Buy"]
+                eventDisplayType: ["Buy", "Sell"],
+                amountNonLiquidityToken: {
+                    gte: 1000 // Utilise "gte" pour "greater than or equal to"
+                }
             }
         };
     
-        console.log('Variables for getTokenEvents:', JSON.stringify(variables, null, 2));
-    
         return this.fetchData(query, variables, 'getTokenEvents', mainContext, subContext);
     }    
-}
+}    
 
 module.exports = new DefinedApi();
