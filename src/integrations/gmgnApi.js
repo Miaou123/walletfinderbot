@@ -3,61 +3,80 @@ const StealthPlugin = require('puppeteer-extra-plugin-stealth');
 const UserAgent = require('user-agents');
 const ApiCallCounter = require('../utils/ApiCallCounter');
 const gmgnRateLimiter = require('../utils/rateLimiters/gmgnRateLimiter');
+const logger = require('../utils/logger');
 
 puppeteer.use(StealthPlugin());
 
 class GmgnApi {
     constructor() {
-      this.baseUrl = 'https://gmgn.ai/defi/quotation/v1';
+        this.baseUrl = 'https://gmgn.ai/defi/quotation/v1';
+        this.proxyUser = process.env.PROXY_USER;
+        this.proxyPass = process.env.PROXY_PASS;
+        this.proxyHost = process.env.PROXY_HOST || 'gate.smartproxy.com';
+        this.proxyPorts = (process.env.PROXY_PORTS || '10001,10002,10003,10004,10005,10006,10007,10008,10009,10010').split(',');
     }
-  
+
+    getRandomProxy() {
+        const port = this.proxyPorts[Math.floor(Math.random() * this.proxyPorts.length)];
+        return `http://${this.proxyUser}:${this.proxyPass}@${this.proxyHost}:${port}`;
+    }
+
     async fetchData(url, method, mainContext = 'default', subContext = null) {
-      ApiCallCounter.incrementCall('GMGN', method, mainContext, subContext);
-  
-      const requestFunction = async () => {
-        const userAgent = new UserAgent();
-        const browser = await puppeteer.launch({
-            headless: true,
-            args: [
-              '--no-sandbox',
-              '--disable-setuid-sandbox',
-              '--disable-dev-shm-usage',
-              '--disable-accelerated-2d-canvas',
-              '--no-first-run',
-              '--no-zygote',
-              '--disable-gpu'
-            ]
-          });          
-        const page = await browser.newPage();
-  
-        try {
-          await page.setUserAgent(userAgent.toString());
-          await page.setExtraHTTPHeaders({
-            'Accept': 'application/json, text/plain, */*',
-            'Accept-Language': 'en-US,en;q=0.9',
-            'Referer': 'https://gmgn.ai/',
-            'Origin': 'https://gmgn.ai',
-          });
-          await page.goto(url, { waitUntil: 'networkidle0', timeout: 30000 });
-  
-          const data = await page.evaluate(() => {
-            const text = document.body.innerText;
-            return JSON.parse(text);
-          });
-  
-          await browser.close();
-          return data;
-        } catch (error) {
-          await browser.close();
-          throw error;
-        } finally {
-            await browser.close();
-        }
-      };
-  
-      // Utilisez le rate limiter avec retries
-      return gmgnRateLimiter.enqueue(requestFunction);
+        ApiCallCounter.incrementCall('GMGN', method, mainContext, subContext);
+
+        const requestFunction = async () => {
+            const userAgent = new UserAgent();
+            const proxyUrl = this.getRandomProxy();
+            const browser = await puppeteer.launch({
+                headless: true,
+                args: [
+                    '--no-sandbox',
+                    '--disable-setuid-sandbox',
+                    '--disable-dev-shm-usage',
+                    '--disable-accelerated-2d-canvas',
+                    '--no-first-run',
+                    '--no-zygote',
+                    '--disable-gpu',
+                    `--proxy-server=${proxyUrl}`,
+                ],
+            });
+
+            const page = await browser.newPage();
+
+            try {
+                await page.setUserAgent(userAgent.toString());
+                await page.setExtraHTTPHeaders({
+                    'Accept': 'application/json, text/plain, */*',
+                    'Accept-Language': 'en-US,en;q=0.9',
+                    'Referer': 'https://gmgn.ai/',
+                    'Origin': 'https://gmgn.ai',
+                });
+
+                await page.goto('https://api.ipify.org?format=json', { waitUntil: 'networkidle0', timeout: 30000 });
+                const ipData = await page.evaluate(() => {
+                    return JSON.parse(document.body.innerText);
+                });
+
+                const response = await page.goto(url, { waitUntil: 'networkidle0', timeout: 60000 });
+
+                const data = await page.evaluate(() => {
+                    const text = document.body.innerText;
+                    return JSON.parse(text);
+                });
+
+                return data;
+            } catch (error) {
+                logger.error(`Error fetching data: ${error.message}`);
+                throw error;
+            } finally {
+                await browser.close();
+            }
+        };
+
+        return gmgnRateLimiter.enqueue(requestFunction);
     }
+
+
 
     async getTokenInfo(contractAddress, mainContext = 'default', subContext = null) {
         const url = `${this.baseUrl}/tokens/sol/${contractAddress}`;

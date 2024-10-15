@@ -41,23 +41,22 @@ const initializeSupplyTracker = async (bot, accessControlInstance) => {
   }
 };
 
-// Utility functions
+// Assurez-vous que ces fonctions peuvent gérer des entrées nulles ou undefined
 const validateAndParseTimeFrame = (timeFrame) => {
-  if (!timeFrame) return 1;
+  if (!timeFrame) return 1; // Default to 1 hour
   
-  if (typeof timeFrame === 'string' && (timeFrame.endsWith('m') || timeFrame.endsWith('min'))) {
-    const minutes = parseFloat(timeFrame.replace(/[m|min]/, ''));
-    if (isNaN(minutes) || minutes < 15 || minutes > 300) {
-      throw new Error("Invalid time frame. Please enter a number between 15 and 300 minutes.");
-    }
-    return Math.round((minutes / 60) * 100) / 100;
+  let value = parseFloat(timeFrame);
+  let unit = timeFrame.replace(/[0-9.]/g, '').toLowerCase();
+
+  if (unit === 'm' || unit === 'min') {
+    value /= 60; // Convert minutes to hours
   }
 
-  const hours = parseFloat(timeFrame);
-  if (isNaN(hours) || hours < 0.25 || hours > 5) {
+  if (isNaN(value) || value < 0.25 || value > 5) {
     throw new Error("Invalid time frame. Please enter a number between 0.25 and 5 hours, or 15 and 300 minutes.");
   }
-  return Math.round(hours * 100) / 100;
+
+  return Math.round(value * 100) / 100; // Round to 2 decimal places
 };
 
 const validateAndParseMinAmountOrPercentage = (input, totalSupply, decimals) => {
@@ -249,37 +248,81 @@ const handleEarlyBuyersCommand = async (bot, msg, args) => {
   const userId = msg.from.id; 
   logger.info(`Starting EarlyBuyers command for user ${msg.from.username}`);
   try {
-    const [coinAddress, timeFrame, percentage] = args;
+    let coinAddress, timeFrame, percentage, pumpFlag;
+    
+    // Fonction pour reconnaître le type d'argument
+    const recognizeArgType = (arg) => {
+      const lowerArg = arg.toLowerCase();
+      if (/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(arg)) {
+        return { type: 'address', value: arg };
+      } else if (/^(\d+(\.\d+)?)(h|m|min)$/.test(lowerArg)) {
+        return { type: 'time', value: lowerArg };
+      } else if (/^(\d+(\.\d+)?%?)$/.test(lowerArg)) {
+        return { type: 'percentage', value: lowerArg.endsWith('%') ? lowerArg : lowerArg + '%' };
+      } else if (lowerArg === 'pump' || lowerArg === 'nopump') {
+        return { type: 'flag', value: lowerArg };
+      }
+      return { type: 'unknown', value: arg };
+    };
 
-    const hours = validateAndParseTimeFrame(timeFrame);
+    // Traitement des arguments
+    args.forEach(arg => {
+      const { type, value } = recognizeArgType(arg);
+      switch (type) {
+        case 'address':
+          coinAddress = value;
+          break;
+        case 'time':
+          timeFrame = value;
+          break;
+        case 'percentage':
+          percentage = value;
+          break;
+        case 'flag':
+          pumpFlag = value;
+          break;
+        default:
+          logger.warn(`Unknown argument type: ${arg}`);
+      }
+    });
+
+    // Vérifications et valeurs par défaut
+    if (!coinAddress) {
+      throw new Error("Please provide a valid coin address.");
+    }
+
+    const hours = timeFrame ? validateAndParseTimeFrame(timeFrame) : 1; // Default to 1 hour if not provided
     if (hours === null) {
-      await bot.sendLongMessage(msg.chat.id, "Invalid time frame. Please enter a number between 0.25 and 5 hours, or 15 and 300 minutes.");
-      return;
+      throw new Error("Invalid time frame. Please enter a number between 0.25 and 5 hours, or 15 and 300 minutes.");
     }
 
     const tokenInfo = await dexScreenerApi.getTokenInfo(coinAddress);
-    
     if (!tokenInfo) {
       throw new Error("Failed to fetch token information");
     }
 
     const { minPercentage } = validateAndParseMinAmountOrPercentage(percentage, tokenInfo.totalSupply, tokenInfo.decimals);
 
+    let analysisType = "Standard (Pumpfun + Defined)";
+    if (pumpFlag === 'pump') analysisType = "Pumpfun only";
+    if (pumpFlag === 'nopump') analysisType = "Defined only";
+
     await bot.sendLongMessage(
       msg.chat.id,
       `🔎 Analyzing early buyers for <b>${tokenInfo.symbol}</b>\n` +
       `⏳ Time frame: <b>${hours} hours</b>\n` +
-      `📊 Minimum percentage: <b>${minPercentage}%</b>`,
+      `📊 Minimum percentage: <b>${minPercentage}%</b>\n` +
+      `🚩 Analysis type: <b>${analysisType}</b>`,
       { parse_mode: 'HTML', disable_web_page_preview: true }
     );      
 
-    const result = await analyzeEarlyBuyers(coinAddress, minPercentage, hours, tokenInfo, 'earlyBuyers');
+    const result = await analyzeEarlyBuyers(coinAddress, minPercentage, hours, tokenInfo, 'earlyBuyers', pumpFlag || '');
 
     if (!result || !result.earlyBuyers) {
       throw new Error("Invalid result from analyzeEarlyBuyers");
     }
 
-    let formattedMessage = await formatEarlyBuyersMessage(result.earlyBuyers, tokenInfo, hours, coinAddress);
+    let formattedMessage = await formatEarlyBuyersMessage(result.earlyBuyers, tokenInfo, hours, coinAddress, pumpFlag);
     if (!formattedMessage || formattedMessage.length === 0) {
       formattedMessage = "No early buyers found or error in formatting the message.";
     }

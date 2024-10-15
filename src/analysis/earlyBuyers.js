@@ -1,270 +1,146 @@
 const { fetchMultipleWallets } = require('../tools/walletChecker');
-const dexScreenerApi = require('../integrations/dexScreenerApi');
 const definedApi = require('../integrations/definedApi');
 const pumpfunApi = require('../integrations/pumpfunApi');
 const logger = require('../utils/logger');
-
-const MAXIMUM_UPL = 2000000;
-const BOT_TRANSACTION_THRESHOLD = 10000;
-const BOT_TRANSACTION_DIFFERENCE_THRESHOLD = 0.05;
+const { isBotWallet } = require('../tools/botDetector');
 
 const processPumpfunTransactions = (transactions, walletsData) => {
     logger.debug(`Processing ${transactions.length} Pumpfun transactions`);
+    
     for (const tx of transactions) {
-        logger.debug(`Processing transaction: ${JSON.stringify(tx)}`);
+
         const wallet = tx.user;
-        const tokenAmount = tx.token_amount * Math.pow(10, -6); // Ajuster les décimales (6 pour tokens pumpfun)
-        const solAmount = tx.sol_amount * Math.pow(10, -9); // Ajuster les décimales (9 pour SOL amount)
+        const tokenAmount = tx.token_amount;
+        const solAmount = tx.sol_amount;
 
-        const currentData = walletsData.get(wallet) || {
-            wallet,
-            bought_amount_token: 0,
-            sold_amount_token: 0,
-            bought_amount_sol: 0,
-            sold_amount_sol: 0,
-            dex: 'pumpfun',
-            transactions: []
-        };
-
-        if (tx.is_buy) {
-            currentData.bought_amount_token += tokenAmount;
-            currentData.bought_amount_sol += solAmount;
-        } else {
-            currentData.sold_amount_token += tokenAmount;
-            currentData.sold_amount_sol += solAmount;
-        }
-
-        currentData.transactions.push({
-            signature: tx.signature,
-            tokenAmount,
-            solAmount,
-            timestamp: new Date(tx.timestamp * 1000).toISOString(),
-            is_buy: tx.is_buy,
-            dex: 'pumpfun'
-        });
-
-        walletsData.set(wallet, currentData);
-        logger.debug(`Processed Pumpfun transactions. WalletsData size: ${walletsData.size}`);
+        updateWalletData(walletsData, wallet, tokenAmount, solAmount, tx.is_buy, 'pumpfun', tx.signature, tx.timestamp);
     }
 };
 
-const calculateTokenAmounts = (event) => {
-    const wsolExchanged = parseFloat(event.token0SwapValueUsd) / parseFloat(event.token0PoolValueUsd);
-    const tokensBought = (1 / parseFloat(event.token1ValueBase)) * wsolExchanged;
-    
-    return {
-        baseToken: {
-            amount: wsolExchanged,
-            value: parseFloat(event.token0SwapValueUsd)
-        },
-        quoteToken: {
-            amount: tokensBought,
-            value: parseFloat(event.token1SwapValueUsd) * parseFloat(event.token0PoolValueUsd)
-        }
-    };
-};
+const processDefinedEvents = (events, walletsData, endTimestamp) => {
 
-const processDefinedEvents = (events, walletsData, tokenInfo, endTimestamp) => {
     for (const event of events.items) {
-        logger.debug(`Processing event: ${JSON.stringify(event)}`);
-
-        // Si l'événement est hors du cadre temporel, on arrête le traitement
         if (event.timestamp > endTimestamp) {
             return false;
         }
 
         const wallet = event.maker;
         const data = event.data;
-        
-        // On s'assure que les données de swap sont présentes
+    
         if (!data || data.__typename !== 'SwapEventData') {
             logger.warn(`No SwapEventData found for event: ${event.transactionHash}`);
             continue;
         }
 
-        // Variables pour stocker les quantités échangées
-        let tokenAmount, usdAmount;
+        let tokenAmount, solAmount;
+        const isBuy = event.eventDisplayType === 'Buy';
 
-        // Calcul des montants en fonction du type d'événement (Buy/Sell)
-        if (event.eventDisplayType === 'Buy') {
-            // Si c'est un "Buy", l'utilisateur reçoit le quoteToken (token1)
-            tokenAmount = Math.abs(parseFloat(data.amount1));  // Montant en token1
-            usdAmount = parseFloat(data.priceUsdTotal);  // Valeur totale en USD
-        } else if (event.eventDisplayType === 'Sell') {
-            // Si c'est un "Sell", l'utilisateur vend le quoteToken (token1)
-            tokenAmount = Math.abs(parseFloat(data.amount1));  // Montant en token1
-            usdAmount = parseFloat(data.priceUsdTotal);  // Valeur totale en USD
+        if (isBuy) {
+            tokenAmount = Math.abs(parseFloat(data.amount1));
+            solAmount = Math.abs(parseFloat(data.amount0));
         } else {
-            logger.warn(`Unexpected event type: ${event.eventDisplayType}`);
-            continue;
+            tokenAmount = Math.abs(parseFloat(data.amount1));
+            solAmount = Math.abs(parseFloat(data.amount0));
         }
 
-        // Récupération ou initialisation des données du wallet
-        const currentData = walletsData.get(wallet) || {
-            wallet,
-            bought_amount_token: 0,
-            sold_amount_token: 0,
-            bought_amount_usd: 0,
-            sold_amount_usd: 0,
-            dex: null,  // Pas de DEX spécifié dans cet exemple
-            transactions: []
-        };
-
-        // Mise à jour des montants en fonction du type de transaction (Buy/Sell)
-        if (event.eventDisplayType === 'Buy') {
-            currentData.bought_amount_token += tokenAmount;
-            currentData.bought_amount_usd += usdAmount;
-        } else if (event.eventDisplayType === 'Sell') {
-            currentData.sold_amount_token += tokenAmount;
-            currentData.sold_amount_usd += usdAmount;
-        }
-
-        // Ajout de la transaction dans les données du portefeuille
-        currentData.transactions.push({
-            signature: event.transactionHash,
-            tokenAmount,
-            usdAmount,
-            timestamp: new Date(event.timestamp * 1000).toISOString(),
-            is_buy: event.eventDisplayType === 'Buy',
-            dex: null  // DEX non spécifié
-        });
-
-        // Mise à jour des données du wallet dans le Map
-        walletsData.set(wallet, currentData);
-
-        logger.debug(`Updated wallet data for ${wallet}: ${JSON.stringify(currentData)}`);
+        updateWalletData(walletsData, wallet, tokenAmount, solAmount, isBuy, null, event.transactionHash, event.timestamp);
     }
-
-    logger.debug(`Processed Defined events. WalletsData size: ${walletsData.size}`);
     return true;
 };
 
+const updateWalletData = (walletsData, wallet, tokenAmount, solAmount, isBuy, dex, signature, timestamp) => {
+    const currentData = walletsData.get(wallet) || {
+        wallet,
+        bought_amount_token: 0,
+        sold_amount_token: 0,
+        bought_amount_sol: 0,
+        sold_amount_sol: 0,
+        dex: dex,
+        transactions: []
+    };
 
-const isBotWallet = (walletData) => {
-    logger.debug(`Checking if wallet is bot: ${JSON.stringify(walletData)}`);
-    const buy = parseInt(walletData.buy) || 0;
-    const sell = parseInt(walletData.sell) || 0;
-    const totalTransactions = buy + sell;
-    const upl = parseFloat(walletData.unrealized_profit) || 0;
-
-    if (totalTransactions < BOT_TRANSACTION_THRESHOLD) {
-        return false;
+    if (isBuy) {
+        currentData.bought_amount_token += tokenAmount;
+        currentData.bought_amount_sol += solAmount;
+    } else {
+        currentData.sold_amount_token += tokenAmount;
+        currentData.sold_amount_sol += solAmount;
     }
 
-    const difference = Math.abs(buy - sell) / totalTransactions;
-    const isHighUPL = upl > MAXIMUM_UPL;
+    currentData.transactions.push({
+        signature,
+        tokenAmount,
+        solAmount,
+        timestamp: new Date(timestamp * 1000).toISOString(),
+        is_buy: isBuy,
+        dex
+    });
 
-    return difference < BOT_TRANSACTION_DIFFERENCE_THRESHOLD || isHighUPL;
+    walletsData.set(wallet, currentData);
 };
 
-
-const analyzeEarlyBuyers = async (tokenAddress, minPercentage = 1, timeFrameHours = 1, mainContext = 'default') => {
-    logger.debug(`Starting analysis for token: ${tokenAddress}, minPercentage: ${minPercentage}, timeFrameHours: ${timeFrameHours}`);
+const analyzeEarlyBuyers = async (coinAddress, minPercentage, timeFrameHours, tokenInfo, mainContext = 'default', pumpFlag = '') => {
+    
     try {
-        let tokenInfo;
-        let totalSupply;
-        let creationTimestamp;
         const walletsData = new Map();
+        const isPumpfunToken = coinAddress.endsWith('pump');
 
-        const isPumpfunToken = tokenAddress.endsWith('pump');
-        logger.debug(`Is Pumpfun token: ${isPumpfunToken}`);
+        const tokenDecimals = tokenInfo.decimals || 6;
+        const solDecimals = 9;
+        const totalSupply = parseFloat(tokenInfo.totalSupply);
+        const solPrice = parseFloat(tokenInfo.solPrice);
 
-        if (isPumpfunToken) {
-            logger.debug(`Fetching token info from DexScreener for: ${tokenAddress}`);
-            tokenInfo = await dexScreenerApi.getTokenInfo(tokenAddress, mainContext);
-            logger.debug(`Token info from DexScreener: ${JSON.stringify(tokenInfo)}`);
+        const thresholdAmount = (totalSupply * minPercentage / 100) * Math.pow(10, tokenDecimals);
 
+        let creationTimestamp;
+
+        // Vérification du flag 'pump' pour un token non-Pumpfun
+        if (pumpFlag === 'pump' && !isPumpfunToken) {
+            throw new Error("This token is not a pumpfun token. If you want to use the 'pump' flag please use a pumpfun token.");
+        }
+
+        // Analyse Pumpfun
+        if (isPumpfunToken && (pumpFlag === 'pump' || pumpFlag === '')) {
             let offset = 0;
             const limit = 200;
             let hasMoreTransactions = true;
             const allTransactions = [];
 
             while (hasMoreTransactions) {
-                logger.debug(`Fetching Pumpfun trades. Offset: ${offset}, Limit: ${limit}`);
                 const transactions = await pumpfunApi.getAllTrades(
-                    tokenAddress,
+                    coinAddress,
                     limit,
                     offset,
-                    0,
+                    pumpFlag === 'pump' ? 0 : timeFrameHours * 3600,
                     mainContext,
                     'getAllTrades'
                 );
-                logger.debug(`Fetched ${transactions ? transactions.length : 0} transactions from Pumpfun API`);
 
                 if (transactions && transactions.length > 0) {
                     allTransactions.push(...transactions);
+                    logger.debug(`Total transactions fetched so far: ${allTransactions.length}`);
                     offset += limit;
                 } else {
                     hasMoreTransactions = false;
+                    logger.debug('No more transactions found from Pumpfun API');
                 }
             }
 
-            logger.debug(`Total transactions fetched: ${allTransactions.length}`);
-
-            const lastTransactionTimestamp = allTransactions[allTransactions.length - 1].timestamp;
-            const firstTransactionTimestamp = allTransactions[0].timestamp;
-
-            const timeDifference = firstTransactionTimestamp - lastTransactionTimestamp;
-            const timeFrameSeconds = timeFrameHours * 3600;
-
-            totalSupply = Math.floor(parseFloat(tokenInfo.totalSupply) * Math.pow(10, tokenInfo.decimals));
-            logger.debug(`Total supply: ${totalSupply}`);
-
-            processPumpfunTransactions(allTransactions, walletsData);
-
-            if (timeDifference >= timeFrameSeconds) {
-                logger.debug('Using Pumpfun data only');
+            if (allTransactions.length === 0) {
+                logger.warn('No Pumpfun transactions were found');
+                if (pumpFlag === 'pump') {
+                    return { earlyBuyers: [], tokenInfo };
+                }
             } else {
-                logger.debug('Fetching additional data from Defined API');
-
-                creationTimestamp = lastTransactionTimestamp;
-                const endTimestamp = creationTimestamp + timeFrameSeconds;
-
-                let cursor = null;
-                let hasMoreEvents = true;
-                const limitEvents = 100;
-
-                while (hasMoreEvents) {
-                    try {
-                        logger.debug(`Fetching Defined events. Cursor: ${cursor}, Limit: ${limitEvents}`);
-                        const eventsResponse = await definedApi.getTokenEvents(
-                            tokenAddress,
-                            creationTimestamp,
-                            endTimestamp,
-                            cursor,
-                            limitEvents,
-                            mainContext,
-                            'getTokenEvents'
-                        );
-
-                        const events = eventsResponse.data.getTokenEvents;
-                        logger.debug(`Fetched ${events && events.items ? events.items.length : 0} events from Defined API`);
-
-                        if (!events || !events.items || events.items.length === 0) {
-                            logger.debug("No more events to process from Defined API");
-                            break;
-                        }
-
-                        hasMoreEvents = processDefinedEvents(events, walletsData, tokenInfo, endTimestamp);
-                        cursor = events.cursor;
-                        hasMoreEvents = hasMoreEvents && cursor !== null && events.items.length === limitEvents;
-                    } catch (error) {
-                        logger.error('Error fetching token events from Defined API:', error);
-                        break;
-                    }
-                }
+                processPumpfunTransactions(allTransactions, walletsData);
+                creationTimestamp = allTransactions[allTransactions.length - 1].timestamp;
             }
-        } else {
-            logger.debug('Processing classic token with Defined API');
-            logger.debug(`Fetching token info from DexScreener for: ${tokenAddress}`);
-            tokenInfo = await dexScreenerApi.getTokenInfo(tokenAddress, mainContext);
-            logger.debug(`Token info from DexScreener: ${JSON.stringify(tokenInfo)}`);
+        }
 
+        // Analyse Defined (sauf si flag 'pump')
+        if (pumpFlag !== 'pump') {
             creationTimestamp = Math.floor(tokenInfo.pairCreatedAt / 1000);
             const endTimestamp = creationTimestamp + (timeFrameHours * 3600);
-
-            totalSupply = Math.floor(parseFloat(tokenInfo.totalSupply) * Math.pow(10, tokenInfo.decimals));
-            logger.debug(`Total supply: ${totalSupply}`);
 
             let cursor = null;
             let hasMoreEvents = true;
@@ -272,9 +148,8 @@ const analyzeEarlyBuyers = async (tokenAddress, minPercentage = 1, timeFrameHour
 
             while (hasMoreEvents) {
                 try {
-                    logger.debug(`Fetching Defined events. Cursor: ${cursor}, Limit: ${limitEvents}`);
                     const eventsResponse = await definedApi.getTokenEvents(
-                        tokenAddress,
+                        coinAddress,
                         creationTimestamp,
                         endTimestamp,
                         cursor,
@@ -284,27 +159,30 @@ const analyzeEarlyBuyers = async (tokenAddress, minPercentage = 1, timeFrameHour
                     );
 
                     const events = eventsResponse.data.getTokenEvents;
-                    logger.debug(`Fetched ${events && events.items ? events.items.length : 0} events from Defined API`);
 
                     if (!events || !events.items || events.items.length === 0) {
-                        logger.debug("No more events to process");
+                        logger.debug("No more events to process from Defined API");
                         break;
                     }
 
-                    hasMoreEvents = processDefinedEvents(events, walletsData, tokenInfo, endTimestamp);
+                    hasMoreEvents = processDefinedEvents(events, walletsData, endTimestamp);
                     cursor = events.cursor;
                     hasMoreEvents = hasMoreEvents && cursor !== null && events.items.length === limitEvents;
                 } catch (error) {
-                    logger.error('Error fetching token events:', error);
+                    logger.error('Error fetching token events from Defined API:', error);
                     break;
                 }
             }
         }
 
+        // Filter wallets with a significant amount of tokens
         const qualifiedWallets = new Map(
-            Array.from(walletsData.entries()).filter(([_, data]) => {
-                const isQualified = data.bought_amount_token >= (totalSupply * minPercentage) / 100;
-                logger.debug(`Wallet ${_.wallet} qualification: ${isQualified}. Bought: ${data.bought_amount_token}, Threshold: ${(totalSupply * minPercentage) / 100}`);
+            Array.from(walletsData.entries()).filter(([wallet, data]) => {
+                if (typeof data.bought_amount_token !== 'number' || isNaN(data.bought_amount_token)) {
+                    logger.warn(`Invalid bought_amount_token for wallet ${wallet}: ${data.bought_amount_token}`);
+                    return false;
+                }
+                const isQualified = data.bought_amount_token >= thresholdAmount;
                 return isQualified;
             })
         );
@@ -312,34 +190,51 @@ const analyzeEarlyBuyers = async (tokenAddress, minPercentage = 1, timeFrameHour
         const walletAddresses = Array.from(qualifiedWallets.keys());
         logger.debug(`Fetching wallet analysis for ${walletAddresses.length} addresses`);
         const walletAnalysis = await fetchMultipleWallets(walletAddresses, 5, mainContext, 'fetchEarlyBuyers');
-        logger.debug(`Fetched wallet analysis: ${JSON.stringify(walletAnalysis)}`);
 
-        const filteredEarlyBuyers = new Map();
+        const filteredEarlyBuyers = [];
 
         for (const [wallet, data] of qualifiedWallets) {
-            const walletData = walletAnalysis.find(w => w.wallet === wallet);
-            logger.debug(`Processing wallet ${wallet}, data: ${JSON.stringify(walletData)}`);
-            if (walletData?.data?.data && !isBotWallet(walletData.data.data)) {
-                filteredEarlyBuyers.set(wallet, {
-                    ...data,
-                    walletInfo: walletData.data.data
-                });
-            } else {
-                logger.debug(`Wallet bot excluded: ${wallet}`);
+            try {
+                const walletData = walletAnalysis.find(w => w.wallet === wallet);
+                if (walletData?.data?.data && !isBotWallet(walletData.data.data)) {
+                    // Ajuster les montants et calculer les valeurs en USD ici
+                    const adjustedBoughtToken = data.bought_amount_token * Math.pow(10, -tokenDecimals);
+                    const adjustedSoldToken = data.sold_amount_token * Math.pow(10, -tokenDecimals);
+                    const adjustedBoughtSol = data.bought_amount_sol * Math.pow(10, -solDecimals);
+                    const adjustedSoldSol = data.sold_amount_sol * Math.pow(10, -solDecimals);
+                    const buyAmountUsd = adjustedBoughtSol * solPrice;
+                    const sellAmountUsd = adjustedSoldSol * solPrice;
+    
+                    filteredEarlyBuyers.push({
+                        wallet,
+                        bought_amount_token: adjustedBoughtToken,
+                        sold_amount_token: adjustedSoldToken,
+                        bought_amount_sol: adjustedBoughtSol,
+                        sold_amount_sol: adjustedSoldSol,
+                        bought_amount_usd: buyAmountUsd,
+                        sold_amount_usd: sellAmountUsd,
+                        dex: data.dex || null,
+                        walletInfo: walletData.data.data
+                    });
+                } else {
+                    logger.debug(`Wallet excluded or identified as bot: ${wallet}`);
+                }
+            } catch (error) {
+                logger.error(`Error processing wallet ${wallet}:`, error);
             }
         }
-
-        logger.debug(`Number of filtered early buyers: ${filteredEarlyBuyers.size}`);
-
+    
+        logger.debug(`Number of filtered early buyers: ${filteredEarlyBuyers.length}`);
+    
         const result = {
-            earlyBuyers: Array.from(filteredEarlyBuyers.values()),
-            tokenInfo
+            earlyBuyers: filteredEarlyBuyers,
+            tokenInfo,
+            solPrice
         };
-        logger.debug(`Analysis result: ${JSON.stringify(result)}`);
         return result;
 
     } catch (error) {
-        logger.error(`Analysis failed for token ${tokenAddress}:`, error);
+        logger.error(`Analysis failed for token ${coinAddress}:`, error);
         throw error;
     }
 };
