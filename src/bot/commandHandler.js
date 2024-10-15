@@ -303,9 +303,9 @@ const handleEarlyBuyersCommand = async (bot, msg, args) => {
 
     const { minPercentage } = validateAndParseMinAmountOrPercentage(percentage, tokenInfo.totalSupply, tokenInfo.decimals);
 
-    let analysisType = "Standard (Pumpfun + Defined)";
-    if (pumpFlag === 'pump') analysisType = "Pumpfun only";
-    if (pumpFlag === 'nopump') analysisType = "Defined only";
+    let analysisType = "Standard";
+    if (pumpFlag === 'pump') analysisType = "Pumpfun";
+    if (pumpFlag === 'nopump') analysisType = "Pumpfun excluded";
 
     await bot.sendLongMessage(
       msg.chat.id,
