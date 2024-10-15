@@ -18,15 +18,22 @@ class GmgnApi {
 
     getRandomProxy() {
         const port = this.proxyPorts[Math.floor(Math.random() * this.proxyPorts.length)];
-        return `http://${this.proxyUser}:${this.proxyPass}@${this.proxyHost}:${port}`;
-    }
+        return {
+            proxyServer: `${this.proxyHost}:${port}`,
+            proxyAuth: {
+                username: this.proxyUser,
+                password: this.proxyPass
+            }
+        };
+    }    
 
     async fetchData(url, method, mainContext = 'default', subContext = null) {
         ApiCallCounter.incrementCall('GMGN', method, mainContext, subContext);
-
+    
         const requestFunction = async () => {
             const userAgent = new UserAgent();
-            const proxyUrl = this.getRandomProxy();
+            const { proxyServer, proxyAuth } = this.getRandomProxy();
+    
             const browser = await puppeteer.launch({
                 headless: true,
                 args: [
@@ -37,13 +44,15 @@ class GmgnApi {
                     '--no-first-run',
                     '--no-zygote',
                     '--disable-gpu',
-                    `--proxy-server=${proxyUrl}`,
+                    `--proxy-server=${proxyServer}`, // Proxy sans identifiants
                 ],
             });
-
+    
             const page = await browser.newPage();
-
+    
             try {
+                await page.authenticate(proxyAuth); // Authentification du proxy
+    
                 await page.setUserAgent(userAgent.toString());
                 await page.setExtraHTTPHeaders({
                     'Accept': 'application/json, text/plain, */*',
@@ -51,19 +60,22 @@ class GmgnApi {
                     'Referer': 'https://gmgn.ai/',
                     'Origin': 'https://gmgn.ai',
                 });
-
+    
+                // Vérification de l'IP pour s'assurer que le proxy fonctionne
                 await page.goto('https://api.ipify.org?format=json', { waitUntil: 'networkidle0', timeout: 30000 });
                 const ipData = await page.evaluate(() => {
                     return JSON.parse(document.body.innerText);
                 });
-
-                const response = await page.goto(url, { waitUntil: 'networkidle0', timeout: 60000 });
-
+                console.log('IP via proxy:', ipData);
+    
+                // Navigation vers l'URL cible
+                await page.goto(url, { waitUntil: 'networkidle0', timeout: 60000 });
+    
                 const data = await page.evaluate(() => {
                     const text = document.body.innerText;
                     return JSON.parse(text);
                 });
-
+    
                 return data;
             } catch (error) {
                 logger.error(`Error fetching data: ${error.message}`);
@@ -72,11 +84,9 @@ class GmgnApi {
                 await browser.close();
             }
         };
-
+    
         return gmgnRateLimiter.enqueue(requestFunction);
     }
-
-
 
     async getTokenInfo(contractAddress, mainContext = 'default', subContext = null) {
         const url = `${this.baseUrl}/tokens/sol/${contractAddress}`;
