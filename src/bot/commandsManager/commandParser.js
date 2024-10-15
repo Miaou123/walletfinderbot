@@ -106,12 +106,12 @@ const validateSolanaAddress = (address) => {
     'eb': { 
       aliases: ['earlybuyers'], 
       minArgs: 1, 
-      maxArgs: 3, 
+      maxArgs: 4, 
       requiresAuth: true, 
       description: 'Analyze early buyers', 
       dailyLimit: 5,
-      usage: '/eb [coin_address] [time_frame] [percentage]',
-      helpMessage: 'Analyze early buyers of a specific coin within a given time frame and percentage threshold.\n\nTime frame is in hours or minutes (e.g., 2h or 30m). Percentage is the minimum percentage of total supply bought in one or multiple transactions over the timeframe.'
+      usage: '/eb [coin_address] [time_frame](1h)* [percentage](1%)* [pump or nopump]*',
+      helpMessage: 'Analyze early buyers of a specific coin within a given time frame and percentage threshold.\n\nTime frame is in hours or minutes (e.g., 2h or 30m). Percentage is the minimum percentage of total supply bought in one or multiple transactions over the timeframe.If you only want to analyse pumpfun transactions, use the flag "pump" at the end of your command and if you only want to analyse raydium transactions use "nopump"'
     },
     'tracker': { 
       aliases: ['tr'], 

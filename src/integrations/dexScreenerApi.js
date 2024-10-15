@@ -20,7 +20,6 @@ class DexScreenerApi {
 
             const { totalSupply, decimals } = this.extractTokenSupply(tokenSupplyResponse);
             const tokenInfo = this.extractTokenInfo(tokenResponse, solResponse, totalSupply, decimals);
-
             return tokenInfo;
         } catch (error) {
             console.error('Error fetching token info:', error);
