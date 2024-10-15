@@ -141,7 +141,6 @@ const analyzeEarlyBuyers = async (coinAddress, minPercentage, timeFrameHours, to
         if (pumpFlag !== 'pump') {
             creationTimestamp = Math.floor(tokenInfo.pairCreatedAt / 1000);
             const endTimestamp = creationTimestamp + (timeFrameHours * 3600);
-
             let cursor = null;
             let hasMoreEvents = true;
             const limitEvents = 100;
