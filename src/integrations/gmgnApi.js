@@ -13,78 +13,94 @@ class GmgnApi {
         this.proxyUser = process.env.PROXY_USER;
         this.proxyPass = process.env.PROXY_PASS;
         this.proxyHost = process.env.PROXY_HOST || 'gate.smartproxy.com';
-        this.proxyPorts = (process.env.PROXY_PORTS || '10001,10002,10003,10004,10005,10006,10007,10008,10009,10010').split(',');
+        this.proxyPort = process.env.PROXY_PORT || '10001'; // Use a static port
+
+        // Initialize the browser instance here, so it can be reused
+        this.browser = null;
     }
 
-    getRandomProxy() {
-        const port = this.proxyPorts[Math.floor(Math.random() * this.proxyPorts.length)];
-        return {
-            proxyServer: `${this.proxyHost}:${port}`,
-            proxyAuth: {
-                username: this.proxyUser,
-                password: this.proxyPass
-            }
-        };
-    }    
-
-    async fetchData(url, method, mainContext = 'default', subContext = null) {
-        ApiCallCounter.incrementCall('GMGN', method, mainContext, subContext);
-    
-        const requestFunction = async () => {
-            const userAgent = new UserAgent();
-            const { proxyServer, proxyAuth } = this.getRandomProxy();
-    
-            const browser = await puppeteer.launch({
+    // Initialize the browser only once
+    async initializeBrowser() {
+        if (!this.browser) {
+            this.browser = await puppeteer.launch({
                 headless: true,
                 args: [
                     '--no-sandbox',
                     '--disable-setuid-sandbox',
                     '--disable-dev-shm-usage',
                     '--disable-accelerated-2d-canvas',
+                    '--disable-background-timer-throttling',
+                    '--disable-renderer-backgrounding',
                     '--no-first-run',
                     '--no-zygote',
                     '--disable-gpu',
-                    `--proxy-server=${proxyServer}`, // Proxy sans identifiants
+                    `--proxy-server=${this.proxyHost}:${this.proxyPort}`, // Fixed proxy configuration
                 ],
             });
-    
-            const page = await browser.newPage();
-    
+        }
+    }
+
+
+    // Centralize page configuration: authentication, headers, request interception
+    async configurePage(page) {
+        // Proxy authentication
+        await page.authenticate({
+            username: this.proxyUser,
+            password: this.proxyPass,
+        });
+
+        // Set User-Agent and custom headers
+        const userAgent = new UserAgent();
+        await page.setUserAgent(userAgent.toString());
+        await page.setExtraHTTPHeaders({
+            'Accept': 'application/json, text/plain, */*',
+            'Accept-Language': 'en-US,en;q=0.9',
+            'Referer': 'https://gmgn.ai/',
+            'Origin': 'https://gmgn.ai',
+        });
+
+        // Enable request interception to block unnecessary resources
+        await page.setRequestInterception(true);
+        page.on('request', (req) => {
+            const resourceType = req.resourceType();
+            if (['image', 'stylesheet', 'font'].includes(resourceType)) {
+                req.abort();  // Block image, CSS, and font requests
+            } else {
+                req.continue(); // Continue for other request types (JSON, scripts, etc.)
+            }
+        });
+    }
+
+    // Fetch data using the existing browser
+    async fetchData(url, method, mainContext = 'default', subContext = null) {
+        ApiCallCounter.incrementCall('GMGN', method, mainContext, subContext);
+
+        await this.initializeBrowser(); // Ensure the browser is initialized
+
+        const requestFunction = async () => {
+            const page = await this.browser.newPage(); // Reuse the same browser, but create a new page
+
             try {
-                await page.authenticate(proxyAuth); // Authentification du proxy
-    
-                await page.setUserAgent(userAgent.toString());
-                await page.setExtraHTTPHeaders({
-                    'Accept': 'application/json, text/plain, */*',
-                    'Accept-Language': 'en-US,en;q=0.9',
-                    'Referer': 'https://gmgn.ai/',
-                    'Origin': 'https://gmgn.ai',
-                });
-    
-                // Vérification de l'IP pour s'assurer que le proxy fonctionne
-                await page.goto('https://api.ipify.org?format=json', { waitUntil: 'networkidle0', timeout: 30000 });
-                const ipData = await page.evaluate(() => {
-                    return JSON.parse(document.body.innerText);
-                });
-                console.log('IP via proxy:', ipData);
-    
-                // Navigation vers l'URL cible
-                await page.goto(url, { waitUntil: 'networkidle0', timeout: 60000 });
-    
+                // Configure the page with authentication, headers, and request interception
+                await this.configurePage(page);
+
+                // Navigate to the target URL
+                await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
+
                 const data = await page.evaluate(() => {
                     const text = document.body.innerText;
                     return JSON.parse(text);
                 });
-    
+
                 return data;
             } catch (error) {
                 logger.error(`Error fetching data: ${error.message}`);
                 throw error;
             } finally {
-                await browser.close();
+                await page.close(); // Close the page after the request is done
             }
         };
-    
+
         return gmgnRateLimiter.enqueue(requestFunction);
     }
 
@@ -224,6 +240,14 @@ class GmgnApi {
 
         const url = `${this.baseUrl}/smartmoney/sol/walletNew/${walletAddress}?period=${period}`;
         return this.fetchData(url, 'getWalletInfo', mainContext, subContext);
+    }
+
+    // Optionally, you can add a cleanup method to close the browser when it's no longer needed
+    async closeBrowser() {
+        if (this.browser) {
+            await this.browser.close();
+            this.browser = null;
+        }
     }
 }
 
