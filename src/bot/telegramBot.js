@@ -171,17 +171,17 @@ You can use "/help [command]", "[command] help" or /[command] for a full detail 
 For example "/help /eb", "/eb help" or "/eb" with no other arguments will give you a full explanation on how the early buyers command works.
 
 /start - Start the bot
-/help - Show help information
+/help - Show help
 /access - Show beta access information
-/ping - Check bot responsiveness
-/scan - Scan a token for top holders
-/bundle - Analyze bundle trades
-/bt - Analyze best traders
+/ping - Check if bot is online
+/scan - Scan a token for a top holders analysis
+/bundle - Analyze bundle
+/eb - Analyze early buyers on a given timeframe
+/bt - Analyze the 100 best traders
 /th - Analyze top holders
-/cross - Cross-analyze multiple tokens
-/team - Analyze team supply
-/search - Search for specific wallets
-/eb - Analyze early buyers
+/cross - Find common holders between multiple tokens
+/team - Analyze team supply with an homemade algorithm (works for fresh launches and CTOs)
+/search - Search for specific wallets with only a part of their address
 /tracker - Show tracked supplies
 /cancel - Cancel the current active command
 
