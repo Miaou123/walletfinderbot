@@ -122,6 +122,8 @@ const checkUsers = () => {
 const initBot = async () => {
     try {
         logger.info('Starting bot initialization...');
+        const me = await bot.getMe();
+        bot.options.username = me.username;
         await userManagerInstance.loadUsers();
         await commandHandler.initializeUserManager();
         checkUsers();
@@ -211,6 +213,17 @@ bot.on('message', async (msg) => {
       }
 
     if (msg.text.startsWith('/')) {
+
+        // Vérification pour les groupes
+        if (isGroup) {
+            const botUsername = bot.options.username; // Assurez-vous que votre instance de bot a cette propriété
+            const mentionRegex = new RegExp(`@${botUsername}$`);
+            if (!mentionRegex.test(msg.text.split(' ')[0]) && msg.text.includes('@')) {
+                // La commande mentionne un autre bot, ignorez-la
+                return;
+            }
+        }
+
         const { command, args } = parseCommand(msg.text);
         const userId = msg.from.id;
 

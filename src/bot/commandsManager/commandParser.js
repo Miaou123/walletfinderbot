@@ -156,6 +156,15 @@ Object.values(commandConfigs).forEach(config => {
 const parseCommand = (text) => {
   const parts = text.trim().split(/\s+/);
   let commandWithSlash = parts[0].toLowerCase();
+
+  // Vérifie si la commande inclut une mention de bot et l'extrait
+  const botMentionRegex = /^\/([a-z]+)@([a-z0-9_]+)bot$/i;
+  const match = commandWithSlash.match(botMentionRegex);
+  if (match) {
+    commandWithSlash = `/${match[1]}`;
+  }
+
+    
   let args = parts.slice(1);
 
   if (commandWithSlash === '/help' && args.length > 0) {
