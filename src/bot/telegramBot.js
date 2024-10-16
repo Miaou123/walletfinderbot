@@ -11,6 +11,7 @@ const { parseCommand, validateArgs, commandConfigs, getCommandHelp } = require('
 const AccessControl = require('./accessManager/accessControl');
 const RateLimiter = require('./commandsManager/commandRateLimiter');
 const CommandUsageTracker = require('./commandsManager/commandUsageTracker');
+const groupMessageLogger = require('./messageDataManager/groupMessageLogger');
 
 // Constants
 const ONE_DAY_IN_MS = 24 * 60 * 60 * 1000;
@@ -125,6 +126,7 @@ const initBot = async () => {
         await commandHandler.initializeUserManager();
         checkUsers();
         await commandHandler.initializeSupplyTracker(bot, accessControl, userManagerInstance);
+        groupMessageLogger.initialize(); 
         logger.info('Bot initialization completed successfully');
     } catch (error) {
         logger.error('Error during bot initialization:', error);
@@ -196,6 +198,13 @@ If you have any questions, want to report a bug, or have any suggestions on new 
 // Main message handler
 bot.on('message', async (msg) => {
     if (!msg.text) return;
+
+    // Vérifiez si le message provient d'un groupe
+    const isGroup = msg.chat.type === 'group' || msg.chat.type === 'supergroup';
+
+    if (isGroup && msg.text) {
+        groupMessageLogger.logGroupMessage(msg);
+      }
 
     if (msg.text.startsWith('/')) {
         const { command, args } = parseCommand(msg.text);
