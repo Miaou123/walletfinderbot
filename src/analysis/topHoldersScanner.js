@@ -156,7 +156,8 @@ function formatWalletInfo(wallet, index) {
   let info = `${index + 1} - <a href="https://solscan.io/account/${wallet.address}">${(wallet.address.substring(0, 6))}...${(wallet.address.slice(-4))}</a> → (${(wallet.supplyPercentage)}%) ${getHoldingEmoji(wallet)}\n`;
   
   if (wallet.isInteresting) {
-    info += `├ ❗️${wallet.category}\n`;
+    const categoryEmoji = getCategoryEmoji(wallet.category);
+    info += `├ ${categoryEmoji} ${wallet.category}\n`;
   }
   
   info += `├ 💳 Sol: ${wallet.solBalance}\n`;
@@ -172,6 +173,19 @@ function formatWalletInfo(wallet, index) {
       info += ` (${topTokens.map(token => 
         `<a href="https://dexscreener.com/solana/${token.mint}?maker=${wallet.address}">${token.symbol}</a> $${formatNumber(token.valueNumber)}`
       ).join(', ')})`;
+    }
+  }
+
+  function getCategoryEmoji(category) {
+    switch (category) {
+      case 'High Value':
+        return '💰';
+      case 'Fresh Address':
+        return '🆕';
+      case 'Inactive':
+        return '💤';
+      default:
+        return '❗️'; 
     }
   }
 

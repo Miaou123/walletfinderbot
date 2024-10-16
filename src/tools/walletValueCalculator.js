@@ -7,7 +7,7 @@ const logger = require('../utils/logger');
 
 // Constants
 const TIMEOUT = 2 * 60 * 1000;
-const MAX_UNIQUE_TOKENS = 1000;
+const MAX_UNIQUE_TOKENS = 10000;
 const ITEMS_PER_PAGE = 1000;
 const BATCH_SIZE = 10;
 const SOL_ADDRESS = 'So11111111111111111111111111111111111111112';

@@ -37,7 +37,7 @@ const validateSolanaAddress = (address) => {
       aliases: ['s'], 
       minArgs: 1, 
       maxArgs: 2, 
-      requiresAuth: true, 
+      requiresAuth: false, 
       description: 'Scan a token for top holders', 
       dailyLimit: 10,
       usage: '/scan [contract_address] [number_of_top_holders](10)*',

@@ -5,17 +5,17 @@ class GmgnRateLimiter {
     this.limiter = new Bottleneck({
       reservoir: maxRequestsPerSecond,
       reservoirRefreshAmount: maxRequestsPerSecond,
-      reservoirRefreshInterval: 1000, maxConcurrent: 5,
-      maxConcurrent: 3,
-      minTime: 10,
+      reservoirRefreshInterval: 1000,
+      maxConcurrent: 5,
+      minTime: 1,
     });
 
     this.retryOptions = {
-      retries: 5,
+      retries: 3,
       initialDelay: 1000,
       backoffFactor: 2,
-      maxDelay: 30000, 
-      timeout: 300000, 
+      maxDelay: 15000, 
+      timeout: 120000, 
     };
   }
 
