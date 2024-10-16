@@ -162,11 +162,15 @@ const handleHelp = async (msg, args) => {
         const generalHelpMessage = `
 Available commands:
 
+If you are not whitelisted yet please use /access.
+
+If you are already whitelisted:
 You can use "/help [command]", "[command] help" or /[command] for a full detail on how the command work.
 For example "/help /eb", "/eb help" or "/eb" with no other arguments will give you a full explanation on how the early buyers command works.
 
 /start - Start the bot
 /help - Show help information
+/access - Show beta access information
 /ping - Check bot responsiveness
 /scan - Scan a token for top holders
 /bundle - Analyze bundle trades
