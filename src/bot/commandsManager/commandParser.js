@@ -133,6 +133,16 @@ const validateSolanaAddress = (address) => {
       usage: '/cancel',
       helpMessage: 'Cancel the currently running command.\n\nUse this to stop a long-running analysis or if you made a mistake in your command input.'
     },
+    'access': { 
+      aliases: ['join'], 
+      minArgs: 0, 
+      maxArgs: 0, 
+      requiresAuth: false, 
+      description: 'Get information about joining the closed beta', 
+      dailyLimit: Infinity,
+      usage: '/access or /join',
+      helpMessage: 'Get information about how to join the closed beta and access the bot.'
+    },
   };
 
   const helpNote = "\n\nFor a better understanding of the bot and its commands, please consult our <a href='https://smp-team.gitbook.io/noesis-bot'>documentation</a>.";

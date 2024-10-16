@@ -220,7 +220,7 @@ bot.on('message', async (msg) => {
         const limitedCommands = ['scan', 'bundle', 'bt', 'th', 'cross', 'team', 'search', 'eb'];
 
         // Gestion des commandes sans arguments comme start, ping, tracker, etc.
-        if (['start', 'ping', 'tracker', 'cancel', 'help'].includes(command)) {
+        if (['start', 'ping', 'tracker', 'cancel', 'help', 'access', 'join'].includes(command)) {
             try {
                 if (command === 'help') {
                     await handleHelp(msg, args);
@@ -359,7 +359,6 @@ bot.onText(/\/removeuser (.+)/, async (msg, match) => {
 bot.onText(/^\/broadcast/, async (msg) => {
     await commandHandlers.broadcastHandler.handleBroadcastCommand(bot, msg);
   });
-  
 
 // Usage stats command
 bot.onText(/\/usagestats/, async (msg) => {

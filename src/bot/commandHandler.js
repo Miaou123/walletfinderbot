@@ -17,6 +17,7 @@ const SupplyTracker = require('../tools/SupplyTracker');
 const UserManager = require('./accessManager/userManager');
 const ActiveCommandsTracker = require('./commandsManager/activeCommandsTracker'); 
 const path = require('path');  
+const fs = require('fs');
 const logger = require('../utils/logger');
 
 let lastAnalysisResults = {};
@@ -77,7 +78,7 @@ const validateAndParseMinAmountOrPercentage = (input, totalSupply, decimals) => 
 };
 
 
-// Modifions la fonction handleStartCommand
+
 const handleStartCommand = async (bot, msg, args) => {
   const chatId = msg.chat.id;
   const userId = msg.from.id;
@@ -92,12 +93,31 @@ const handleStartCommand = async (bot, msg, args) => {
   // Ajouter l'utilisateur à la liste des utilisateurs avec toutes les informations
   userManager.addUser(userId, chatId, username);
 
+  // Lire le fichier access.json pour obtenir le nombre d'utilisateurs autorisés
+  const accessFilePath = path.join(__dirname, '../config/access.json');
+  let availableSpots;
+  try {
+    const rawData = fs.readFileSync(accessFilePath);
+    const accessData = JSON.parse(rawData);
+    const totalAllowedUsers = accessData.allowedUsers.length;
+    const maxUsers = 100;
+    availableSpots = maxUsers - totalAllowedUsers;
+  } catch (error) {
+    logger.error('Error reading access.json:', error);
+    availableSpots = "N/A"; // En cas d'erreur, afficher N/A
+  }
+
   const startMessage = `
 Welcome to Noesis! ✨🔍
 
-For more information on the bot and the current beta phase, please check our <a href="https://smp-team.gitbook.io/noesis-bot">documentation</a>.
+For more information on the bot and the current beta phase, please check our <a href="https://smp-team.gitbook.io/noesis-bot">documentation</a> and follow us on <a href="https://x.com/NoesisTracker">twitter</a>.
 
 If you are already whitelisted you can start by using /help for a full list of commands.
+
+If you are not whitelisted yet:
+• How to Join: DM @NoesisTracker on twitter or @rengon0x on Twitter/Telegram to request access.
+• Available Spots: ${availableSpots}/100
+• Selection Process: Access is granted on a first-come, first-served basis. Inactive users will be removed on a daily basis, and the total number of spots will be increased every week.
 
 If you have any questions, want to report a bug or have any new feature suggestions feel free to dm @Rengon0x on telegram or twitter!
 
@@ -110,7 +130,6 @@ As we advance, we intend to upgrade to higher tiers, which will result in 4–10
   await bot.sendLongMessage(chatId, startMessage);
 };
 
-
 const handlePingCommand = async (bot, msg, args) => {
   const startTime = Date.now();
   
@@ -122,6 +141,31 @@ const handlePingCommand = async (bot, msg, args) => {
   await bot.sendLongMessage(msg.chat.id, `Pong! Latency is ${latency}ms`);
 };
 
+// Ajoutez cette fonction dans commandHandler.js
+const handleAccessCommand = async (bot, msg) => {
+  const accessFilePath = path.join(__dirname, '../config/access.json');
+  let accessData;
+  try {
+    const rawData = fs.readFileSync(accessFilePath);
+    accessData = JSON.parse(rawData);
+  } catch (error) {
+    logger.error('Error reading access.json:', error);
+    await bot.sendLongMessage(msg.chat.id, "An error occurred while processing your request. Please try again later.");
+    return;
+  }
+
+  const totalAllowedUsers = accessData.allowedUsers.length;
+  const maxUsers = 100;
+  const availableSpots = maxUsers - totalAllowedUsers;
+
+  const message = `
+• Available Spots: ${availableSpots}/${maxUsers}
+• How to Join: Please DM @rengon0x on Twitter or Telegram to request access.
+• Selection Process: Access is granted on a first-come, first-served basis. Inactive users will be removed on a daily basis, and new spots will be available every week.
+  `;
+
+  await bot.sendLongMessage(msg.chat.id, message);
+};
 
 const handleScanCommand = async (bot, msg, args) => {
   const chatId = msg.chat.id;
@@ -977,4 +1021,6 @@ module.exports = {
   handleCallbackQuery,
   handleMessage,
   initializeUserManager, 
+  access: handleAccessCommand,
+  join: handleAccessCommand,
 };
