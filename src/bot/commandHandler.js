@@ -124,9 +124,16 @@ const handlePingCommand = async (bot, msg, args) => {
 
 
 const handleScanCommand = async (bot, msg, args) => {
-  const userId = msg.from.id;
   const chatId = msg.chat.id;
-  logger.info(`Starting Scan command for user ${msg.from.username}`);
+  const userId = msg.from.id;
+  const username = msg.from.username;
+
+  if (!userManager) {
+    logger.error('UserManager is not initialized. Ensure initializeUserManager is called before using the command.');
+    return;
+  }
+
+  userManager.addUser(userId, chatId, username);
 
   try {
 
