@@ -11,8 +11,7 @@ const { analyzeToken } = require('../analysis/topHoldersAnalyzer');
 const { searchWallets } = require('../analysis/walletSearcher');
 const { analyzeBestTraders } = require('../analysis/bestTraders');
 const { analyzeTeamSupply, sendWalletDetails } = require('../analysis/teamSupply');
-const BundleFinder = require('../analysis/bundleFinder');
-const { formatBundleResponse } = require('./formatters/bundleFormatter');
+const { getAvailableSpots } = require('../utils/accessSpots');
 const SupplyTracker = require('../tools/SupplyTracker');
 const UserManager = require('./accessManager/userManager');
 const ActiveCommandsTracker = require('./commandsManager/activeCommandsTracker'); 
@@ -93,19 +92,14 @@ const handleStartCommand = async (bot, msg, args) => {
   // Ajouter l'utilisateur à la liste des utilisateurs avec toutes les informations
   userManager.addUser(userId, chatId, username);
 
-  // Lire le fichier access.json pour obtenir le nombre d'utilisateurs autorisés
-  const accessFilePath = path.join(__dirname, '../config/access.json');
-  let availableSpots;
-  try {
-    const rawData = fs.readFileSync(accessFilePath);
-    const accessData = JSON.parse(rawData);
-    const totalAllowedUsers = accessData.allowedUsers.length;
-    const maxUsers = 100;
-    availableSpots = maxUsers - totalAllowedUsers;
-  } catch (error) {
-    logger.error('Error reading access.json:', error);
-    availableSpots = "N/A"; // En cas d'erreur, afficher N/A
+  const spotsInfo = getAvailableSpots();
+  
+  if (spotsInfo === null) {
+    await bot.sendLongMessage(msg.chat.id, "An error occurred while processing your request. Please try again later.");
+    return;
   }
+
+  const { availableSpots, maxUsers } = spotsInfo;
 
   const startMessage = `
 Welcome to Noesis! ✨🔍
@@ -116,7 +110,7 @@ If you are already whitelisted you can start by using /help for a full list of c
 
 If you are not whitelisted yet:
 • How to Join: DM @NoesisTracker on twitter or @rengon0x on Twitter/Telegram to request access.
-• Available Spots: ${availableSpots}/100
+• Available Spots: ${availableSpots}/${maxUsers}
 • Selection Process: Access is granted on a first-come, first-served basis. Inactive users will be removed on a daily basis, and the total number of spots will be increased every week.
 
 If you have any questions, want to report a bug or have any new feature suggestions feel free to dm @Rengon0x on telegram or twitter!
@@ -140,23 +134,18 @@ const handlePingCommand = async (bot, msg, args) => {
   
   await bot.sendLongMessage(msg.chat.id, `Pong! Latency is ${latency}ms`);
 };
-
 // Ajoutez cette fonction dans commandHandler.js
 const handleAccessCommand = async (bot, msg) => {
-  const accessFilePath = path.join(__dirname, '../config/access.json');
-  let accessData;
-  try {
-    const rawData = fs.readFileSync(accessFilePath);
-    accessData = JSON.parse(rawData);
-  } catch (error) {
-    logger.error('Error reading access.json:', error);
+
+  const spotsInfo = getAvailableSpots();
+
+  if (spotsInfo === null) {
     await bot.sendLongMessage(msg.chat.id, "An error occurred while processing your request. Please try again later.");
     return;
   }
 
-  const totalAllowedUsers = accessData.allowedUsers.length;
-  const maxUsers = 100;
-  const availableSpots = maxUsers - totalAllowedUsers;
+  const { availableSpots, maxUsers } = spotsInfo;
+
 
   const message = `
 • Available Spots: ${availableSpots}/${maxUsers}
@@ -553,26 +542,6 @@ const handleSearchCommand = async (bot, msg, args) => {
     logger.debug('Search command completed');
     ApiCallCounter.logApiCalls('searchWallet');
     ActiveCommandsTracker.removeCommand(userId, 'search');
-  }
-};
-
-const handleBundleCommand = async (bot, msg, args) => {
-  const userId = msg.from.id; 
-  logger.info(`Starting Bundle command for user ${msg.from.username}`);
-  try {
-    const [tokenAddress] = args;
-    const bundleFinder = new BundleFinder();
-    const bundleData = await bundleFinder.findBundle(tokenAddress);
-    const formattedResponse = formatBundleResponse(bundleData);
-    
-    await bot.sendLongMessage(msg.chat.id, formattedResponse, { parse_mode: 'Markdown' });
-  } catch (error) {
-    logger.error(`Error handling bundle command: ${error.message}`);
-    await bot.sendLongMessage(msg.chat.id, 'An error occurred while processing your request. Please try again later.');
-  } finally {
-    logger.debug('Search command completed');
-    ApiCallCounter.logApiCalls('bundle');
-    ActiveCommandsTracker.removeCommand(userId, 'bundle');
   }
 };
 
@@ -1010,8 +979,6 @@ module.exports = {
   t: handleTeamSupplyCommand,
   search: handleSearchCommand,
   sh: handleSearchCommand,
-  bundle: handleBundleCommand,
-  bd: handleBundleCommand,
   bt: handleBestTradersCommand,
   besttraders: handleBestTradersCommand,
   tracker: handleTrackerCommand,

@@ -3,55 +3,86 @@ const StealthPlugin = require('puppeteer-extra-plugin-stealth');
 const UserAgent = require('user-agents');
 const ApiCallCounter = require('../utils/ApiCallCounter');
 const pumpfunRateLimiter = require('../utils/rateLimiters/pumpfunRateLimiter');
+const logger = require('../utils/logger');
 
 puppeteer.use(StealthPlugin());
 
 class PumpFunApi {
     constructor() {
         this.baseUrl = 'https://frontend-api.pump.fun';
+        this.browser = null;
     }
 
-    async fetchData(url, method, mainContext = 'default', subContext = null) {
-        ApiCallCounter.incrementCall('PumpFun', method, mainContext, subContext);
-
-        const requestFunction = async () => {
-            const userAgent = new UserAgent();
-            const browser = await puppeteer.launch({
+    async initializeBrowser() {
+        if (!this.browser) {
+            this.browser = await puppeteer.launch({
                 headless: true,
                 args: [
                     '--no-sandbox',
                     '--disable-setuid-sandbox',
                     '--disable-dev-shm-usage',
                     '--disable-accelerated-2d-canvas',
+                    '--disable-background-timer-throttling',
+                    '--disable-renderer-backgrounding',
                     '--no-first-run',
                     '--no-zygote',
-                    '--disable-gpu'
-                ]
+                    '--disable-gpu',
+                ],
             });
-            const page = await browser.newPage();
+        }
+    }
+
+    async configurePage(page) {
+        const userAgent = new UserAgent();
+        await page.setUserAgent(userAgent.toString());
+        await page.setExtraHTTPHeaders({
+            'Accept': 'application/json, text/plain, */*',
+            'Accept-Language': 'en-US,en;q=0.9',
+            'Referer': 'https://pump.fun/',
+            'Origin': 'https://pump.fun',
+        });
+
+        await page.setRequestInterception(true);
+        page.on('request', (req) => {
+            const resourceType = req.resourceType();
+            if (['image', 'stylesheet', 'font'].includes(resourceType)) {
+                req.abort();
+            } else {
+                req.continue();
+            }
+        });
+    }
+
+    async fetchData(url, method, mainContext = 'default', subContext = null) {
+        ApiCallCounter.incrementCall('PumpFun', method, mainContext, subContext);
+
+        await this.initializeBrowser();
+
+        const requestFunction = async () => {
+            const page = await this.browser.newPage();
 
             try {
-                await page.setUserAgent(userAgent.toString());
-                await page.setExtraHTTPHeaders({
-                    'Accept': 'application/json, text/plain, */*',
-                    'Accept-Language': 'en-US,en;q=0.9',
-                    'Referer': 'https://pump.fun/',
-                    'Origin': 'https://pump.fun',
-                });
-                await page.goto(url, { waitUntil: 'networkidle0', timeout: 30000 });
+                await this.configurePage(page);
+                await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
 
-                const data = await page.evaluate(() => {
-                    const text = document.body.innerText;
-                    return JSON.parse(text);
-                });
+                const pageContent = await page.content();
+                const bodyText = await page.evaluate(() => document.body.innerText);
 
-                await browser.close();
-                return data;
+                try {
+                    const data = JSON.parse(bodyText);
+                    return data;
+                } catch (parseError) {
+                    logger.error(`JSON parsing error. Page content:`);
+                    logger.error(pageContent);
+                    logger.error(`Body text:`);
+                    logger.error(bodyText);
+                    throw new Error(`JSON parsing failed. Body text: ${bodyText}`);
+                }
             } catch (error) {
-                await browser.close();
+                logger.error(`Error fetching data: ${error.message}`);
                 throw error;
             } finally {
-                await browser.close();
+                await page.close();
             }
         };
 
@@ -67,6 +98,12 @@ class PumpFunApi {
         return this.fetchData(url, 'getAllTrades', mainContext, subContext);
     }
 
+    async closeBrowser() {
+        if (this.browser) {
+            await this.browser.close();
+            this.browser = null;
+        }
+    }
 }
 
 module.exports = new PumpFunApi();

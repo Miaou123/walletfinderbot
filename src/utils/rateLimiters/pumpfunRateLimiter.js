@@ -1,4 +1,5 @@
 const Bottleneck = require('bottleneck');
+const logger = require('../logger');
 
 class PumpfunRateLimiter {
   constructor(maxRequestsPerSecond) {
@@ -6,16 +7,16 @@ class PumpfunRateLimiter {
       reservoir: maxRequestsPerSecond,
       reservoirRefreshAmount: maxRequestsPerSecond,
       reservoirRefreshInterval: 1000,
-      maxConcurrent: 3,
-      minTime: 10,
+      maxConcurrent: 5,
+      minTime: 1,
     });
 
     this.retryOptions = {
-      retries: 5,
+      retries: 3,
       initialDelay: 1000,
       backoffFactor: 2,
-      maxDelay: 30000, // Maximum delay of 30 seconds
-      timeout: 300000, // 5 minutes timeout
+      maxDelay: 15000, 
+      timeout: 120000, 
     };
   }
 
@@ -37,10 +38,12 @@ class PumpfunRateLimiter {
         } catch (error) {
           retries -= 1;
           if (retries <= 0 || Date.now() - startTime > this.retryOptions.timeout) {
-            console.error(`Task failed after all retries or timeout: ${error.message}`);
+            logger.error(`Task failed after all retries or timeout: ${error.message}`);
+            logger.error(`Full error details:`, error);
             throw error;
           }
-          console.warn(`Task failed: ${error.message}. Retrying in ${delay}ms...`);
+          logger.warn(`Task failed: ${error.message}. Retrying in ${delay}ms...`);
+          logger.debug(`Full error details for retry:`, error);
           await new Promise((resolve) => setTimeout(resolve, delay));
           delay = Math.min(delay * this.retryOptions.backoffFactor, this.retryOptions.maxDelay);
         }

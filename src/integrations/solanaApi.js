@@ -87,6 +87,32 @@ class SolanaApi {
     }
   }
 
+  async getTokenAccountBalance(tokenAccountAddress, config = {}, mainContext = 'default', subContext = null) {
+    try {
+      // Assurez-vous que le champ 'commitment' est présent dans config
+      if (!config.commitment) {
+        config.commitment = 'confirmed';
+      }
+  
+      const result = await this.callHelius('getTokenAccountBalance', [tokenAccountAddress, config], 'rpc', mainContext, subContext);
+      
+      if (!result || !result.value) {
+        console.error(`Unexpected result for getTokenAccountBalance of account ${tokenAccountAddress}:`, result);
+        return null;
+      }
+  
+      return {
+        amount: result.value.amount,
+        decimals: result.value.decimals,
+        uiAmount: result.value.uiAmount,
+        uiAmountString: result.value.uiAmountString
+      };
+    } catch (error) {
+      console.error(`Error getting token account balance for ${tokenAccountAddress}:`, error);
+      throw error;
+    }
+  }
+
   async getTokenAccountsByOwner(walletAddress, tokenAddress, mainContext = 'default', subContext = null) {
     const result = await this.callHelius('getTokenAccountsByOwner', [
       walletAddress,

@@ -12,6 +12,7 @@ const AccessControl = require('./accessManager/accessControl');
 const RateLimiter = require('./commandsManager/commandRateLimiter');
 const CommandUsageTracker = require('./commandsManager/commandUsageTracker');
 const groupMessageLogger = require('./messageDataManager/groupMessageLogger');
+const { getAvailableSpots } = require('../utils/accessSpots'); 
 
 // Constants
 const ONE_DAY_IN_MS = 24 * 60 * 60 * 1000;
@@ -144,9 +145,17 @@ initBot().catch(error => {
 
 // Authentication middleware
 const authMiddleware = async (msg, command) => {
+    const spotsInfo = getAvailableSpots();
+  
+    if (spotsInfo === null) {
+      await bot.sendLongMessage(msg.chat.id, "An error occurred while processing your request. Please try again later.");
+      return;
+    }
+  
+    const { availableSpots, maxUsers } = spotsInfo;
     const username = msg.from.username;
     if (!accessControl.isAllowed(username)) {
-        await bot.sendLongMessage(msg.chat.id, "Sorry, you do not have access to this command. Noesis is currently in beta; if you want to participate, please contact @Rengon0x via Telegram or Twitter. There are currently X/100 spots available for this beta version.");
+        await bot.sendLongMessage(msg.chat.id, `Sorry, you do not have access to this command. Noesis is currently in beta; if you want to participate, please contact @Rengon0x via Telegram or Twitter. There are currently ${availableSpots}/${maxUsers} spots available for this beta version.`);
         return false;
     }
     
@@ -256,9 +265,10 @@ bot.on('message', async (msg) => {
         }
 
         // Récupération de la configuration de la commande
-        const config = commandConfigs[command];
-        if (!config) {
-            await bot.sendLongMessage(msg.chat.id, "Unknown command. Use /help to see available commands.");
+        if (!command) {
+            if (!isGroup) {
+                await bot.sendLongMessage(msg.chat.id, "Unknown command. Use /help to see available commands.");
+            }
             return;
         }
 
@@ -294,7 +304,12 @@ bot.on('message', async (msg) => {
 
         // Exécution de la commande
         try {
-            if (typeof commandHandler[command] === 'function') {
+            if (commandHandlers[command] && typeof commandHandlers[command].handleCommand === 'function') {
+                // Nouvelle logique pour les commandes gérées par CommandHandlers
+                logger.info(`Executing new command handler: ${command} for user: ${msg.from.username} (ID: ${userId}) with args: [${args}]`);
+                await commandHandlers[command].handleCommand(bot, msg, args);
+            } else if (typeof commandHandler[command] === 'function') {
+                // Logique existante pour les commandes gérées par l'ancien système
                 logger.info(`Executing command: ${command} for user: ${msg.from.username} (ID: ${userId}) with args: [${args}]`);
                 await commandHandler[command](bot, msg, args);
             } else {

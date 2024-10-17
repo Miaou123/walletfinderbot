@@ -47,11 +47,11 @@ const validateSolanaAddress = (address) => {
       aliases: ['bd'], 
       minArgs: 1, 
       maxArgs: 1, 
-      requiresAuth: true, 
+      requiresAuth: false, 
       description: 'Analyze bundle trades', 
-      dailyLimit: 5,
-      usage: '/bundle [contract_address]',
-      helpMessage: 'Analyze bundle trades for a specific contract address.'
+      dailyLimit: Infinity,
+      usage: '/bundle [contract_address] [Team]*',
+      helpMessage: 'Analyze bundled trades for a specific contract address. If you only want bundles related to the team, use the "team" parameter.'
     },
     'bt': { 
       aliases: ['besttraders'], 
@@ -79,7 +79,7 @@ const validateSolanaAddress = (address) => {
       maxArgs: 6, 
       requiresAuth: true, 
       description: 'Cross-analyze multiple tokens', 
-      dailyLimit: 5,
+      dailyLimit: 20,
       usage: '/cross [contract_address1] [contract_address2] ... [Combined_value_min]($10000)*',
       helpMessage: 'Search for wallets that hold multiple coins. You can analyze up to 5 coins with a minimum combined value (default is $10000).\n\nThis command helps identify wallets that have significant holdings across multiple tokens.'
     },
