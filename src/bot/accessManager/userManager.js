@@ -8,21 +8,15 @@ class UserManager {
     }
 
     async loadUsers() {
-        console.log('Attempting to load users from:', this.filePath);
         try {
             const data = await fs.readFile(this.filePath, 'utf8');
-            console.log('Raw data read from file:', data);
             const parsedData = JSON.parse(data);
-            console.log('Parsed data:', parsedData);
             this.users = new Map(parsedData);
-            console.log('Users loaded into Map. Size:', this.users.size);
             logger.info(`Loaded ${this.users.size} users`);
         } catch (error) {
             if (error.code === 'ENOENT') {
-                console.log('File not found:', this.filePath);
-                logger.info('No users file found. Starting with empty user list.');
+                logger.error('File not found:', this.filePath);
             } else {
-                console.error('Error loading users:', error);
                 logger.error('Error loading users:', error);
             }
         }
@@ -71,8 +65,8 @@ class UserManager {
     }
 
     debugUsers() {
-        console.log('Current users in UserManager:');
-        console.log(Array.from(this.users.entries()));
+        logger.debug('Current users in UserManager:');
+        logger.debug(Array.from(this.users.entries()));
         return Array.from(this.users.entries());
     }
 }

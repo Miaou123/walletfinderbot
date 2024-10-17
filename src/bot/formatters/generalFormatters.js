@@ -1,8 +1,12 @@
 
 
-const formatNumber = (number, decimals = 1) => {
+const formatNumber = (number, decimals = 1, isPercentage = false) => {
   if (number === undefined || number === null) {
     return '<code>N/A</code>';
+  }
+
+  if (isPercentage) {
+    return `<code>${number.toFixed(2)}%</code>`;
   }
 
   const absNumber = Math.abs(number);
@@ -13,7 +17,7 @@ const formatNumber = (number, decimals = 1) => {
   } else if (absNumber >= 1e3) {
     formattedNumber = (number / 1e3).toFixed(decimals) + 'k';
   } else {
-    formattedNumber = Math.floor(number).toString(); 
+    formattedNumber = Math.floor(number).toString();
   }
 
   formattedNumber = formattedNumber.replace(/\.0+([kM])?$/, '$1'); 
