@@ -50,8 +50,8 @@ const validateSolanaAddress = (address) => {
       requiresAuth: false, 
       description: 'Analyze bundle trades', 
       dailyLimit: Infinity,
-      usage: '/bundle [contract_address] [Team]*',
-      helpMessage: 'Analyze bundled trades for a specific contract address. If you only want bundles related to the team, use the "team" parameter.'
+      usage: '/bundle [contract_address]',
+      helpMessage: 'Analyze bundled trades for a specific contract address (Raydium, Meteora and pumpfun supported).'
     },
     'bt': { 
       aliases: ['besttraders'], 
