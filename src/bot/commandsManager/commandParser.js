@@ -48,7 +48,7 @@ const validateSolanaAddress = (address) => {
       minArgs: 1, 
       maxArgs: 1, 
       requiresAuth: false, 
-      description: 'Analyze bundle trades', 
+      description: 'Analyze bundled trades', 
       dailyLimit: Infinity,
       usage: '/bundle [contract_address]',
       helpMessage: 'Analyze bundled trades for a specific contract address (Raydium, Meteora and pumpfun supported).'
