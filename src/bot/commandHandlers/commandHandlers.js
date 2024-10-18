@@ -5,7 +5,7 @@ const BundleHandler = require('./bundleHandler');
 
 class CommandHandlers {
   constructor(userManager, accessControl) {
-    this.broadcast = new BroadcastHandler(userManager, accessControl);
+    this.broadcastHandler = new BroadcastHandler(userManager, accessControl);
     this.bundle = new BundleHandler(userManager, accessControl);
     // Initialisez ici vos autres gestionnaires de commandes
     // this.someOtherHandler = new SomeOtherHandler(userManager, accessControl);
