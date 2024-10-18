@@ -1,13 +1,9 @@
 const pumpfunApi = require('../integrations/pumpfunApi');
 const { getSolanaApi } = require('../integrations/solanaApi');
-const solanaFmApi = require('../integrations/solanaFmApi');
 const gmgnApi = require('../integrations/gmgnApi');
 const { analyzeFunding } = require('../tools/fundingAnalyzer');
 const config = require('../utils/config');
 const logger = require('../utils/logger');
-const puppeteer = require('puppeteer-extra');
-const StealthPlugin = require('puppeteer-extra-plugin-stealth');
-const UserAgent = require('user-agents');
 
 puppeteer.use(StealthPlugin());
 
@@ -37,7 +33,6 @@ class UnifiedBundleAnalyzer {
     }
 
     async analyzePumpfunBundle(address, limit, isTeamAnalysis) {
-        const solanaApi = getSolanaApi();
         let offset = 0;
         const pageLimit = 200;
         let hasMoreTransactions = true;
@@ -65,8 +60,6 @@ class UnifiedBundleAnalyzer {
         logger.debug(`Total trades fetched: ${allTrades.length}`);
 
         const bundles = {};
-        let totalTokensBundled = 0;
-        let totalSolSpent = 0;
 
         allTrades.forEach(trade => {
             if (trade.is_buy) {
