@@ -1,12 +1,11 @@
 
-
-const formatNumber = (number, decimals = 1, isPercentage = false) => {
+const formatNumber = (number, decimals = 2, isPercentage = false) => {
   if (number === undefined || number === null) {
     return '<code>N/A</code>';
   }
 
   if (isPercentage) {
-    return `<code>${number.toFixed(2)}%</code>`;
+    return `<code>${number.toFixed(decimals)}%</code>`;
   }
 
   const absNumber = Math.abs(number);
@@ -17,10 +16,18 @@ const formatNumber = (number, decimals = 1, isPercentage = false) => {
   } else if (absNumber >= 1e3) {
     formattedNumber = (number / 1e3).toFixed(decimals) + 'k';
   } else {
-    formattedNumber = Math.floor(number).toString();
+    formattedNumber = number.toFixed(decimals);
   }
 
-  formattedNumber = formattedNumber.replace(/\.0+([kM])?$/, '$1'); 
+  // Remove trailing zeros after the decimal point, but keep at least one decimal if there's a fractional part
+  formattedNumber = formattedNumber.replace(/\.?0+$/, '');
+  if (formattedNumber.includes('.') && !formattedNumber.includes('k') && !formattedNumber.includes('M')) {
+    const parts = formattedNumber.split('.');
+    if (parts[1].length < decimals) {
+      formattedNumber = number.toFixed(decimals);
+    }
+  }
+
   return `<code>${formattedNumber}</code>`;
 };
 

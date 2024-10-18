@@ -55,4 +55,32 @@ function formatMainMessage(results) {
     return output;
 }
 
-module.exports = formatMainMessage;
+function formatNonPumpfunBundleResponse(bundleData, tokenInfo) {
+    let output = `<b>Bundle Analysis</b> for <a href="https://solscan.io/token/${tokenInfo.address}">${tokenInfo.name}</a> (${tokenInfo.symbol}) <a href="https://dexscreener.com/solana/${tokenInfo.address}">📈</a>\n\n`;
+
+    output += `<b>📦 Bundle Detected:</b> ${bundleData.bundleDetected ? 'Yes' : 'No'}\n`;
+    output += `<b>🔢 Total Bundles:</b> ${bundleData.bundles.length}\n`;
+    output += `<b>🪙 Total Tokens Bundled:</b> ${formatNumber(bundleData.totalTokenAmount, 2)} ${tokenInfo.symbol} (${formatNumber(bundleData.developerInfo.percentageOfSupply, 2)}%)\n`;
+    output += `<b>💰 Total SOL Spent:</b> ${formatNumber(bundleData.totalSolAmount, 2)} SOL\n\n`;
+
+    output += "<b>Top 5 Transactions:</b>\n";
+    const transactions = Object.entries(bundleData.transactionDetails)
+        .sort(([, a], [, b]) => b.tokenAmounts[0] - a.tokenAmounts[0])
+        .slice(0, 5);
+
+    transactions.forEach(([txHash, details], index) => {
+        const truncatedHash = truncateAddress(txHash);
+        output += `<b>Transaction ${index + 1}:</b> <a href="https://solscan.io/tx/${txHash}">${truncatedHash}</a>\n`;
+        output += `  <b>🪙 Token Amount:</b> ${formatNumber(details.tokenAmounts[0], 2)} ${tokenInfo.symbol}\n`;
+        output += `  <b>💰 SOL Amount:</b> ${formatNumber(details.solAmounts[0], 2)} SOL\n`;
+        output += `  <b>📊 Percentage:</b> ${formatNumber(details.tokenAmountsPercentages[0], 2)}%\n\n`;
+    });
+
+    return output;
+}
+
+
+module.exports = {
+    formatMainMessage,
+    formatNonPumpfunBundleResponse
+};
