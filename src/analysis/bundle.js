@@ -5,8 +5,6 @@ const { analyzeFunding } = require('../tools/fundingAnalyzer');
 const config = require('../utils/config');
 const logger = require('../utils/logger');
 
-puppeteer.use(StealthPlugin());
-
 class UnifiedBundleAnalyzer {
     constructor() {
         this.logger = logger;
