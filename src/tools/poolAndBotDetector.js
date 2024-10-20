@@ -62,18 +62,18 @@ const checkLiquidityPool = async (address, mainContext = 'default') => {
  * @returns {Promise<{type: string, subType: string|null}>} - Le type (bot, pool, ou normal) et le sous-type si applicable.
  */
 const analyzeWallet = async (walletData, address, mainContext = 'default') => {
-    const buy = new BigNumber(walletData.buy || 0);
-    const sell = new BigNumber(walletData.sell || 0);
-    const totalTransactions = buy.plus(sell);
-    const upl = new BigNumber(walletData.unrealized_profit || 0);
-
     // Vérifier d'abord si c'est un pool de liquidité
     const poolType = await checkLiquidityPool(address, mainContext);
     if (poolType) {
         return { type: 'pool', subType: poolType };
     }
 
-    // Ensuite, vérifier si c'est un bot
+    // Si ce n'est pas une pool, vérifier si c'est un bot
+    const buy = new BigNumber(walletData.buy || 0);
+    const sell = new BigNumber(walletData.sell || 0);
+    const totalTransactions = buy.plus(sell);
+    const upl = new BigNumber(walletData.unrealized_profit || 0);
+
     if (totalTransactions.isGreaterThanOrEqualTo(BOT_TRANSACTION_THRESHOLD)) {
         const difference = buy.minus(sell).abs().dividedBy(totalTransactions);
         const isHighUPL = upl.isGreaterThan(MAXIMUM_UPL);
@@ -83,6 +83,7 @@ const analyzeWallet = async (walletData, address, mainContext = 'default') => {
         }
     }
 
+    // Si ce n'est ni une pool ni un bot, c'est un wallet normal
     return { type: 'normal', subType: null };
 };
 
