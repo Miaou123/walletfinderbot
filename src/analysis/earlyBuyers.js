@@ -2,7 +2,7 @@ const { fetchMultipleWallets } = require('../tools/walletChecker');
 const definedApi = require('../integrations/definedApi');
 const pumpfunApi = require('../integrations/pumpfunApi');
 const logger = require('../utils/logger');
-const { isBotWallet } = require('../tools/poolAndBotDetector');
+const { analyzeWallet  } = require('../tools/poolAndBotDetector');
 
 const processPumpfunTransactions = (transactions, walletsData) => {
     logger.debug(`Processing ${transactions.length} Pumpfun transactions`);
@@ -195,7 +195,7 @@ const analyzeEarlyBuyers = async (coinAddress, minPercentage, timeFrameHours, to
         for (const [wallet, data] of qualifiedWallets) {
             try {
                 const walletData = walletAnalysis.find(w => w.wallet === wallet);
-                if (walletData?.data?.data && !isBotWallet(walletData.data.data)) {
+                if (walletData?.data?.data && !analyzeWallet(walletData.data.data)) {
                     // Ajuster les montants et calculer les valeurs en USD ici
                     const adjustedBoughtToken = data.bought_amount_token * Math.pow(10, -tokenDecimals);
                     const adjustedSoldToken = data.sold_amount_token * Math.pow(10, -tokenDecimals);
