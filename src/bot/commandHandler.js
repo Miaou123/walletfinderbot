@@ -41,22 +41,21 @@ const initializeSupplyTracker = async (bot, accessControlInstance) => {
   }
 };
 
-// Assurez-vous que ces fonctions peuvent gérer des entrées nulles ou undefined
 const validateAndParseTimeFrame = (timeFrame) => {
-  if (!timeFrame) return 1; // Default to 1 hour
+  if (!timeFrame) return 1;
   
   let value = parseFloat(timeFrame);
   let unit = timeFrame.replace(/[0-9.]/g, '').toLowerCase();
 
   if (unit === 'm' || unit === 'min') {
-    value /= 60; // Convert minutes to hours
+    value /= 60;
   }
 
   if (isNaN(value) || value < 0.25 || value > 5) {
     throw new Error("Invalid time frame. Please enter a number between 0.25 and 5 hours, or 15 and 300 minutes.");
   }
 
-  return Math.round(value * 100) / 100; // Round to 2 decimal places
+  return Math.round(value * 100) / 100;
 };
 
 const validateAndParseMinAmountOrPercentage = (input, totalSupply, decimals) => {
@@ -76,26 +75,22 @@ const validateAndParseMinAmountOrPercentage = (input, totalSupply, decimals) => 
   return { minAmount, minPercentage };
 };
 
-
-
-const handleStartCommand = async (bot, msg, args) => {
+const handleStartCommand = async (bot, msg, args, messageThreadId) => {
   const chatId = msg.chat.id;
   const userId = msg.from.id;
   const username = msg.from.username;
 
-  // Vérification de l'initialisation de userManager
   if (!userManager) {
     logger.error('UserManager is not initialized. Ensure initializeUserManager is called before using the command.');
     return;
   }
 
-  // Ajouter l'utilisateur à la liste des utilisateurs avec toutes les informations
   userManager.addUser(userId, chatId, username);
 
   const spotsInfo = getAvailableSpots();
   
   if (spotsInfo === null) {
-    await bot.sendLongMessage(msg.chat.id, "An error occurred while processing your request. Please try again later.");
+    await bot.sendLongMessage(chatId, "An error occurred while processing your request. Please try again later.", { message_thread_id: messageThreadId });
     return;
   }
 
@@ -121,31 +116,29 @@ As we advance, we intend to upgrade to higher tiers, which will result in 4–10
 ⚠️This bot is still in development phase and will probably be subject to many bugs/issues⚠️
   `;
 
-  await bot.sendLongMessage(chatId, startMessage);
+  await bot.sendLongMessage(chatId, startMessage, { message_thread_id: messageThreadId });
 };
 
-const handlePingCommand = async (bot, msg, args) => {
+const handlePingCommand = async (bot, msg, args, messageThreadId) => {
   const startTime = Date.now();
   
-  await bot.sendLongMessage(msg.chat.id, 'Pinging...');
+  await bot.sendLongMessage(msg.chat.id, 'Pinging...', { message_thread_id: messageThreadId });
   
   const endTime = Date.now();
   const latency = endTime - startTime;
   
-  await bot.sendLongMessage(msg.chat.id, `Pong! Latency is ${latency}ms`);
+  await bot.sendLongMessage(msg.chat.id, `Pong! Latency is ${latency}ms`, { message_thread_id: messageThreadId });
 };
-// Ajoutez cette fonction dans commandHandler.js
-const handleAccessCommand = async (bot, msg) => {
 
+const handleAccessCommand = async (bot, msg, args, messageThreadId) => {
   const spotsInfo = getAvailableSpots();
 
   if (spotsInfo === null) {
-    await bot.sendLongMessage(msg.chat.id, "An error occurred while processing your request. Please try again later.");
+    await bot.sendLongMessage(msg.chat.id, "An error occurred while processing your request. Please try again later.", { message_thread_id: messageThreadId });
     return;
   }
 
   const { availableSpots, maxUsers } = spotsInfo;
-
 
   const message = `
 • Available Spots: ${availableSpots}/${maxUsers}
@@ -153,10 +146,10 @@ const handleAccessCommand = async (bot, msg) => {
 • Selection Process: Access is granted on a first-come, first-served basis. Inactive users will be removed on a daily basis, and new spots will be available every week.
   `;
 
-  await bot.sendLongMessage(msg.chat.id, message);
+  await bot.sendLongMessage(msg.chat.id, message, { message_thread_id: messageThreadId });
 };
 
-const handleScanCommand = async (bot, msg, args) => {
+const handleScanCommand = async (bot, msg, args, messageThreadId) => {
   const chatId = msg.chat.id;
   const userId = msg.from.id;
   const username = msg.from.username;
@@ -169,17 +162,15 @@ const handleScanCommand = async (bot, msg, args) => {
   userManager.addUser(userId, chatId, username);
 
   try {
-
     const [tokenAddress, numberOfHoldersStr] = args;
     const numberOfHolders = numberOfHoldersStr ? parseInt(numberOfHoldersStr) : 10;
 
-    // Validation du nombre de détenteurs
     if (isNaN(numberOfHolders) || numberOfHolders < 1 || numberOfHolders > 100) {
-      await bot.sendLongMessage(chatId, "Invalid number of holders. Please provide a number between 1 and 100.");
+      await bot.sendLongMessage(chatId, "Invalid number of holders. Please provide a number between 1 and 100.", { message_thread_id: messageThreadId });
       return;
     }
 
-    await bot.sendLongMessage(chatId, `Starting scan for token: ${tokenAddress}\nAnalyzing top ${numberOfHolders} holders. This may take a few minutes...`);
+    await bot.sendLongMessage(chatId, `Starting scan for token: ${tokenAddress}\nAnalyzing top ${numberOfHolders} holders. This may take a few minutes...`, { message_thread_id: messageThreadId });
 
     const scanResult = await scanToken(tokenAddress, numberOfHolders, true, 'scan');
 
@@ -187,7 +178,6 @@ const handleScanCommand = async (bot, msg, args) => {
       throw new Error("Scan result is incomplete or invalid.");
     }
 
-    // Envoyer le résultat formaté
     await bot.sendLongMessage(chatId, scanResult.formattedResult, { 
       parse_mode: 'HTML', 
       disable_web_page_preview: true,
@@ -197,12 +187,11 @@ const handleScanCommand = async (bot, msg, args) => {
             { text: "Track Supply", callback_data: `track_${tokenAddress}` },
           ]
         ]
-      }
+      },
+      message_thread_id: messageThreadId
     });
 
-    // Harmoniser lastAnalysisResults
     if (scanResult.trackingInfo) {
-      lastAnalysisResults[chatId] = null; 
       lastAnalysisResults[chatId] = {
         tokenAddress: scanResult.trackingInfo.tokenAddress,
         tokenInfo: {
@@ -213,7 +202,7 @@ const handleScanCommand = async (bot, msg, args) => {
         totalSupplyControlled: scanResult.trackingInfo.totalSupplyControlled,
         initialSupplyPercentage: scanResult.trackingInfo.totalSupplyControlled,
         topHoldersWallets: scanResult.trackingInfo.topHoldersWallets,
-        teamWallets: [], // Vide pour la commande scan
+        teamWallets: [],
         allWalletsDetails: scanResult.allAnalyzedWallets,
         analysisType: 'tokenScanner',
         trackType: 'topHolders',
@@ -235,14 +224,14 @@ const handleScanCommand = async (bot, msg, args) => {
       errorMessage += "\nThe request timed out. The server might be busy. Please try again in a few minutes.";
     }
 
-    await bot.sendLongMessage(chatId, errorMessage);
+    await bot.sendLongMessage(chatId, errorMessage, { message_thread_id: messageThreadId });
   } finally {
     ApiCallCounter.logApiCalls('scan');
     ActiveCommandsTracker.removeCommand(userId, 'scan');
   }
 };
 
-const handleTopHoldersCommand = async (bot, msg, args) => {
+const handleTopHoldersCommand = async (bot, msg, args, messageThreadId) => {
   const userId = msg.from.id; 
   logger.info(`Starting TopHolders command for user ${msg.from.username}`);
   try {
@@ -250,16 +239,16 @@ const handleTopHoldersCommand = async (bot, msg, args) => {
     const count = parseInt(topHoldersCountStr) || 20;
 
     if (isNaN(count) || count < 1 || count > 100) {
-      await bot.sendLongMessage(msg.chat.id, "Invalid number of holders. Please provide a number between 1 and 100.");
+      await bot.sendLongMessage(msg.chat.id, "Invalid number of holders. Please provide a number between 1 and 100.", { message_thread_id: messageThreadId });
       return;
     }
 
-    await bot.sendLongMessage(msg.chat.id, `Starting top holders analysis for coin: ${coinAddress}\nThis may take a few minutes...`);
+    await bot.sendLongMessage(msg.chat.id, `Starting top holders analysis for coin: ${coinAddress}\nThis may take a few minutes...`, { message_thread_id: messageThreadId });
     
     const { tokenInfo, analyzedWallets } = await analyzeToken(coinAddress, count, 'Analyze');
     
     if (analyzedWallets.length === 0) {
-      await bot.sendLongMessage(msg.chat.id, "No wallets found for analysis.");
+      await bot.sendLongMessage(msg.chat.id, "No wallets found for analysis.", { message_thread_id: messageThreadId });
       return;
     }
 
@@ -269,28 +258,27 @@ const handleTopHoldersCommand = async (bot, msg, args) => {
       if (typeof message === 'string' && message.trim() !== '') {
         await bot.sendLongMessage(msg.chat.id, message, {
           parse_mode: 'HTML',
-          disable_web_page_preview: true
+          disable_web_page_preview: true,
+          message_thread_id: messageThreadId
         });
       }
     }
   } catch (error) {
     logger.error('Error in handleTopHoldersCommand:', error);
-    await bot.sendLongMessage(msg.chat.id, `An error occurred during analysis: ${error.message}`);
+    await bot.sendLongMessage(msg.chat.id, `An error occurred during analysis: ${error.message}`, { message_thread_id: messageThreadId });
   } finally {
     logger.debug('TopHolders command completed');
     ApiCallCounter.logApiCalls('Analyze');
     ActiveCommandsTracker.removeCommand(userId, 'th');
-    
   }
 };
 
-const handleEarlyBuyersCommand = async (bot, msg, args) => {
+const handleEarlyBuyersCommand = async (bot, msg, args, messageThreadId) => {
   const userId = msg.from.id; 
   logger.info(`Starting EarlyBuyers command for user ${msg.from.username}`);
   try {
     let coinAddress, timeFrame, percentage, pumpFlag;
     
-    // Fonction pour reconnaître le type d'argument
     const recognizeArgType = (arg) => {
       const lowerArg = arg.toLowerCase();
       if (/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(arg)) {
@@ -305,7 +293,6 @@ const handleEarlyBuyersCommand = async (bot, msg, args) => {
       return { type: 'unknown', value: arg };
     };
 
-    // Traitement des arguments
     args.forEach(arg => {
       const { type, value } = recognizeArgType(arg);
       switch (type) {
@@ -326,12 +313,11 @@ const handleEarlyBuyersCommand = async (bot, msg, args) => {
       }
     });
 
-    // Vérifications et valeurs par défaut
     if (!coinAddress) {
       throw new Error("Please provide a valid coin address.");
     }
 
-    const hours = timeFrame ? validateAndParseTimeFrame(timeFrame) : 1; // Default to 1 hour if not provided
+    const hours = timeFrame ? validateAndParseTimeFrame(timeFrame) : 1;
     if (hours === null) {
       throw new Error("Invalid time frame. Please enter a number between 0.25 and 5 hours, or 15 and 300 minutes.");
     }
@@ -353,7 +339,7 @@ const handleEarlyBuyersCommand = async (bot, msg, args) => {
       `⏳ Time frame: <b>${hours} hours</b>\n` +
       `📊 Minimum percentage: <b>${minPercentage}%</b>\n` +
       `🚩 Analysis type: <b>${analysisType}</b>`,
-      { parse_mode: 'HTML', disable_web_page_preview: true }
+      { parse_mode: 'HTML', disable_web_page_preview: true, message_thread_id: messageThreadId }
     );      
 
     const result = await analyzeEarlyBuyers(coinAddress, minPercentage, hours, tokenInfo, 'earlyBuyers', pumpFlag || '');
@@ -367,7 +353,7 @@ const handleEarlyBuyersCommand = async (bot, msg, args) => {
       formattedMessage = "No early buyers found or error in formatting the message.";
     }
 
-    await bot.sendLongMessage(msg.chat.id, formattedMessage, { parse_mode: 'HTML', disable_web_page_preview: true });
+    await bot.sendLongMessage(msg.chat.id, formattedMessage, { parse_mode: 'HTML', disable_web_page_preview: true, message_thread_id: messageThreadId });
 
   } catch (error) {
     logger.error(`Error in handleEarlyBuyersCommand:`, error);
@@ -375,7 +361,7 @@ const handleEarlyBuyersCommand = async (bot, msg, args) => {
     if (error.stack) {
       logger.error("Error stack:", error.stack);
     }
-    await bot.sendLongMessage(msg.chat.id, errorMessage);
+    await bot.sendLongMessage(msg.chat.id, errorMessage, { message_thread_id: messageThreadId });
   } finally {
     logger.debug('EarlyBuyers command completed');
     ApiCallCounter.logApiCalls('earlyBuyers');
@@ -383,13 +369,13 @@ const handleEarlyBuyersCommand = async (bot, msg, args) => {
   }
 };
 
-const handleCrossCommand = async (bot, msg, args) => {
+const handleCrossCommand = async (bot, msg, args, messageThreadId) => {
   const userId = msg.from.id; 
   logger.info(`Starting Cross command for user ${msg.from.username}`);
   const DEFAULT_MIN_COMBINED_VALUE = 1000; 
   try {
     if (args.length < 2) {
-      await bot.sendLongMessage(msg.chat.id, "Please provide at least two coin addresses and optionally a minimum combined value. Usage: /cross <coin_address1> <coin_address2> [coin_address3...] [min_value]");
+      await bot.sendLongMessage(msg.chat.id, "Please provide at least two coin addresses and optionally a minimum combined value. Usage: /cross <coin_address1> <coin_address2> [coin_address3...] [min_value]", { message_thread_id: messageThreadId });
       return;
     }
 
@@ -403,22 +389,22 @@ const handleCrossCommand = async (bot, msg, args) => {
         contractAddresses.push(item);
       } else {
         logger.info('Invalid input:', item);
-        await bot.sendLongMessage(msg.chat.id, `Invalid input: ${item}. Please provide valid Solana addresses.`);
+        await bot.sendLongMessage(msg.chat.id, `Invalid input: ${item}. Please provide valid Solana addresses.`, { message_thread_id: messageThreadId });
         return;
       }
     }
 
     if (contractAddresses.length < 2) {
-      await bot.sendLongMessage(msg.chat.id, "Please provide at least two valid coin addresses.");
+      await bot.sendLongMessage(msg.chat.id, "Please provide at least two valid coin addresses.", { message_thread_id: messageThreadId });
       return;
     }
 
-    await bot.sendLongMessage(msg.chat.id, `Starting cross-analysis for ${contractAddresses.length} coins with minimum combined value of $${minCombinedValue}...`);
+    await bot.sendLongMessage(msg.chat.id, `Starting cross-analysis for ${contractAddresses.length} coins with minimum combined value of $${minCombinedValue}...`, { message_thread_id: messageThreadId });
 
     const relevantHolders = await crossAnalyze(contractAddresses, minCombinedValue, 'crossWallet');
   
     if (!Array.isArray(relevantHolders) || relevantHolders.length === 0) {
-      await bot.sendLongMessage(msg.chat.id, "No relevant holders found matching the criteria.");
+      await bot.sendLongMessage(msg.chat.id, "No relevant holders found matching the criteria.", { message_thread_id: messageThreadId });
       return;
     }
 
@@ -440,14 +426,14 @@ const handleCrossCommand = async (bot, msg, args) => {
       }
     }));
 
-    await sendFormattedCrossAnalysisMessage(bot, msg.chat.id, relevantHolders, contractAddresses, tokenInfos);
+    await sendFormattedCrossAnalysisMessage(bot, msg.chat.id, relevantHolders, contractAddresses, tokenInfos, messageThreadId);
 
   } catch (error) {
     logger.error('Error in handleCrossCommand:', error);
     if (error.response && error.response.statusCode === 400 && error.response.body && error.response.body.description.includes('message is too long')) {
-      await bot.sendLongMessage(msg.chat.id, "An error occurred during cross-analysis: The resulting message is too long to send via Telegram.\n\nPlease try with a higher minimum combined value or reduce the number of coins. Usage: /cross [coin_address1] [coin_address2] ... [Combined_value_min]");
+      await bot.sendLongMessage(msg.chat.id, "An error occurred during cross-analysis: The resulting message is too long to send via Telegram.\n\nPlease try with a higher minimum combined value or reduce the number of coins. Usage: /cross [coin_address1] [coin_address2] ... [Combined_value_min]", { message_thread_id: messageThreadId });
     } else {
-      await bot.sendLongMessage(msg.chat.id, `An error occurred during cross-analysis: ${error.message}`);
+      await bot.sendLongMessage(msg.chat.id, `An error occurred during cross-analysis: ${error.message}`, { message_thread_id: messageThreadId });
     }
   } finally {
     logger.debug('Cross command completed');
@@ -456,13 +442,13 @@ const handleCrossCommand = async (bot, msg, args) => {
   }  
 };
 
-const handleTeamSupplyCommand = async (bot, msg, args) => {
+const handleTeamSupplyCommand = async (bot, msg, args, messageThreadId) => {
   const userId = msg.from.id; 
   logger.info(`Starting Team Supply command for user ${msg.from.username}`);
   try {
     const [tokenAddress] = args;
 
-    await bot.sendLongMessage(msg.chat.id, `Analyzing team supply for token: ${tokenAddress}\nThis may take a few minutes...`);
+    await bot.sendLongMessage(msg.chat.id, `Analyzing team supply for token: ${tokenAddress}\nThis may take a few minutes...`, { message_thread_id: messageThreadId });
 
     const { formattedResults, allWalletsDetails, allTeamWallets, tokenInfo } = await analyzeTeamSupply(tokenAddress,'teamSupply');
 
@@ -472,7 +458,6 @@ const handleTeamSupplyCommand = async (bot, msg, args) => {
 
     const initialSupplyPercentage = parseFloat(formattedResults.match(/Supply Controlled by team\/insiders: ([\d.]+)%/)[1]);
 
-    lastAnalysisResults[msg.chat.id] = null;
     lastAnalysisResults[msg.chat.id] = { 
       tokenAddress,
       tokenInfo: {
@@ -498,11 +483,12 @@ const handleTeamSupplyCommand = async (bot, msg, args) => {
           ]
         ]
       },
-      disable_web_page_preview: true
+      disable_web_page_preview: true,
+      message_thread_id: messageThreadId
     });
   } catch (error) {
     logger.error('Error in handleTeamSupplyCommand:', error);
-    await bot.sendLongMessage(msg.chat.id, `An error occurred during team supply analysis: ${error.message}`);
+    await bot.sendLongMessage(msg.chat.id, `An error occurred during team supply analysis: ${error.message}`, { message_thread_id: messageThreadId });
   } finally {
     logger.debug('handleTeamSupplyCommand command completed');
     ApiCallCounter.logApiCalls('teamSupply');
@@ -510,34 +496,34 @@ const handleTeamSupplyCommand = async (bot, msg, args) => {
   }
 };
 
-const handleSearchCommand = async (bot, msg, args) => {
+const handleSearchCommand = async (bot, msg, args, messageThreadId) => {
   const userId = msg.from.id; 
   logger.info(`Starting Search command for user ${msg.from.username}`);
   try {
     const [tokenAddress, ...searchCriteria] = args;
 
     if (searchCriteria.length === 0) {
-      await bot.sendLongMessage(msg.chat.id, "Please provide search criteria.");
+      await bot.sendLongMessage(msg.chat.id, "Please provide search criteria.", { message_thread_id: messageThreadId });
       return;
     }
 
-    await bot.sendLongMessage(msg.chat.id, `Searching wallets for coin: ${tokenAddress}`);
+    await bot.sendLongMessage(msg.chat.id, `Searching wallets for coin: ${tokenAddress}`, { message_thread_id: messageThreadId });
 
     const results = await searchWallets(tokenAddress, searchCriteria, 'searchWallet');
 
     if (results.length === 0) {
-      await bot.sendLongMessage(msg.chat.id, "No matching wallets found.");
+      await bot.sendLongMessage(msg.chat.id, "No matching wallets found.", { message_thread_id: messageThreadId });
       return;
     }
 
     let message = `Found ${results.length} matching wallet(s):\n\n`;
     message += results.join('');
 
-    await bot.sendLongMessage(msg.chat.id, message, { parse_mode: 'HTML', disable_web_page_preview: true });
+    await bot.sendLongMessage(msg.chat.id, message, { parse_mode: 'HTML', disable_web_page_preview: true, message_thread_id: messageThreadId });
 
   } catch (error) {
     logger.error(`Error in handleSearchCommand:`, error);
-    await bot.sendLongMessage(msg.chat.id, `An error occurred during the search: ${error.message}`);
+    await bot.sendLongMessage(msg.chat.id, `An error occurred during the search: ${error.message}`, { message_thread_id: messageThreadId });
   } finally {
     logger.debug('Search command completed');
     ApiCallCounter.logApiCalls('searchWallet');
@@ -545,7 +531,7 @@ const handleSearchCommand = async (bot, msg, args) => {
   }
 };
 
-const handleBestTradersCommand = async (bot, msg, args) => {
+const handleBestTradersCommand = async (bot, msg, args, messageThreadId) => {
   const userId = msg.from.id; 
   logger.info(`Starting BestTrader command for user ${msg.from.username}`);
   try {
@@ -570,22 +556,22 @@ const handleBestTradersCommand = async (bot, msg, args) => {
       }
     }
 
-    await bot.sendLongMessage(msg.chat.id, `Analyzing best traders for contract: ${contractAddress} with winrate >${winrateThreshold}% and portfolio value >$${portfolioThreshold}, sorted by ${sortOption}`);
+    await bot.sendLongMessage(msg.chat.id, `Analyzing best traders for contract: ${contractAddress} with winrate >${winrateThreshold}% and portfolio value >$${portfolioThreshold}, sorted by ${sortOption}`, { message_thread_id: messageThreadId });
 
     const bestTraders = await analyzeBestTraders(contractAddress, winrateThreshold, portfolioThreshold, sortOption, 'bestTraders');
         
     if (bestTraders.length === 0) {
-      await bot.sendLongMessage(msg.chat.id, "No traders found meeting the criteria.");
+      await bot.sendLongMessage(msg.chat.id, "No traders found meeting the criteria.", { message_thread_id: messageThreadId });
       return;
     }
 
     const message = formatBestTraders(bestTraders, sortOption);
 
-    await bot.sendLongMessage(msg.chat.id, message, { parse_mode: 'HTML', disable_web_page_preview: true });
+    await bot.sendLongMessage(msg.chat.id, message, { parse_mode: 'HTML', disable_web_page_preview: true, message_thread_id: messageThreadId });
 
   } catch (error) {
     logger.error('Error in handleBestTradersCommand:', error);
-    await bot.sendLongMessage(msg.chat.id, `An error occurred while processing your request: ${error.message}`);
+    await bot.sendLongMessage(msg.chat.id, `An error occurred while processing your request: ${error.message}`, { message_thread_id: messageThreadId });
   } finally {
     logger.debug('bestTraders command completed');
     ApiCallCounter.logApiCalls('bestTraders');
@@ -593,7 +579,7 @@ const handleBestTradersCommand = async (bot, msg, args) => {
   }
 };
 
-const handleTrackerCommand = async (bot, msg, args) => {
+const handleTrackerCommand = async (bot, msg, args, messageThreadId) => {
   logger.info(`Starting Tracker command for user ${msg.from.username}`);
   const chatId = msg.chat.id;
   const username = msg.from.username;
@@ -602,7 +588,7 @@ const handleTrackerCommand = async (bot, msg, args) => {
   console.log("Tracked supplies:", trackedSupplies);
 
   if (trackedSupplies.length === 0) {
-    await bot.sendLongMessage(chatId, "You are not currently tracking any supplies. To start tracking supplies, please run /team or /scan first.");
+    await bot.sendLongMessage(chatId, "You are not currently tracking any supplies. To start tracking supplies, please run /team or /scan first.", { message_thread_id: messageThreadId });
     return;
   }
 
@@ -643,12 +629,13 @@ const handleTrackerCommand = async (bot, msg, args) => {
     reply_markup: {
       inline_keyboard: inlineKeyboard
     },
-    parse_mode: 'HTML'
+    parse_mode: 'HTML',
+    message_thread_id: messageThreadId
   });
 };
 
 
-const handleStopCommand = async (bot, msg, args) => {
+const handleStopCommand = async (bot, msg, args, messageThreadId) => {
   const chatId = msg.chat.id;
   const username = msg.from.username;
   const [trackerId] = args;
@@ -656,13 +643,13 @@ const handleStopCommand = async (bot, msg, args) => {
   try {
     const success = supplyTrackerInstance.stopTracking(username, trackerId);
     if (success) {
-      await bot.sendLongMessage(chatId, `Tracking stopped for ${trackerId}`);
+      await bot.sendLongMessage(chatId, `Tracking stopped for ${trackerId}`, { message_thread_id: messageThreadId });
     } else {
-      await bot.sendLongMessage(chatId, `No active tracking found for ${trackerId}`);
+      await bot.sendLongMessage(chatId, `No active tracking found for ${trackerId}`, { message_thread_id: messageThreadId });
     }
   } catch (error) {
     logger.error(`Error stopping tracking: ${error.message}`);
-    await bot.sendLongMessage(chatId, "An error occurred while stopping the tracking.");
+    await bot.sendLongMessage(chatId, "An error occurred while stopping the tracking.", { message_thread_id: messageThreadId });
   }
 };
 
@@ -672,6 +659,7 @@ const handleCallbackQuery = async (bot, callbackQuery) => {
   const action = callbackQuery.data;
   const chatId = callbackQuery.message.chat.id;
   const username = callbackQuery.from.username;
+  const messageThreadId = callbackQuery.message.message_thread_id;
 
   try {
     const [actionType, ...params] = action.split('_');
@@ -717,20 +705,20 @@ const handleCallbackQuery = async (bot, callbackQuery) => {
           });
           return;
         }
-        return await handleTrackAction(bot, chatId, tokenAddress, trackingInfo);
+        return await handleTrackAction(bot, chatId, tokenAddress, trackingInfo, messageThreadId);
 
       case 'details':
         if (!trackingInfo || !trackingInfo.allWalletsDetails || !trackingInfo.tokenInfo) {
           throw new Error("No wallet details or token information found. Please run the analysis again.");
         }
-        return await sendWalletDetails(bot, chatId, trackingInfo.allWalletsDetails, trackingInfo.tokenInfo);
+        return await sendWalletDetails(bot, chatId, trackingInfo.allWalletsDetails, trackingInfo.tokenInfo, messageThreadId);
 
       case 'sd':
-        await handleSetDefaultThreshold(bot, chatId, trackingInfo, trackingId);
+        await handleSetDefaultThreshold(bot, chatId, trackingInfo, trackingId, messageThreadId);
         break;
 
       case 'sc':
-        await handleSetCustomThreshold(bot, chatId, trackingInfo, trackingId);
+        await handleSetCustomThreshold(bot, chatId, trackingInfo, trackingId, messageThreadId);
         break;
 
       case 'st':
@@ -741,7 +729,7 @@ const handleCallbackQuery = async (bot, callbackQuery) => {
           });
           return;
         }
-        await handleStartTracking(bot, chatId, trackingInfo, threshold);
+        await handleStartTracking(bot, chatId, trackingInfo, threshold, messageThreadId);
         break;
 
       case 'stop':
@@ -752,7 +740,8 @@ const handleCallbackQuery = async (bot, callbackQuery) => {
           await bot.answerCallbackQuery(callbackQuery.id, { text: "Tracking stopped successfully." });
           await bot.editMessageText("Tracking stopped. Use /tracker to see your current trackers.", {
             chat_id: chatId,
-            message_id: callbackQuery.message.message_id
+            message_id: callbackQuery.message.message_id,
+            message_thread_id: messageThreadId
           });
         } else {
           await bot.answerCallbackQuery(callbackQuery.id, { text: "Failed to stop tracking. Tracker not found." });
@@ -769,14 +758,14 @@ const handleCallbackQuery = async (bot, callbackQuery) => {
   } catch (error) {
     logger.error('Error in handleCallbackQuery:', error);
     const errorMessage = `An error occurred: ${error.message}. Please try again or contact support.`;
-    await bot.sendLongMessage(chatId, errorMessage);
+    await bot.sendLongMessage(chatId, errorMessage, { message_thread_id: messageThreadId });
     if (!callbackQuery.answered) {
       await bot.answerCallbackQuery(callbackQuery.id, { text: "An error occurred", show_alert: true });
     }
   }
 };
 
-const handleTrackAction = async (bot, chatId, tokenAddress, trackingInfo, trackType) => {
+const handleTrackAction = async (bot, chatId, tokenAddress, trackingInfo, messageThreadId) => {
   logger.debug(`Starting handleTrackAction for token: ${tokenAddress}, chatId: ${chatId}, trackType: ${trackType}`);
   logger.debug(`Current trackingInfo:`, trackingInfo);
   try {
@@ -811,12 +800,14 @@ const handleTrackAction = async (bot, chatId, tokenAddress, trackingInfo, trackT
       ]
     };
 
-    // Use bot.sendMessage to get the sentMessage object with message_id
-    const sentMessage = await bot.sendMessage(chatId, message, { reply_markup: keyboard, parse_mode: 'HTML' });
+    const sentMessage = await bot.sendMessage(chatId, message, { 
+      reply_markup: keyboard, 
+      parse_mode: 'HTML',
+      message_thread_id: messageThreadId
+    });
     trackingInfo.messageId = sentMessage.message_id;
-    trackingInfo.trackType = trackType;  // Add this line to ensure trackType is saved
+    trackingInfo.trackType = trackType;
 
-    // Update lastAnalysisResults and pendingTracking
     lastAnalysisResults[chatId] = trackingInfo;
     const trackingId = `${chatId}_${tokenAddress}`;
     pendingTracking.set(trackingId, trackingInfo);
@@ -825,21 +816,20 @@ const handleTrackAction = async (bot, chatId, tokenAddress, trackingInfo, trackT
   } catch (error) {
     logger.error('Error in handleTrackAction:', error);
     try {
-      await bot.sendMessage(chatId, `An error occurred while setting up tracking: ${error.message}. Please try again or contact support.`);
+      await bot.sendMessage(chatId, `An error occurred while setting up tracking: ${error.message}. Please try again or contact support.`, { message_thread_id: messageThreadId });
     } catch (sendError) {
       logger.error('Error sending error message to user:', sendError);
     }
   }
 };
 
-
-const handleSetDefaultThreshold = async (bot, chatId, trackingInfo, trackingId) => {
+const handleSetDefaultThreshold = async (bot, chatId, trackingInfo, trackingId, messageThreadId) => {
   trackingInfo.threshold = 1;
   pendingTracking.set(trackingId, trackingInfo);
-  await updateTrackingMessage(bot, chatId, trackingInfo, trackingId);
+  await updateTrackingMessage(bot, chatId, trackingInfo, trackingId, messageThreadId);
 };
 
-const updateTrackingMessage = async (bot, chatId, trackingInfo, trackingId) => {
+const updateTrackingMessage = async (bot, chatId, trackingInfo, trackingId, messageThreadId) => {
   const tokenAddress = trackingInfo.tokenAddress;
   const threshold = trackingInfo.threshold || 1;
   const ticker = trackingInfo.tokenInfo.symbol || 'Unknown';
@@ -866,15 +856,16 @@ const updateTrackingMessage = async (bot, chatId, trackingInfo, trackingId) => {
     await bot.editMessageText(message, {
       chat_id: chatId,
       message_id: trackingInfo.messageId,
-      reply_markup: keyboard
+      reply_markup: keyboard,
+      message_thread_id: messageThreadId
     });
   } catch (error) {
     logger.error('Error updating tracking message:', error);
   }
 };
 
-const handleSetCustomThreshold = async (bot, chatId, trackingInfo, trackingId) => {
-  await bot.sendLongMessage(chatId, "Enter new supply change percentage (e.g., 2.5):");
+const handleSetCustomThreshold = async (bot, chatId, trackingInfo, trackingId, messageThreadId) => {
+  await bot.sendLongMessage(chatId, "Enter new supply change percentage (e.g., 2.5):", { message_thread_id: messageThreadId });
   trackingInfo.awaitingCustomThreshold = true;
   pendingTracking.set(trackingId, trackingInfo);
 
@@ -884,7 +875,7 @@ const handleSetCustomThreshold = async (bot, chatId, trackingInfo, trackingId) =
   });
 };
 
-const handleStartTracking = async (bot, chatId, trackingInfo, threshold) => {
+const handleStartTracking = async (bot, chatId, trackingInfo, threshold, messageThreadId) => {
   threshold = trackingInfo.threshold || threshold || 1;
   const { tokenAddress, teamWallets, topHoldersWallets, initialSupplyPercentage, tokenInfo, username, analysisType } = trackingInfo;
   const trackType = trackingInfo.trackType || (trackingInfo.analysisType === 'tokenScanner' ? 'topHolders' : 'team');
@@ -898,7 +889,7 @@ const handleStartTracking = async (bot, chatId, trackingInfo, threshold) => {
 
   if (!wallets || wallets.length === 0) {
     logger.warn(`No ${trackType} wallets found for ${tokenAddress}. This may cause issues with tracking.`);
-    await bot.sendLongMessage(chatId, `Warning: No ${trackType} wallets found. Tracking may not work as expected.`);
+    await bot.sendLongMessage(chatId, `Warning: No ${trackType} wallets found. Tracking may not work as expected.`, { message_thread_id: messageThreadId });
     return;
   }
 
@@ -916,11 +907,11 @@ const handleStartTracking = async (bot, chatId, trackingInfo, threshold) => {
       username
     );
 
-    await bot.sendLongMessage(chatId, `Tracking started for ${tokenInfo.symbol} ${trackType} supply with ${threshold}% threshold. Use /tracker to see and manage your active trackings.`);
+    await bot.sendLongMessage(chatId, `Tracking started for ${tokenInfo.symbol} ${trackType} supply with ${threshold}% threshold. Use /tracker to see and manage your active trackings.`, { message_thread_id: messageThreadId });
     logger.info('SupplyTracker.startTracking called successfully');
   } catch (error) {
     logger.error("Error starting tracking:", error);
-    await bot.sendLongMessage(chatId, `An error occurred while starting the tracking: ${error.message}`);
+    await bot.sendLongMessage(chatId, `An error occurred while starting the tracking: ${error.message}`, { message_thread_id: messageThreadId });
   }
 };
 
@@ -928,40 +919,36 @@ const handleMessage = async (bot, msg) => {
   const chatId = msg.chat.id;
   const text = msg.text.trim();
   const userState = userStates.get(chatId);
+  const messageThreadId = msg.message_thread_id;
 
   if (userState && userState.action === 'awaiting_custom_threshold') {
     const trackingId = userState.trackingId;
     let trackingInfo = pendingTracking.get(trackingId);
 
     if (!trackingInfo) {
-      await bot.sendLongMessage(chatId, "Tracking info not found. Please start over.");
+      await bot.sendLongMessage(chatId, "Tracking info not found. Please start over.", { message_thread_id: messageThreadId });
       userStates.delete(chatId);
       return;
     }
 
-    // Retirer le symbole '%' s'il est présent et vérifier la valeur
     const thresholdInput = text.replace('%', '').trim();
     const threshold = parseFloat(thresholdInput);
 
-    // Vérifier si le seuil est valide (entre 0.1 et 100)
     if (isNaN(threshold) || threshold < 0.1 || threshold > 100) {
-      await bot.sendLongMessage(chatId, "Invalid input. Please enter a number between 0.1 and 100 for the threshold.");
+      await bot.sendLongMessage(chatId, "Invalid input. Please enter a number between 0.1 and 100 for the threshold.", { message_thread_id: messageThreadId });
       return;
     }
 
-    // Si l'entrée est correcte, continuer avec la mise à jour
     trackingInfo.threshold = threshold;
     trackingInfo.awaitingCustomThreshold = false;
     pendingTracking.set(trackingId, trackingInfo);
 
-    await updateTrackingMessage(bot, chatId, trackingInfo, trackingId);
+    await updateTrackingMessage(bot, chatId, trackingInfo, trackingId, messageThreadId);
     userStates.delete(chatId);
   } else {
     // Gérer d'autres messages ou ignorer
   }
 };
-
-
 
 // Export all command handlers
 module.exports = {
@@ -990,4 +977,26 @@ module.exports = {
   initializeUserManager, 
   access: handleAccessCommand,
   join: handleAccessCommand,
+};
+
+Object.keys(module.exports).forEach(key => {
+  if (typeof module.exports[key] === 'function' && !['initializeSupplyTracker', 'handleCallbackQuery', 'handleMessage', 'initializeUserManager'].includes(key)) {
+    const originalHandler = module.exports[key];
+    module.exports[key] = async (bot, msg, args) => {
+      const messageThreadId = msg.message_thread_id;
+      return await originalHandler(bot, msg, args, messageThreadId);
+    };
+  }
+});
+
+const originalHandleCallbackQuery = module.exports.handleCallbackQuery;
+module.exports.handleCallbackQuery = async (bot, callbackQuery) => {
+  const messageThreadId = callbackQuery.message.message_thread_id;
+  return await originalHandleCallbackQuery(bot, callbackQuery, messageThreadId);
+};
+
+const originalHandleMessage = module.exports.handleMessage;
+module.exports.handleMessage = async (bot, msg) => {
+  const messageThreadId = msg.message_thread_id;
+  return await originalHandleMessage(bot, msg, messageThreadId);
 };

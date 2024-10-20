@@ -62,6 +62,11 @@ const checkLiquidityPool = async (address, mainContext = 'default') => {
  * @returns {Promise<{type: string, subType: string|null}>} - Le type (bot, pool, ou normal) et le sous-type si applicable.
  */
 const analyzeWallet = async (walletData, address, mainContext = 'default') => {
+    if (!address) {
+        logger.warn('Attempt to analyze wallet with undefined address');
+        return { type: 'unknown', subType: null };
+    }
+
     // Vérifier d'abord si c'est un pool de liquidité
     const poolType = await checkLiquidityPool(address, mainContext);
     if (poolType) {
