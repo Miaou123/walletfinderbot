@@ -2,7 +2,7 @@ const { fetchMultipleWallets } = require('../tools/walletChecker');
 const definedApi = require('../integrations/definedApi');
 const pumpfunApi = require('../integrations/pumpfunApi');
 const logger = require('../utils/logger');
-const { isBotWallet } = require('../tools/botDetector');
+const { isBotWallet } = require('../tools/poolAndBotDetector');
 
 const processPumpfunTransactions = (transactions, walletsData) => {
     logger.debug(`Processing ${transactions.length} Pumpfun transactions`);

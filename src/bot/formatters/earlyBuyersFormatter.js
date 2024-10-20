@@ -1,5 +1,5 @@
 const logger = require('../../utils/logger');
-const { formatNumber } = require('./walletAnalyzerFormatter');
+const { formatNumber } = require('./topHoldersFormatter');
 const { getEmojiForPnl, truncateAddress } = require('./generalFormatters');
 
 const MINIMUM_PORT_SIZE = 1000;
