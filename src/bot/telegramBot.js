@@ -219,13 +219,15 @@ bot.on('message', async (msg) => {
 
     if (isGroup && msg.text) {
         groupMessageLogger.logGroupMessage(msg);
-      }
+    }
 
     if (msg.text.startsWith('/')) {
+        const { command, args } = parseCommand(msg.text);
+        const userId = msg.from.id;
 
         // Vérification pour les groupes
         if (isGroup) {
-            const botUsername = bot.options.username; // Assurez-vous que votre instance de bot a cette propriété
+            const botUsername = bot.options.username;
             const mentionRegex = new RegExp(`@${botUsername}$`);
             if (!mentionRegex.test(msg.text.split(' ')[0]) && msg.text.includes('@')) {
                 // La commande mentionne un autre bot, ignorez-la
@@ -233,13 +235,13 @@ bot.on('message', async (msg) => {
             }
         }
 
-        const { command, args } = parseCommand(msg.text);
-        const userId = msg.from.id;
-
         logger.info(`Received command: ${command} with args: [${args}] from user: ${msg.from.username} (ID: ${userId})`);
 
         if (!command) {
-            await bot.sendLongMessage(msg.chat.id, "Unknown command. Use /help to see available commands.");
+            // Ne pas envoyer de message d'erreur dans les groupes
+            if (!isGroup) {
+                await bot.sendLongMessage(msg.chat.id, "Unknown command. Use /help to see available commands.");
+            }
             return;
         }
 
@@ -255,19 +257,17 @@ bot.on('message', async (msg) => {
                     await commandHandler[command](bot, msg, args);
                 } else {
                     logger.error(`Command handler not found for command: ${command}`);
-                    await bot.sendLongMessage(msg.chat.id, "Command not found. Please use /help to see available commands.");
+                    // Ne pas envoyer de message d'erreur dans les groupes
+                    if (!isGroup) {
+                        await bot.sendLongMessage(msg.chat.id, "Command not found. Please use /help to see available commands.");
+                    }
                 }
             } catch (error) {
                 logger.error(`Error handling command ${command}:`, error);
-                await bot.sendLongMessage(msg.chat.id, "An unexpected error occurred. Please try again later.");
-            }
-            return;
-        }
-
-        // Récupération de la configuration de la commande
-        if (!command) {
-            if (!isGroup) {
-                await bot.sendLongMessage(msg.chat.id, "Unknown command. Use /help to see available commands.");
+                // Ne pas envoyer de message d'erreur dans les groupes
+                if (!isGroup) {
+                    await bot.sendLongMessage(msg.chat.id, "An unexpected error occurred. Please try again later.");
+                }
             }
             return;
         }
@@ -275,7 +275,10 @@ bot.on('message', async (msg) => {
         // Validation des arguments
         const validationErrors = validateArgs(command, args);
         if (validationErrors.length > 0) {
-            await bot.sendLongMessage(msg.chat.id, validationErrors.join('\n\n'));
+            // Ne pas envoyer de message d'erreur dans les groupes
+            if (!isGroup) {
+                await bot.sendLongMessage(msg.chat.id, validationErrors.join('\n\n'));
+            }
             return;
         }
 
@@ -289,13 +292,19 @@ bot.on('message', async (msg) => {
         if (limitedCommands.includes(command)) {
             if (!ActiveCommandsTracker.canAddCommand(userId, command)) {
                 logger.warn(`User ${userId} attempted to start command ${command} but has reached the limit.`);
-                await bot.sendLongMessage(msg.chat.id, "You have reached the maximum number of concurrent commands. Please wait for one of your commands to finish before starting a new one.");
+                // Ne pas envoyer de message d'erreur dans les groupes
+                if (!isGroup) {
+                    await bot.sendLongMessage(msg.chat.id, "You have reached the maximum number of concurrent commands. Please wait for one of your commands to finish before starting a new one.");
+                }
                 return;
             }
 
             if (!ActiveCommandsTracker.addCommand(userId, command)) {
                 logger.warn(`Failed to add command ${command} for user ${userId}. Maximum limit reached.`);
-                await bot.sendLongMessage(msg.chat.id, "You have reached the maximum number of instances for this command. Please wait for one to finish before starting a new one.");
+                // Ne pas envoyer de message d'erreur dans les groupes
+                if (!isGroup) {
+                    await bot.sendLongMessage(msg.chat.id, "You have reached the maximum number of instances for this command. Please wait for one to finish before starting a new one.");
+                }
                 return;
             }
 
@@ -305,20 +314,24 @@ bot.on('message', async (msg) => {
         // Exécution de la commande
         try {
             if (commandHandlers[command] && typeof commandHandlers[command].handleCommand === 'function') {
-                // Nouvelle logique pour les commandes gérées par CommandHandlers
                 logger.info(`Executing new command handler: ${command} for user: ${msg.from.username} (ID: ${userId}) with args: [${args}]`);
                 await commandHandlers[command].handleCommand(bot, msg, args);
             } else if (typeof commandHandler[command] === 'function') {
-                // Logique existante pour les commandes gérées par l'ancien système
                 logger.info(`Executing command: ${command} for user: ${msg.from.username} (ID: ${userId}) with args: [${args}]`);
                 await commandHandler[command](bot, msg, args);
             } else {
                 logger.error(`Command handler not found for command: ${command}`);
-                await bot.sendLongMessage(msg.chat.id, "Command not found. Please use /help to see available commands.");
+                // Ne pas envoyer de message d'erreur dans les groupes
+                if (!isGroup) {
+                    await bot.sendLongMessage(msg.chat.id, "Command not found. Please use /help to see available commands.");
+                }
             }
         } catch (error) {
             logger.error(`Error in command handler for command ${command}:`, error);
-            await bot.sendLongMessage(msg.chat.id, "An unexpected error occurred while processing the command. Please try again later.");
+            // Ne pas envoyer de message d'erreur dans les groupes
+            if (!isGroup) {
+                await bot.sendLongMessage(msg.chat.id, "An unexpected error occurred while processing the command. Please try again later.");
+            }
         } finally {
             // Supprimer la commande de la liste des commandes actives une fois terminée
             if (limitedCommands.includes(command)) {

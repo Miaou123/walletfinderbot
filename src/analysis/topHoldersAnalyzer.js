@@ -1,5 +1,5 @@
 const { getSolanaApi } = require('../integrations/solanaApi');
-const dexScreenerApi = require('../integrations/dexScreenerApi');
+const gmgnApi = require('../integrations/gmgnApi');
 const { checkInactivityPeriod } = require('../tools/inactivityPeriod');
 const { getAssetsForMultipleWallets } = require('../tools/walletValueCalculator');
 const { getTopHolders } = require('../tools/getHolders');
@@ -8,8 +8,11 @@ const config = require('../utils/config');
 const BigNumber = require('bignumber.js');
 
 async function analyzeToken(coinAddress, count, mainContext = 'default') {
-  const tokenInfo = await dexScreenerApi.getTokenInfo(coinAddress, mainContext);
-  if (!tokenInfo) throw new Error("Failed to fetch token information");
+  const tokenInfoResponse = await gmgnApi.getTokenInfo(coinAddress, mainContext);
+  if (!tokenInfoResponse || !tokenInfoResponse.data || !tokenInfoResponse.data.token) {
+    throw new Error("Failed to fetch token information");
+  }
+  const tokenInfo = tokenInfoResponse.data.token;
 
   const topHolders = await getTopHolders(coinAddress, count, mainContext, 'getTopHolders');
   const walletInfos = topHolders.map(holder => ({ address: holder.address, tokenBalance: holder.amount }));
@@ -85,7 +88,7 @@ const isLowTransactionCount = (count) => count < config.LOW_TRANSACTION_THRESHOL
 
 const formatWalletData = (walletInfo, specificTokenInfo, tokenInfo, stats) => {
   const tokenBalance = specificTokenInfo ? new BigNumber(specificTokenInfo.balance) : new BigNumber(0);
-  const supplyPercentage = calculateSupplyPercentage(tokenBalance, tokenInfo.totalSupply);
+  const supplyPercentage = calculateSupplyPercentage(tokenBalance, tokenInfo.total_supply);
   const tokenValueUsd = specificTokenInfo ? specificTokenInfo.value : 'N/A';
   const formattedInfo = `${tokenBalance.toFormat(0)} ${tokenInfo.symbol}, ${supplyPercentage}% of supply, $${tokenValueUsd} - ${stats.solBalance} SOL - ${stats.daysSinceLastRelevantSwap || 'N/A'} days since last relevant swap`;
 

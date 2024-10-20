@@ -41,6 +41,85 @@ const summarizeHolders = (categorizedWallets, tokenInfo) => {
   }
 };
 
+const formatAnalysisMessage = (analysisResult, tokenInfo) => {
+  logger.info(`Formatting early buyers message for ${tokenInfo.symbol}`);
+  const messages = [];
+  const errors = [];
+
+  try {
+    let analyzedWallets;
+    
+    // Check the structure of analysisResult
+    if (Array.isArray(analysisResult)) {
+      analyzedWallets = analysisResult;
+    } else if (analysisResult && Array.isArray(analysisResult.analyzedWallets)) {
+      analyzedWallets = analysisResult.analyzedWallets;
+    } else if (analysisResult && typeof analysisResult === 'object') {
+      // If it's an object, we'll try to extract the wallets
+      analyzedWallets = Object.values(analysisResult).flat().filter(Array.isArray);
+    } else {
+      throw new Error('Invalid analysis result: unable to find analyzed wallets');
+    }
+
+    // Catégoriser les portefeuilles
+    const categorizedWallets = {
+      'High Value': [],
+      'Low Transactions': [],
+      'Inactive': []
+    };
+
+    analyzedWallets.forEach(wallet => {
+      if (wallet.category && categorizedWallets.hasOwnProperty(wallet.category)) {
+        categorizedWallets[wallet.category].push(wallet);
+      }
+    });
+
+    let totalWhaleWallets = categorizedWallets['High Value'].length;
+    let totalWhaleSupplyPercentage = categorizedWallets['High Value'].reduce((sum, wallet) => sum + parseFloat(wallet.supplyPercentage || 0), 0);
+    let totalWhaleValue = categorizedWallets['High Value'].reduce((sum, wallet) => sum + parseFloat(wallet.tokenValueUsd || 0), 0);
+
+    let freshWallets = categorizedWallets['Low Transactions'].length;
+    let freshWalletsSupplyPercentage = categorizedWallets['Low Transactions'].reduce((sum, wallet) => sum + parseFloat(wallet.supplyPercentage || 0), 0);
+    let freshWalletsValue = categorizedWallets['Low Transactions'].reduce((sum, wallet) => sum + parseFloat(wallet.tokenValueUsd || 0), 0);
+
+    let inactiveWallets = categorizedWallets['Inactive'].length;
+    let inactiveWalletsSupplyPercentage = categorizedWallets['Inactive'].reduce((sum, wallet) => sum + parseFloat(wallet.supplyPercentage || 0), 0);
+    let inactiveWalletsValue = categorizedWallets['Inactive'].reduce((sum, wallet) => sum + parseFloat(wallet.tokenValueUsd || 0), 0);
+
+    let summaryMessage = `<b><a href="https://solscan.io/token/${tokenInfo.address}">${tokenInfo.name}</a></b> (${tokenInfo.symbol}) `;
+    summaryMessage += `<a href="https://dexscreener.com/solana/${tokenInfo.address}">📈</a>\n`;
+    summaryMessage += `<code>${tokenInfo.address}</code>\n\n`;
+
+    summaryMessage += `🐳 ${totalWhaleWallets} whales wallets (calculated excluding ${tokenInfo.symbol}) (${totalWhaleSupplyPercentage.toFixed(2)}% worth $${formatNumber(totalWhaleValue)})\n`;
+    summaryMessage += `🆕 ${freshWallets} fresh wallets (${freshWalletsSupplyPercentage.toFixed(2)}% worth $${formatNumber(freshWalletsValue)})\n`;
+    summaryMessage += `💤 ${inactiveWallets} inactive wallets (${inactiveWalletsSupplyPercentage.toFixed(2)}% worth $${formatNumber(inactiveWalletsValue)})`;
+
+    messages.push(summaryMessage);
+
+    const whaleMessage = formatWhaleMap({categorizedWallets}, tokenInfo, 'High Value', '🐳 Whale Wallets');
+    if (whaleMessage) {
+      messages.push(whaleMessage);
+    }
+
+    const freshWalletMessage = formatFreshWalletMessage({categorizedWallets}, tokenInfo);
+    if (freshWalletMessage) {
+      messages.push(freshWalletMessage);
+    }
+
+    const inactiveWalletMessage = formatInactiveWalletMessage({categorizedWallets}, tokenInfo);
+    if (inactiveWalletMessage) {
+      messages.push(inactiveWalletMessage);
+    }
+
+  } catch (error) {
+    logger.error('Error in formatAnalysisMessage:', error);
+    errors.push(`Error in analysis formatting: ${error.message}`);
+    messages.push('An error occurred while formatting the analysis results.');
+  }
+
+  return { messages, errors };
+};
+
 const formatSingleWallet = (wallet, index, tokenInfo) => {
   try {
     const rank = index + 1;
@@ -160,72 +239,7 @@ const formatInactiveWalletMessage = (analysisResult, tokenInfo) => {
   }
 };
 
-const formatAnalysisMessage = (analysisResult, tokenInfo) => {
 
-  logger.info(`Formatting early buyers message for ${tokenInfo.symbol}`);
-  const messages = [];
-  const errors = [];
-
-  try {
-    if (!Array.isArray(analysisResult)) {
-      throw new Error('Invalid analysis result: expected an array');
-    }
-
-    // Catégoriser les portefeuilles
-    const categorizedWallets = {
-      'High Value': [],
-      'Low Transactions': [],
-      'Inactive': []
-    };
-
-    analysisResult.forEach(wallet => {
-      if (wallet.category && categorizedWallets.hasOwnProperty(wallet.category)) {
-        categorizedWallets[wallet.category].push(wallet);
-      }
-    });
-
-    let totalWhaleWallets = categorizedWallets['High Value'].length;
-    let totalWhaleSupplyPercentage = categorizedWallets['High Value'].reduce((sum, wallet) => sum + parseFloat(wallet.supplyPercentage), 0);
-    let totalWhaleValue = categorizedWallets['High Value'].reduce((sum, wallet) => sum + parseFloat(wallet.tokenValueUsd), 0);
-
-    let freshWallets = categorizedWallets['Low Transactions'].length;
-    let freshWalletsSupplyPercentage = categorizedWallets['Low Transactions'].reduce((sum, wallet) => sum + parseFloat(wallet.supplyPercentage), 0);
-    let freshWalletsValue = categorizedWallets['Low Transactions'].reduce((sum, wallet) => sum + parseFloat(wallet.tokenValueUsd), 0);
-
-    let inactiveWallets = categorizedWallets['Inactive'].length;
-    let inactiveWalletsSupplyPercentage = categorizedWallets['Inactive'].reduce((sum, wallet) => sum + parseFloat(wallet.supplyPercentage), 0);
-    let inactiveWalletsValue = categorizedWallets['Inactive'].reduce((sum, wallet) => sum + parseFloat(wallet.tokenValueUsd), 0);
-
-    let summaryMessage = `Analysis completed, interesting wallets found: ${analysisResult.length}\n\n`;
-    summaryMessage += `🐳 ${totalWhaleWallets} whales wallets (calculated excluding ${tokenInfo.symbol}) (${totalWhaleSupplyPercentage.toFixed(2)}% worth $${formatNumber(totalWhaleValue)})\n`;
-    summaryMessage += `🆕 ${freshWallets} fresh wallets (${freshWalletsSupplyPercentage.toFixed(2)}% worth $${formatNumber(freshWalletsValue)})\n`;
-    summaryMessage += `💤 ${inactiveWallets} inactive wallets (${inactiveWalletsSupplyPercentage.toFixed(2)}% worth $${formatNumber(inactiveWalletsValue)})`;
-
-    messages.push(summaryMessage);
-
-    const whaleMessage = formatWhaleMap({categorizedWallets}, tokenInfo, 'High Value', '🐳 Whale Wallets');
-    if (whaleMessage) {
-      messages.push(whaleMessage);
-    }
-
-    const freshWalletMessage = formatFreshWalletMessage({categorizedWallets}, tokenInfo, '🆕 Fresh Wallets');
-    if (freshWalletMessage) {
-      messages.push(freshWalletMessage);
-    }
-
-    const inactiveWalletMessage = formatInactiveWalletMessage({categorizedWallets}, tokenInfo, '💤 Inactive Wallets');
-    if (inactiveWalletMessage) {
-      messages.push(inactiveWalletMessage);
-    }
-
-  } catch (error) {
-    logger.error('Error in formatAnalysisMessage:', error);
-    errors.push(`Error in analysis formatting: ${error.message}`);
-    messages.push('An error occurred while formatting the analysis results.');
-  }
-
-  return { messages, errors };
-};
 
 module.exports = {
   formatNumber,

@@ -1,9 +1,10 @@
 const { getSolanaApi } = require('../integrations/solanaApi');
-const dexScreenerApi = require('../integrations/dexScreenerApi');
+const gmgnApi = require('../integrations/gmgnApi');
 const { getAssetsForMultipleWallets } = require('../tools/walletValueCalculator');
 const { checkInactivityPeriod } = require('../tools/inactivityPeriod');
 const { getHolders, getTopHolders } = require('../tools/getHolders');
 const { fetchMultipleWallets } = require('../tools/walletChecker');
+const { analyzeWallet } = require('../tools/poolAndBotDetector');
 const config = require('../utils/config');
 const BigNumber = require('bignumber.js');
 const logger = require('../utils/logger');
@@ -11,15 +12,21 @@ const logger = require('../utils/logger');
 async function scanToken(tokenAddress, requestedHolders = 10, trackSupply = false, mainContext = 'default') {
   logger.debug(`Starting scan for token ${tokenAddress}`, { requestedHolders, trackSupply, mainContext });
 
-  const tokenInfo = await dexScreenerApi.getTokenInfo(tokenAddress, mainContext);
+  const tokenInfoResponse = await gmgnApi.getTokenInfo(tokenAddress, mainContext);
+  if (!tokenInfoResponse || !tokenInfoResponse.data || !tokenInfoResponse.data.token) {
+    throw new Error("Failed to fetch token information");
+  }
+  const tokenInfo = tokenInfoResponse.data.token;
+
   const topHolders = await getTopHolders(tokenAddress, requestedHolders, mainContext, 'getTopHolders');
   const walletAddresses = topHolders.map(holder => holder.address);
   const assetsData = await getAssetsForMultipleWallets(walletAddresses, mainContext, 'getAssets');
+  
   const analyzedWallets = await Promise.all(topHolders.map(async (holder, index) => {
     try {
       const walletData = assetsData[holder.address] || {};
       const decimals = tokenInfo.decimals;
-      const totalSupply = new BigNumber(tokenInfo.totalSupply || 0);
+      const totalSupply = new BigNumber(tokenInfo.total_supply || 0);
       const tokenBalanceRaw = new BigNumber(holder.tokenBalance || 0);
       const tokenBalance = tokenBalanceRaw.dividedBy(new BigNumber(10).pow(decimals));
       const supplyPercentage = totalSupply.isGreaterThan(0) ? 
@@ -31,61 +38,70 @@ async function scanToken(tokenAddress, requestedHolders = 10, trackSupply = fals
       const totalValue = new BigNumber(walletData.totalValue || 0);
       const portfolioValueWithoutToken = totalValue.minus(tokenValue);
 
-      let isInteresting = false;
-      let category = '';
+     // Analyse du wallet pour détecter si c'est un bot ou un pool
+     logger.info(`Analyzing wallet ${holder.address} for pool or bot detection`);
+     const walletAnalysis = await analyzeWallet(walletData, holder.address, mainContext);
+     logger.info(`Wallet ${holder.address} analysis result:`, walletAnalysis);
 
-      // Check if it's a high value wallet (whale)
-      if (portfolioValueWithoutToken.isGreaterThan(config.HIGH_WALLET_VALUE_THRESHOLD)) {
-        isInteresting = true;
-        category = 'High Value';
-      } else {
-        // Check if it's a fresh wallet
-        const solanaApi = getSolanaApi();
-        const transactions = await solanaApi.getSignaturesForAddress(holder.address, { limit: config.LOW_TRANSACTION_THRESHOLD + 1 }, mainContext);
-        const transactionCount = transactions.length;
+     let isInteresting = false;
+     let category = '';
 
-        if (transactionCount < config.LOW_TRANSACTION_THRESHOLD) {
-          isInteresting = true;
-          category = 'Fresh Address';
-        } else {
-            // Check inactivity period
-            const inactivityCheck = await checkInactivityPeriod(holder.address, tokenAddress, mainContext, 'checkInactivity');
-          if (inactivityCheck.isInactive) {
-            isInteresting = true;
-            category = 'Inactive';
-          }
-        }
-      }
+     if (walletAnalysis.type === 'pool' || walletAnalysis.type === 'bot') {
+       isInteresting = true;
+       category = walletAnalysis.type === 'bot' ? 'Bot' : 'Pool';
+     } else {
+       // Vérifications existantes pour les wallets normaux
+       if (portfolioValueWithoutToken.isGreaterThan(config.HIGH_WALLET_VALUE_THRESHOLD)) {
+         isInteresting = true;
+         category = 'High Value';
+       } else {
+         const solanaApi = getSolanaApi();
+         const transactions = await solanaApi.getSignaturesForAddress(holder.address, { limit: config.LOW_TRANSACTION_THRESHOLD + 1 }, mainContext);
+         const transactionCount = transactions.length;
 
-      return {
-        rank: index + 1,
-        address: holder.address,
-        supplyPercentage,
-        solBalance: walletData.solBalance || '0',
-        portfolioValue: walletData.totalValue || '0',
-        portfolioValueWithoutToken: portfolioValueWithoutToken.toFixed(2),
-        isInteresting,
-        category,
-        tokenBalance: tokenBalance.toFormat(0),
-        tokenValue: tokenValue.toFixed(2),
-        tokenInfos: walletData.tokenInfos || []
-      };
-    } catch (error) {
-      console.error(`Error analyzing wallet ${holder.address}:`, error);
-      return {
-        rank: index + 1,
-        address: holder.address,
-        error: 'Failed to analyze'
-      };
-    }
-  }));
+         if (transactionCount < config.LOW_TRANSACTION_THRESHOLD) {
+           isInteresting = true;
+           category = 'Fresh Address';
+         } else {
+           const inactivityCheck = await checkInactivityPeriod(holder.address, tokenAddress, mainContext, 'checkInactivity');
+           if (inactivityCheck.isInactive) {
+             isInteresting = true;
+             category = 'Inactive';
+           }
+         }
+       }
+     }
+
+     return {
+       rank: index + 1,
+       address: holder.address,
+       supplyPercentage,
+       solBalance: walletData.solBalance || '0',
+       portfolioValue: walletData.totalValue || '0',
+       portfolioValueWithoutToken: portfolioValueWithoutToken.toFixed(2),
+       isInteresting,
+       category,
+       walletType: walletAnalysis.type,
+       poolType: walletAnalysis.subType,
+       tokenBalance: tokenBalance.toFormat(0),
+       tokenValue: tokenValue.toFixed(2),
+       tokenInfos: walletData.tokenInfos || []
+     };
+   } catch (error) {
+     logger.error(`Error analyzing wallet ${holder.address}:`, error);
+     return {
+       rank: index + 1,
+       address: holder.address,
+       error: 'Failed to analyze'
+     };
+   }
+ }));
 
   // 5. Filtrer les wallets
   const filteredWallets = analyzedWallets.filter(wallet => {
     if (wallet.error) return false;
-    const isNotPoolOrBot = !wallet.isPool && !wallet.isBot;
     const hasValidValue = new BigNumber(wallet.portfolioValue).isGreaterThan(0);
-    return isNotPoolOrBot && hasValidValue;
+    return hasValidValue;
   });
 
   // 6. Process all wallets with walletChecker
@@ -130,16 +146,16 @@ async function scanToken(tokenAddress, requestedHolders = 10, trackSupply = fals
 }
 
 function formatScanResult(tokenInfo, finalWallets, totalSupplyControlled, averagePortfolioValue, notableAddresses, tokenAddress) {
-  let result = `<b><a href="https://solscan.io/token/${tokenAddress}">${(tokenInfo.name)}</a></b> (${(tokenInfo.symbol)}) `;
+  let result = `<b><a href="https://solscan.io/token/${tokenAddress}">${tokenInfo.name}</a></b> (${tokenInfo.symbol}) `;
   result += `<a href="https://dexscreener.com/solana/${tokenAddress}">📈</a>\n`;
-  result += `<code>${(tokenAddress)}</code>\n\n`;
+  result += `<code>${tokenAddress}</code>\n\n`;
 
   if (finalWallets.length === 0) {
     result += "<strong>No valid holders found after filtering.</strong>\n";
     return result;
   }
 
-  result += `<strong>Top ${finalWallets.length} holders analysis (excluding liquidity pools and bots):</strong>\n`;
+  result += `<strong>Top ${finalWallets.length} holders analysis:</strong>\n`;
   result += `👥 Supply Controlled: ${totalSupplyControlled.toFixed(2)}%\n`;
   result += `💰 Average portfolio Value: $${(averagePortfolioValue / 1000).toFixed(2)}K\n`;
   result += `❗️ Notable Addresses: ${notableAddresses}\n\n`;
@@ -153,11 +169,15 @@ function formatScanResult(tokenInfo, finalWallets, totalSupplyControlled, averag
 }
 
 function formatWalletInfo(wallet, index) {
-  let info = `${index + 1} - <a href="https://solscan.io/account/${wallet.address}">${(wallet.address.substring(0, 6))}...${(wallet.address.slice(-4))}</a> → (${(wallet.supplyPercentage)}%) ${getHoldingEmoji(wallet)}\n`;
+  let info = `${index + 1} - <a href="https://solscan.io/account/${wallet.address}">${wallet.address.substring(0, 6)}...${wallet.address.slice(-4)}</a> → (${wallet.supplyPercentage}%) ${getWalletTypeEmoji(wallet)}\n`;
   
   if (wallet.isInteresting) {
     const categoryEmoji = getCategoryEmoji(wallet.category);
-    info += `├ ${categoryEmoji} ${wallet.category}\n`;
+    let categoryInfo = `${categoryEmoji} ${wallet.category}`;
+    if (wallet.category === 'Pool' && wallet.poolType) {
+      categoryInfo += ` (${wallet.poolType})`;
+    }
+    info += `├ ${categoryInfo}\n`;
   }
   
   info += `├ 💳 Sol: ${wallet.solBalance}\n`;
@@ -176,25 +196,36 @@ function formatWalletInfo(wallet, index) {
     }
   }
 
-  function getCategoryEmoji(category) {
-    switch (category) {
-      case 'High Value':
-        return '💰';
-      case 'Fresh Address':
-        return '🆕';
-      case 'Inactive':
-        return '💤';
-      default:
-        return '❗️'; 
-    }
-  }
-
   info += '\n\n';
   return info;
 }
 
-function formatNumber(num) {
-  return num.toLocaleString('en-US', { maximumFractionDigits: 0 });
+function getWalletTypeEmoji(wallet) {
+  switch (wallet.walletType) {
+    case 'bot':
+      return '🤖';
+    case 'pool':
+      return '💧';
+    default:
+      return getHoldingEmoji(wallet);
+  }
+}
+
+function getCategoryEmoji(category, poolType) {
+  switch (category) {
+    case 'High Value':
+      return '💰';
+    case 'Fresh Address':
+      return '🆕';
+    case 'Inactive':
+      return '💤';
+    case 'Bot':
+      return '🤖';
+    case 'Pool':
+      return '💧';
+    default:
+      return '❗️'; 
+  }
 }
 
 function getHoldingEmoji(wallet) {
