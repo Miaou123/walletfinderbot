@@ -100,6 +100,7 @@ async function scanToken(tokenAddress, requestedHolders = 10, trackSupply = fals
   // 5. Filtrer les wallets
   const filteredWallets = analyzedWallets.filter(wallet => {
     if (wallet.error) return false;
+    if (wallet.walletType === 'pool') return true; // Toujours inclure les pools
     const hasValidValue = new BigNumber(wallet.portfolioValue).isGreaterThan(0);
     return hasValidValue;
   });
