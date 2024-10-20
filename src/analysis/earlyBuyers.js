@@ -195,28 +195,33 @@ const analyzeEarlyBuyers = async (coinAddress, minPercentage, timeFrameHours, to
         for (const [wallet, data] of qualifiedWallets) {
             try {
                 const walletData = walletAnalysis.find(w => w.wallet === wallet);
-                if (walletData?.data?.data && !analyzeWallet(walletData.data.data)) {
-                    // Ajuster les montants et calculer les valeurs en USD ici
-                    const adjustedBoughtToken = data.bought_amount_token * Math.pow(10, -tokenDecimals);
-                    const adjustedSoldToken = data.sold_amount_token * Math.pow(10, -tokenDecimals);
-                    const adjustedBoughtSol = data.bought_amount_sol * Math.pow(10, -solDecimals);
-                    const adjustedSoldSol = data.sold_amount_sol * Math.pow(10, -solDecimals);
-                    const buyAmountUsd = adjustedBoughtSol * solPrice;
-                    const sellAmountUsd = adjustedSoldSol * solPrice;
-    
-                    filteredEarlyBuyers.push({
-                        wallet,
-                        bought_amount_token: adjustedBoughtToken,
-                        sold_amount_token: adjustedSoldToken,
-                        bought_amount_sol: adjustedBoughtSol,
-                        sold_amount_sol: adjustedSoldSol,
-                        bought_amount_usd: buyAmountUsd,
-                        sold_amount_usd: sellAmountUsd,
-                        dex: data.dex || null,
-                        walletInfo: walletData.data.data
-                    });
+                if (walletData?.data?.data) {
+                    const analysis = await analyzeWallet(walletData.data.data, wallet, mainContext);
+                    if (analysis.type === 'normal') {
+                        // Ajuster les montants et calculer les valeurs en USD ici
+                        const adjustedBoughtToken = data.bought_amount_token * Math.pow(10, -tokenDecimals);
+                        const adjustedSoldToken = data.sold_amount_token * Math.pow(10, -tokenDecimals);
+                        const adjustedBoughtSol = data.bought_amount_sol * Math.pow(10, -solDecimals);
+                        const adjustedSoldSol = data.sold_amount_sol * Math.pow(10, -solDecimals);
+                        const buyAmountUsd = adjustedBoughtSol * solPrice;
+                        const sellAmountUsd = adjustedSoldSol * solPrice;
+        
+                        filteredEarlyBuyers.push({
+                            wallet,
+                            bought_amount_token: adjustedBoughtToken,
+                            sold_amount_token: adjustedSoldToken,
+                            bought_amount_sol: adjustedBoughtSol,
+                            sold_amount_sol: adjustedSoldSol,
+                            bought_amount_usd: buyAmountUsd,
+                            sold_amount_usd: sellAmountUsd,
+                            dex: data.dex || null,
+                            walletInfo: walletData.data.data
+                        });
+                    } else {
+                        logger.debug(`Wallet excluded or identified as ${analysis.type}: ${wallet}`);
+                    }
                 } else {
-                    logger.debug(`Wallet excluded or identified as bot: ${wallet}`);
+                    logger.debug(`No valid data found for wallet: ${wallet}`);
                 }
             } catch (error) {
                 logger.error(`Error processing wallet ${wallet}:`, error);
