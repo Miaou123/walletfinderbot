@@ -14,8 +14,6 @@ function formatCrossBtResponse(analysisResults, tokenAddresses) {
     });
     message += '\n';
 
-    message += `<b>Common traders across all tokens:</b> ${analysisResults.commonTraders.length}\n\n`;
-
     analysisResults.commonTraders.forEach((trader, index) => {
         try {
             logger.debug(`Formatting trader info for trader ${index + 1}: ${JSON.stringify(trader)}`);
