@@ -328,7 +328,6 @@ bot.on('message', async (msg) => {
         }
     } else {
         try {
-            logger.info(`Handling non-command message from user: ${msg.from.username}`);
             await commandHandler.handleMessage(bot, msg, messageThreadId);
         } catch (error) {
             logger.error(`Error handling non-command message:`, error);
@@ -388,8 +387,13 @@ bot.onText(/\/removeuser (.+)/, async (msg, match) => {
 });
 
 bot.onText(/^\/broadcast/, async (msg) => {
-    await commandHandlers.broadcastHandler.handleBroadcastCommand(bot, msg);
-  });
+    try {
+        await commandHandlers.broadcastHandler.handleBroadcastCommand(bot, msg);
+    } catch (error) {
+        logger.error('Error in broadcast command:', error);
+        await bot.sendMessage(msg.chat.id, "An error occurred while processing the broadcast command.");
+    }
+});
 
 // Usage stats command
 bot.onText(/\/usagestats/, async (msg) => {

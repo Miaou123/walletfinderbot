@@ -14,7 +14,7 @@ const formatNumber = (number, decimals = 1, isPercentage = false) => {
   let formattedNumber;
 
   if (isPercentage) {
-    formattedNumber = (number * 100).toFixed(2) + '%';
+    formattedNumber = number.toFixed(2) + '%';
   } else if (absNumber >= 1e6) {
     formattedNumber = (number / 1e6).toFixed(decimals) + 'M';
   } else if (absNumber >= 1e3) {

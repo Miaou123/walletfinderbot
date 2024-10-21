@@ -98,6 +98,8 @@ class UnifiedBundleAnalyzer {
             priceUsd: gmgnTokenInfo.data.token.price,
         };
 
+        logger.debug(`Token info: ${JSON.stringify(tokenInfo)}`);
+
         const totalSupply = parseFloat(tokenInfo.totalSupply);
 
         if (isTeamAnalysis) {
@@ -180,8 +182,10 @@ class UnifiedBundleAnalyzer {
     async performRegularAnalysis(filteredBundles, tokenInfo, totalSupply, address) {
         const totalTokensBundled = filteredBundles.reduce((sum, bundle) => sum + bundle.tokensBought, 0);
         const totalSolSpent = filteredBundles.reduce((sum, bundle) => sum + bundle.solSpent, 0);
-
+        logger.debug(`totalTokensBundled: ${totalTokensBundled}`);
+        logger.debug(`totalSupply: ${totalSupply}`);
         const percentageBundled = (totalTokensBundled / totalSupply) * 100;
+        logger.debug(`percentageBundled (calculated): ${percentageBundled}`);
 
         const allBundles = await Promise.all(filteredBundles.map(async (bundle, index) => {
             const holdingAmounts = await Promise.all(
