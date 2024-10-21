@@ -2,7 +2,7 @@ const { fetchMultipleWallets } = require('../tools/walletChecker');
 const definedApi = require('../integrations/definedApi');
 const pumpfunApi = require('../integrations/pumpfunApi');
 const logger = require('../utils/logger');
-const { analyzeWallet  } = require('../tools/poolAndBotDetector');
+const PoolAndBotDetector  = require('../tools/poolAndBotDetector');
 
 const processPumpfunTransactions = (transactions, walletsData) => {
     logger.debug(`Processing ${transactions.length} Pumpfun transactions`);
@@ -80,7 +80,7 @@ const updateWalletData = (walletsData, wallet, tokenAmount, solAmount, isBuy, de
 };
 
 const analyzeEarlyBuyers = async (coinAddress, minPercentage, timeFrameHours, tokenInfo, mainContext = 'default', pumpFlag = '') => {
-    
+    const detector = new PoolAndBotDetector();
     try {
         const walletsData = new Map();
         const isPumpfunToken = coinAddress.endsWith('pump');
@@ -186,26 +186,40 @@ const analyzeEarlyBuyers = async (coinAddress, minPercentage, timeFrameHours, to
             })
         );
 
-        const walletAddresses = Array.from(qualifiedWallets.keys());
-        logger.debug(`Fetching wallet analysis for ${walletAddresses.length} addresses`);
-        const walletAnalysis = await fetchMultipleWallets(walletAddresses, 5, mainContext, 'fetchEarlyBuyers');
-
+        const qualifiedWalletsArray = Array.from(qualifiedWallets.entries());
+        const batchSize = 10; // Ajustez cette valeur selon vos besoins
         const filteredEarlyBuyers = [];
 
-        for (const [wallet, data] of qualifiedWallets) {
+        for (let i = 0; i < qualifiedWalletsArray.length; i += batchSize) {
+            const batch = qualifiedWalletsArray.slice(i, i + batchSize);
+            const walletAddresses = batch.map(([wallet]) => wallet);
+            
             try {
-                const walletData = walletAnalysis.find(w => w.wallet === wallet);
-                if (walletData?.data?.data) {
-                    const analysis = await analyzeWallet(walletData.data.data, wallet, mainContext);
-                    if (analysis.type === 'normal') {
-                        // Ajuster les montants et calculer les valeurs en USD ici
+                const walletAnalysisBatch = await fetchMultipleWallets(walletAddresses, 5, mainContext, 'fetchEarlyBuyers');
+                const analysisTasks = walletAnalysisBatch.map(async walletData => {
+                    if (walletData?.data) {
+                        return detector.analyzeWallet({
+                            wallet: walletData.wallet,
+                            data: walletData.data
+                        }, mainContext);
+                    }
+                    return null;
+                });
+
+                const analysisResults = await Promise.all(analysisTasks);
+
+                analysisResults.forEach((analysis, index) => {
+                    if (analysis && analysis.type === 'normal') {
+                        const [wallet, data] = batch[index];
+                        const walletData = walletAnalysisBatch[index];
+
                         const adjustedBoughtToken = data.bought_amount_token * Math.pow(10, -tokenDecimals);
                         const adjustedSoldToken = data.sold_amount_token * Math.pow(10, -tokenDecimals);
                         const adjustedBoughtSol = data.bought_amount_sol * Math.pow(10, -solDecimals);
                         const adjustedSoldSol = data.sold_amount_sol * Math.pow(10, -solDecimals);
                         const buyAmountUsd = adjustedBoughtSol * solPrice;
                         const sellAmountUsd = adjustedSoldSol * solPrice;
-        
+
                         filteredEarlyBuyers.push({
                             wallet,
                             bought_amount_token: adjustedBoughtToken,
@@ -217,14 +231,12 @@ const analyzeEarlyBuyers = async (coinAddress, minPercentage, timeFrameHours, to
                             dex: data.dex || null,
                             walletInfo: walletData.data.data
                         });
-                    } else {
-                        logger.debug(`Wallet excluded or identified as ${analysis.type}: ${wallet}`);
+                    } else if (analysis) {
+                        logger.debug(`Wallet excluded or identified as ${analysis.type}: ${batch[index][0]}`);
                     }
-                } else {
-                    logger.debug(`No valid data found for wallet: ${wallet}`);
-                }
+                });
             } catch (error) {
-                logger.error(`Error processing wallet ${wallet}:`, error);
+                logger.error(`Error processing batch of wallets:`, error);
             }
         }
     
