@@ -4,7 +4,7 @@ const { getAssetsForMultipleWallets } = require('../tools/walletValueCalculator'
 const { checkInactivityPeriod } = require('../tools/inactivityPeriod');
 const { getHolders, getTopHolders } = require('../tools/getHolders');
 const { fetchMultipleWallets } = require('../tools/walletChecker');
-const { analyzeWallet } = require('../tools/poolAndBotDetector');
+const PoolAndBotDetector = require('../tools/poolAndBotDetector');
 const config = require('../utils/config');
 const BigNumber = require('bignumber.js');
 const logger = require('../utils/logger');
@@ -21,6 +21,8 @@ async function scanToken(tokenAddress, requestedHolders = 10, trackSupply = fals
   const topHolders = await getTopHolders(tokenAddress, requestedHolders, mainContext, 'getTopHolders');
   const walletAddresses = topHolders.map(holder => holder.address);
   const assetsData = await getAssetsForMultipleWallets(walletAddresses, mainContext, 'getAssets');
+
+  const detector = new PoolAndBotDetector();
   
   const analyzedWallets = await Promise.all(topHolders.map(async (holder, index) => {
     try {
@@ -38,18 +40,21 @@ async function scanToken(tokenAddress, requestedHolders = 10, trackSupply = fals
       const totalValue = new BigNumber(walletData.totalValue || 0);
       const portfolioValueWithoutToken = totalValue.minus(tokenValue);
 
-     // Analyse du wallet pour détecter si c'est un bot ou un pool
-     logger.info(`Analyzing wallet ${holder.address} for pool or bot detection`);
-     const walletAnalysis = await analyzeWallet(walletData, holder.address, mainContext);
-     logger.info(`Wallet ${holder.address} analysis result:`, walletAnalysis);
+      // Analyse du wallet pour détecter si c'est un bot ou un pool
+      logger.info(`Analyzing wallet ${holder.address} for pool or bot detection`);
+      const walletAnalysis = await detector.analyzeWallet({
+        wallet: holder.address,
+        data: { data: walletData }
+      }, mainContext);
+      logger.info(`Wallet ${holder.address} analysis result:`, walletAnalysis);
 
-     let isInteresting = false;
-     let category = '';
+      let isInteresting = false;
+      let category = '';
 
-     if (walletAnalysis.type === 'pool' || walletAnalysis.type === 'bot') {
-       isInteresting = true;
-       category = walletAnalysis.type === 'bot' ? 'Bot' : 'Pool';
-     } else {
+      if (walletAnalysis.type === 'pool' || walletAnalysis.type === 'bot') {
+        isInteresting = false;
+        category = walletAnalysis.type === 'bot' ? 'Bot' : 'Pool';
+      } else {
        // Vérifications existantes pour les wallets normaux
        if (portfolioValueWithoutToken.isGreaterThan(config.HIGH_WALLET_VALUE_THRESHOLD)) {
          isInteresting = true;

@@ -83,6 +83,16 @@ const validateSolanaAddress = (address) => {
       usage: '/cross [contract_address1] [contract_address2] ... [Combined_value_min]($10000)*',
       helpMessage: 'Search for wallets that hold multiple coins. You can analyze up to 5 coins with a minimum combined value (default is $10000).\n\nThis command helps identify wallets that have significant holdings across multiple tokens.'
     },
+    'crossbt': { 
+      aliases: ['cbt'], 
+      minArgs: 2, 
+      maxArgs: 3, 
+      requiresAuth: true, 
+      description: 'Cross-analyze top traders of multiple tokens', 
+      dailyLimit: 20,
+      usage: '/crossbt [contract_address1] [contract_address2] [contract_address3]*',
+      helpMessage: 'Analyze and compare the top 100 traders across 2 or 3 tokens to find common wallets. This command will help you find the best traders across a meta or wallets from team/insiders involved in multiple coins. You can analyze up to 3 coins.'
+    },
     'team': { 
       aliases: ['t'], 
       minArgs: 1, 

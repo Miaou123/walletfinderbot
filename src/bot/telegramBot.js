@@ -302,9 +302,10 @@ bot.on('message', async (msg) => {
         }
 
         try {
-            if (commandHandlers[command] && typeof commandHandlers[command].handleCommand === 'function') {
+            const handlerName = command.toLowerCase();
+            if (commandHandlers[handlerName] && typeof commandHandlers[handlerName].handleCommand === 'function') {
                 logger.info(`Executing new command handler: ${command} for user: ${msg.from.username} (ID: ${userId}) with args: [${args}]`);
-                await commandHandlers[command].handleCommand(bot, msg, args, messageThreadId);
+                await commandHandlers[handlerName].handleCommand(bot, msg, args, messageThreadId);
             } else if (typeof commandHandler[command] === 'function') {
                 logger.info(`Executing command: ${command} for user: ${msg.from.username} (ID: ${userId}) with args: [${args}]`);
                 await commandHandler[command](bot, msg, args, messageThreadId);
