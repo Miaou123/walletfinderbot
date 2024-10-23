@@ -21,9 +21,6 @@ const formatNumber = (number, decimals = 1, isPercentage = false) => {
     formattedNumber = (number / 1e3).toFixed(decimals) + 'k';
   } else if (absNumber >= 1) {
     formattedNumber = number.toFixed(decimals);
-  } else {
-    // Pour les très petits nombres, utilisez la notation scientifique
-    formattedNumber = number.toExponential(decimals);
   }
 
   formattedNumber = formattedNumber.replace(/\.0+([kM%])?$/, '$1');
