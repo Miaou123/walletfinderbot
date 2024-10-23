@@ -1,45 +1,5 @@
-const { formatNumber } = require('./generalFormatters');
+const { formatNumber, truncateAddress  } = require('./generalFormatters');
 const logger = require('../../utils/logger');
-
-const getHoldingEmoji = (wallet) => {
-  try {
-    const totalValue = parseFloat(wallet.stats.totalValue);
-    if (totalValue > 100000) return '🐳';
-    if (totalValue > 50000) return '🦈';
-    if (totalValue > 10000) return '🐬';
-    if (totalValue > 1000) return '🐟';
-    return '🦐';
-  } catch (error) {
-    logger.error('Error in getHoldingEmoji:', error);
-    return '❓';
-  }
-};
-
-const summarizeHolders = (categorizedWallets, tokenInfo) => {
-  try {
-    const summary = {
-      '🐳 (> $100K)': 0,
-      '🦈 ($50K - $100K)': 0,
-      '🐬 ($10K - $50K)': 0,
-      '🐟 ($1K - $10K)': 0,
-      '🦐 ($0 - $1K)': 0
-    };
-
-    Object.values(categorizedWallets).flat().forEach(wallet => {
-      const usdValue = wallet.stats.totalValue ? parseFloat(wallet.stats.totalValue) : (parseFloat(wallet.solBalance) * tokenInfo.solPrice);
-      if (usdValue > 100000) summary['🐳 (> $100K)']++;
-      else if (usdValue > 50000) summary['🦈 ($50K - $100K)']++;
-      else if (usdValue > 10000) summary['🐬 ($10K - $50K)']++;
-      else if (usdValue > 1000) summary['🐟 ($1K - $10K)']++;
-      else summary['🦐 ($0 - $1K)']++;
-    });
-
-    return summary;
-  } catch (error) {
-    logger.error('Error in summarizeHolders:', error);
-    return {};
-  }
-};
 
 const formatAnalysisMessage = (analysisResult, tokenInfo) => {
   logger.info(`Formatting early buyers message for ${tokenInfo.symbol}`);
@@ -123,21 +83,29 @@ const formatAnalysisMessage = (analysisResult, tokenInfo) => {
 const formatSingleWallet = (wallet, index, tokenInfo) => {
   try {
     const rank = index + 1;
-    const emoji = getHoldingEmoji(wallet);
-    const shortAddress = `${wallet.address.substring(0, 6)}...${wallet.address.slice(-4)}`;
+    const portfolioValue = parseFloat(wallet.stats.totalValue);
     
-    let result = `${rank} - <a href="https://solscan.io/account/${wallet.address}">${shortAddress}</a> → (${wallet.supplyPercentage}%)\n`;
-    
-    result += `├ 💳 Sol: ${wallet.solBalance}\n`;
+    // 1. Ligne principale avec adresse, pourcentage et liens
+    let info = `${rank}. ${truncateAddress(wallet.address)} → ${formatNumber(wallet.supplyPercentage, 2, true)} ` +
+               `<a href="https://gmgn.ai/sol/address/${wallet.address}">gmgn</a>/` +
+               `<a href="https://app.cielo.finance/profile/${wallet.address}/pnl/tokens">cielo</a>\n`;
 
-    // Ajouter les informations du wallet checker si elles sont disponibles
-    if (wallet.winrate !== undefined && wallet.pnl30d !== undefined && wallet.unrealizedPnl !== undefined) {
-      result += `├ 💰 P/L (30d): $${formatNumber(wallet.pnl30d)} 📈 uP/L: $${formatNumber(wallet.unrealizedPnl)}\n`;
-      result += `├ 📊 Winrate (30d): ${wallet.winrate.toFixed(2)}%\n`;
+    // 2. Portfolio et SOL
+    info += `├ 💼 Port: ${formatNumber(portfolioValue)} (SOL: ${formatNumber(wallet.solBalance, 2)})\n`;
+
+    // 3. P/L et unrealized P/L si disponible
+    if (wallet.pnl30d !== undefined && wallet.unrealizedPnl !== undefined) {
+      info += `├ 💰 P/L (30d): ${formatNumber(wallet.pnl30d)} 📈 uP/L: ${formatNumber(wallet.unrealizedPnl)}\n`;
     }
 
-    result += `└ 💲 Port: $${formatNumber(parseFloat(wallet.stats.totalValue))}`;
+    // 4. Winrate si disponible
+    if (wallet.winrate !== undefined) {
+      info += `└ 📊 Winrate (30d): ${formatNumber(wallet.winrate, 2, true)}`;
+    } else {
+      info += `└ 💼 Port: ${formatNumber(portfolioValue)}`;
+    }
   
+    // 5. Ajouter les top tokens si disponibles
     if (wallet.stats.tokenInfos && wallet.stats.tokenInfos.length > 0) {
       const topTokens = wallet.stats.tokenInfos
         .filter(token => token.symbol !== 'SOL' && token.symbol !== tokenInfo.symbol && parseFloat(token.value) >= 1000)
@@ -145,13 +113,13 @@ const formatSingleWallet = (wallet, index, tokenInfo) => {
         .slice(0, 3);
   
       if (topTokens.length > 0) {
-        result += ` (${topTokens.map(token => 
-          `<a href="https://dexscreener.com/solana/${token.mint}?maker=${wallet.address}">${token.symbol}</a> $${formatNumber(parseFloat(token.value))}`
+        info += ` (${topTokens.map(token => 
+          `<a href="https://dexscreener.com/solana/${token.mint}?maker=${wallet.address}">${token.symbol}</a> ${formatNumber(token.value)}`
         ).join(', ')})`;
       }
     }
   
-    return result + '\n\n';
+    return info + '\n\n';
   } catch (error) {
     logger.error('Error in formatSingleWallet:', error);
     return '';
@@ -247,7 +215,5 @@ module.exports = {
   formatFreshWalletMessage,
   formatInactiveWalletMessage,
   formatAnalysisMessage,
-  summarizeHolders,
-  getHoldingEmoji,
   formatSingleWallet
 };

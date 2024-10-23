@@ -65,6 +65,20 @@ async function saveInterestingWallet(address, walletData) {
         return null;
     }
 
+    // Gérer twitter_bind de manière plus robuste
+    let twitterBind = null;
+    if (walletData.twitter_bind) {
+        try {
+            // Si c'est déjà une string, on la garde, sinon on la convertit
+            twitterBind = typeof walletData.twitter_bind === 'string' 
+                ? walletData.twitter_bind 
+                : JSON.stringify(walletData.twitter_bind);
+        } catch (error) {
+            logger.warn(`Could not process twitter_bind for wallet ${address}, setting to null`);
+            twitterBind = null;
+        }
+    }
+
     // Créer un objet avec seulement les champs définis dans le schéma
     const walletToSave = {
         address,
@@ -77,15 +91,25 @@ async function saveInterestingWallet(address, walletData) {
         token_sold_avg_profit: walletData.token_sold_avg_profit,
         pnl_2x_5x_num: walletData.pnl_2x_5x_num,
         pnl_gt_5x_num: walletData.pnl_gt_5x_num,
-        twitter_bind: walletData.twitter_bind || null,
+        twitter_bind: twitterBind,
         refresh_date: new Date(),
         lastUpdated: new Date()
     };
 
     const { error } = validateWallet(walletToSave);
     if (error) {
-        logger.error(`Invalid wallet data for address ${address}:`, error.details[0].message);
-        throw new Error(`Invalid wallet data: ${error.details[0].message}`);
+        logger.warn(`Validation warning for wallet ${address}: ${error.details[0].message}`);
+        // Supprimer twitter_bind si c'est la source de l'erreur
+        if (error.details[0].path.includes('twitter_bind')) {
+            delete walletToSave.twitter_bind;
+            const secondValidation = validateWallet(walletToSave);
+            if (secondValidation.error) {
+                logger.error(`Still invalid wallet data after removing twitter_bind:`, secondValidation.error.details[0].message);
+                throw new Error(`Invalid wallet data: ${secondValidation.error.details[0].message}`);
+            }
+        } else {
+            throw new Error(`Invalid wallet data: ${error.details[0].message}`);
+        }
     }
 
     try {

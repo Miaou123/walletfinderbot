@@ -7,10 +7,12 @@ const { sendFormattedCrossAnalysisMessage } = require('./formatters/crossAnalysi
 const { formatBestTraders } = require('./formatters/bestTradersFormatter');
 const { scanToken } = require('../analysis/topHoldersScanner');
 const { formatAnalysisMessage } = require('./formatters/topHoldersFormatter');
+const { formatScanResult} = require('./formatters/scanResultFormatter');
+const {formatTeamSupplyResult, formatWalletDetails} = require('./formatters/teamSupplyFormatter');
 const { analyzeToken } = require('../analysis/topHoldersAnalyzer');
 const { searchWallets } = require('../analysis/walletSearcher');
 const { analyzeBestTraders } = require('../analysis/bestTraders');
-const { analyzeTeamSupply, sendWalletDetails } = require('../analysis/teamSupply');
+const { analyzeTeamSupply } = require('../analysis/teamSupply');
 const { getAvailableSpots } = require('../utils/accessSpots');
 const SupplyTracker = require('../tools/SupplyTracker');
 const UserManager = require('./accessManager/userManager');
@@ -157,13 +159,6 @@ const handleScanCommand = async (bot, msg, args, messageThreadId) => {
   const userId = msg.from.id;
   const username = msg.from.username;
 
-  if (!userManager) {
-    logger.error('UserManager is not initialized. Ensure initializeUserManager is called before using the command.');
-    return;
-  }
-
-  userManager.addUser(userId, chatId, username);
-
   try {
     const [tokenAddress, numberOfHoldersStr] = args;
     const numberOfHolders = numberOfHoldersStr ? parseInt(numberOfHoldersStr) : 10;
@@ -176,12 +171,23 @@ const handleScanCommand = async (bot, msg, args, messageThreadId) => {
     await bot.sendLongMessage(chatId, `Starting scan for token: ${tokenAddress}\nAnalyzing top ${numberOfHolders} holders. This may take a few minutes...`, { message_thread_id: messageThreadId });
 
     const scanResult = await scanToken(tokenAddress, numberOfHolders, true, 'scan');
-
-    if (!scanResult || !scanResult.formattedResult) {
+    
+    if (!scanResult || !scanResult.scanData) {
       throw new Error("Scan result is incomplete or invalid.");
     }
 
-    await bot.sendLongMessage(chatId, scanResult.formattedResult, { 
+    // Formater le résultat
+    const formattedResult = formatScanResult(
+      scanResult.scanData.tokenInfo,
+      scanResult.scanData.filteredWallets,
+      scanResult.scanData.totalSupplyControlled,
+      scanResult.scanData.averagePortfolioValue,
+      scanResult.scanData.notableAddresses,
+      scanResult.scanData.tokenAddress
+    );
+
+    // Envoyer le résultat formaté
+    await bot.sendLongMessage(chatId, formattedResult, { 
       parse_mode: 'HTML', 
       disable_web_page_preview: true,
       reply_markup: {
@@ -194,8 +200,9 @@ const handleScanCommand = async (bot, msg, args, messageThreadId) => {
       message_thread_id: messageThreadId
     });
 
+    // Sauvegarder les données pour le tracking
     if (scanResult.trackingInfo) {
-      lastAnalysisResults[chatId] = {
+      const trackingData = {
         tokenAddress: scanResult.trackingInfo.tokenAddress,
         tokenInfo: {
           symbol: scanResult.trackingInfo.tokenSymbol,
@@ -206,28 +213,36 @@ const handleScanCommand = async (bot, msg, args, messageThreadId) => {
         initialSupplyPercentage: scanResult.trackingInfo.totalSupplyControlled,
         topHoldersWallets: scanResult.trackingInfo.topHoldersWallets,
         teamWallets: [],
-        allWalletsDetails: scanResult.allAnalyzedWallets,
         analysisType: 'tokenScanner',
         trackType: 'topHolders',
-        username: msg.from.username,
+        username: username
       };
-      logger.debug(`Scan result received for ${tokenAddress}:`, scanResult);
-      logger.debug(`Setting lastAnalysisResults for chatId ${chatId}:`, lastAnalysisResults[chatId]);
-    } else {
-      logger.warn(`Incomplete tracking info for token ${tokenAddress}`);
-    }
 
+      // Vérifier que toutes les données sont présentes
+      const validationResult = validateTrackingData(trackingData);
+      if (!validationResult.isValid) {
+        logger.warn(`Invalid tracking data: ${validationResult.message}`);
+        throw new Error(`Invalid tracking data: ${validationResult.message}`);
+      }
+
+      lastAnalysisResults[chatId] = trackingData;
+
+      logger.debug('Saved tracking data:', {
+        chatId,
+        tokenAddress,
+        savedData: {
+          hasTokenInfo: !!trackingData.tokenInfo,
+          symbol: trackingData.tokenInfo.symbol,
+          totalSupply: trackingData.tokenInfo.totalSupply,
+          totalSupplyControlled: trackingData.totalSupplyControlled,
+          hasTopHolders: !!trackingData.topHoldersWallets,
+          numberOfHolders: trackingData.topHoldersWallets.length
+        }
+      });
+    }
   } catch (error) {
     logger.error('Error in handleScanCommand:', error);
-    let errorMessage = `An error occurred during the token scan: ${error.message}`;
-    
-    if (error.message.includes("Unexpected token")) {
-      errorMessage += "\nThere might be an issue with the API response. Please try again later.";
-    } else if (error.message.includes("timeout")) {
-      errorMessage += "\nThe request timed out. The server might be busy. Please try again in a few minutes.";
-    }
-
-    await bot.sendLongMessage(chatId, errorMessage, { message_thread_id: messageThreadId });
+    await bot.sendLongMessage(chatId, `An error occurred during the token scan: ${error.message}`, { message_thread_id: messageThreadId });
   } finally {
     ApiCallCounter.logApiCalls('scan');
     ActiveCommandsTracker.removeCommand(userId, 'scan');
@@ -446,37 +461,86 @@ const handleCrossCommand = async (bot, msg, args, messageThreadId) => {
 };
 
 const handleTeamSupplyCommand = async (bot, msg, args, messageThreadId) => {
+  const chatId = msg.chat.id;
   const userId = msg.from.id; 
-  logger.info(`Starting Team Supply command for user ${msg.from.username}`);
+  const username = msg.from.username;
+
   try {
     const [tokenAddress] = args;
 
-    await bot.sendLongMessage(msg.chat.id, `Analyzing team supply for token: ${tokenAddress}\nThis may take a few minutes...`, { message_thread_id: messageThreadId });
+    await bot.sendLongMessage(chatId, 
+      `Analyzing team supply for token: ${tokenAddress}\nThis may take a few minutes...`, 
+      { message_thread_id: messageThreadId }
+    );
 
-    const { formattedResults, allWalletsDetails, allTeamWallets, tokenInfo } = await analyzeTeamSupply(tokenAddress,'teamSupply');
+    const { scanData, trackingInfo } = await analyzeTeamSupply(tokenAddress, 'teamSupply');
 
-    if (!formattedResults || formattedResults.trim() === '') {
-      throw new Error('Analysis result is empty');
-    }
-
-    const initialSupplyPercentage = parseFloat(formattedResults.match(/Supply Controlled by team\/insiders: ([\d.]+)%/)[1]);
-
-    lastAnalysisResults[msg.chat.id] = { 
-      tokenAddress,
-      tokenInfo: {
-        ...tokenInfo,
+    // Log les données reçues
+    logger.debug('Team supply analysis data received:', {
+      scanData: {
+        hasTokenInfo: !!scanData.tokenInfo,
+        hasAnalyzedWallets: !!scanData.analyzedWallets,
+        hasTeamWallets: !!scanData.teamWallets,
+        totalSupplyControlled: scanData.totalSupplyControlled
       },
-      teamWallets: allTeamWallets,
-      topHoldersWallets: [],
-      allWalletsDetails, 
-      initialSupplyPercentage,
-      totalSupplyControlled: initialSupplyPercentage,
+      trackingInfo: {
+        hasTokenInfo: !!trackingInfo,
+        tokenSymbol: trackingInfo?.tokenSymbol,
+        totalSupply: trackingInfo?.totalSupply,
+        teamWallets: trackingInfo?.teamWallets?.length
+      }
+    });
+
+    // Formater le résultat
+    const formattedResult = formatTeamSupplyResult(
+      scanData.analyzedWallets,
+      scanData.tokenInfo,
+      scanData.teamWallets,
+      scanData.totalSupplyControlled
+    );
+
+    // Préparer les données de tracking
+    const trackingData = {
+      tokenAddress: tokenAddress,
+      tokenInfo: {
+        symbol: scanData.tokenInfo.symbol,
+        totalSupply: scanData.tokenInfo.totalSupply,
+        decimals: scanData.tokenInfo.decimals,
+      },
+      totalSupplyControlled: scanData.totalSupplyControlled,
+      initialSupplyPercentage: scanData.totalSupplyControlled,
+      teamWallets: scanData.teamWallets,
+      topHoldersWallets: [], // Pour la cohérence avec scanCommand
+      allWalletsDetails: scanData.analyzedWallets,
       analysisType: 'teamSupplyAnalyzer',
       trackType: 'team',
-      username: msg.from.username
+      username
     };
 
-    await bot.sendLongMessage(msg.chat.id, formattedResults, { 
+    // Log les données de tracking
+    logger.debug('Team supply tracking data prepared:', {
+      tokenAddress,
+      symbol: trackingData.tokenInfo.symbol,
+      totalSupply: trackingData.tokenInfo.totalSupply,
+      teamWalletsCount: trackingData.teamWallets.length,
+      totalSupplyControlled: trackingData.totalSupplyControlled
+    });
+
+    // Sauvegarder les données pour le tracking
+    lastAnalysisResults[chatId] = trackingData;
+
+    // Log les données sauvegardées
+    logger.debug('Team supply data saved in lastAnalysisResults:', {
+      chatId,
+      hasTrackingData: !!lastAnalysisResults[chatId],
+      savedData: {
+        hasTokenInfo: !!lastAnalysisResults[chatId]?.tokenInfo,
+        hasTeamWallets: !!lastAnalysisResults[chatId]?.teamWallets,
+        trackType: lastAnalysisResults[chatId]?.trackType
+      }
+    });
+
+    await bot.sendLongMessage(chatId, formattedResult, {
       parse_mode: 'HTML',
       reply_markup: {
         inline_keyboard: [
@@ -489,11 +553,15 @@ const handleTeamSupplyCommand = async (bot, msg, args, messageThreadId) => {
       disable_web_page_preview: true,
       message_thread_id: messageThreadId
     });
+
   } catch (error) {
     logger.error('Error in handleTeamSupplyCommand:', error);
-    await bot.sendLongMessage(msg.chat.id, `An error occurred during team supply analysis: ${error.message}`, { message_thread_id: messageThreadId });
+    await bot.sendLongMessage(chatId, 
+      `An error occurred during team supply analysis: ${error.message}`, 
+      { message_thread_id: messageThreadId }
+    );
   } finally {
-    logger.debug('handleTeamSupplyCommand command completed');
+    logger.debug('handleTeamSupplyCommand completed');
     ApiCallCounter.logApiCalls('teamSupply');
     ActiveCommandsTracker.removeCommand(userId, 'team');
   }
@@ -666,26 +734,17 @@ const handleCallbackQuery = async (bot, callbackQuery) => {
 
   try {
     const [actionType, ...params] = action.split('_');
-    let tokenAddress, threshold, trackType;
+    // Déclarer les variables une seule fois
+    const tokenAddress = params[0];
+    let threshold;
+    let trackType = params[1] || 'topHolders';
 
     logger.debug(`Callback query: actionType=${actionType}, params=${params}`);
 
+    // Ne mettre dans le premier switch que ce qui doit modifier les valeurs
     switch (actionType) {
-      case 'track':
-        tokenAddress = params[0];
-        trackType = params[1] || 'topHolders';
-        break;
       case 'st':
-      case 'sd':
-      case 'sc':
-        tokenAddress = params[0];
-        if (actionType === 'st') {
-          threshold = parseFloat(params[1]);
-        }
-        break;
-      case 'stop':
-        tokenAddress = params[0];
-        trackType = params[1];
+        threshold = parseFloat(params[1]);
         break;
     }
 
@@ -708,13 +767,19 @@ const handleCallbackQuery = async (bot, callbackQuery) => {
           });
           return;
         }
+        trackingInfo.trackType = trackType;
         return await handleTrackAction(bot, chatId, tokenAddress, trackingInfo, messageThreadId);
 
-      case 'details':
-        if (!trackingInfo || !trackingInfo.allWalletsDetails || !trackingInfo.tokenInfo) {
-          throw new Error("No wallet details or token information found. Please run the analysis again.");
-        }
-        return await sendWalletDetails(bot, chatId, trackingInfo.allWalletsDetails, trackingInfo.tokenInfo, messageThreadId);
+        case 'details':
+          if (!trackingInfo || !trackingInfo.allWalletsDetails || !trackingInfo.tokenInfo) {
+            throw new Error("No wallet details or token information found. Please run the analysis again.");
+          }
+          const message = formatWalletDetails(trackingInfo.allWalletsDetails, trackingInfo.tokenInfo);
+          await bot.sendLongMessage(chatId, message, {
+            parse_mode: 'HTML',
+            message_thread_id: messageThreadId
+          });
+          break;
 
       case 'sd':
         await handleSetDefaultThreshold(bot, chatId, trackingInfo, trackingId, messageThreadId);
@@ -737,7 +802,8 @@ const handleCallbackQuery = async (bot, callbackQuery) => {
 
       case 'stop':
         const trackerId = `${tokenAddress}_${trackType}`;
-        logger.debug(`Attempting to stop tracking for trackerId: ${trackerId}`);
+        logger.debug(`Stopping tracking for: ${trackerId}, username: ${username}`);
+        
         const success = supplyTrackerInstance.stopTracking(username, trackerId);
         if (success) {
           await bot.answerCallbackQuery(callbackQuery.id, { text: "Tracking stopped successfully." });
@@ -769,60 +835,70 @@ const handleCallbackQuery = async (bot, callbackQuery) => {
 };
 
 const handleTrackAction = async (bot, chatId, tokenAddress, trackingInfo, messageThreadId) => {
-  logger.debug(`Starting handleTrackAction for token: ${tokenAddress}, chatId: ${chatId}, trackType: ${trackType}`);
+  logger.debug(`Starting handleTrackAction for token: ${tokenAddress}, chatId: ${chatId}`);
   logger.debug(`Current trackingInfo:`, trackingInfo);
+
   try {
-    if (!trackingInfo || !trackingInfo.tokenInfo || trackingInfo.tokenAddress !== tokenAddress) {
-      logger.error(`Mismatch in token addresses. Received: ${tokenAddress}, Expected: ${trackingInfo ? trackingInfo.tokenAddress : 'undefined'}`);
-      throw new Error('Invalid or outdated tracking info');
-    }
+      if (!trackingInfo || !trackingInfo.tokenInfo || trackingInfo.tokenAddress !== tokenAddress) {
+          logger.error(`Mismatch in token addresses. Received: ${tokenAddress}, Expected: ${trackingInfo ? trackingInfo.tokenAddress : 'undefined'}`);
+          throw new Error('Invalid or outdated tracking info');
+      }
 
-    const totalSupply = trackingInfo.tokenInfo.totalSupply;
-    const decimals = trackingInfo.tokenInfo.decimals || 6;
-    const ticker = trackingInfo.tokenInfo.symbol || 'Unknown';
-    const initialSupplyPercentage = trackingInfo.totalSupplyControlled || trackingInfo.initialSupplyPercentage || 0;
-    const username = trackingInfo.username;
-    const supplyType = trackType === 'team' ? 'team supply' : 'total supply';
+      // Définir trackType avant de l'utiliser
+      const trackType = trackingInfo.trackType || 
+                       (trackingInfo.analysisType === 'tokenScanner' ? 'topHolders' : 'team');
 
-    logger.debug('Extracted info:', { totalSupply, decimals, ticker, initialSupplyPercentage, trackType, username });
+      logger.debug(`Track type determined: ${trackType}`);
 
-    if (!totalSupply || isNaN(initialSupplyPercentage)) {
-      throw new Error('Invalid supply information');
-    }
+      const totalSupply = trackingInfo.tokenInfo.totalSupply;
+      const decimals = trackingInfo.tokenInfo.decimals || 6;
+      const ticker = trackingInfo.tokenInfo.symbol || 'Unknown';
+      const initialSupplyPercentage = trackingInfo.totalSupplyControlled || trackingInfo.initialSupplyPercentage || 0;
+      const username = trackingInfo.username;
+      const supplyType = trackType === 'team' ? 'team supply' : 'total supply';
 
-    const message = `🔁 Ready to track ${ticker} ${supplyType} (${initialSupplyPercentage.toFixed(2)}%)\n\n` +
-                    `You will receive a notification when ${supplyType} changes by more than 1%`;
+      logger.debug('Extracted info:', { totalSupply, decimals, ticker, initialSupplyPercentage, trackType, username });
 
-    const keyboard = {
-      inline_keyboard: [
-        [
-          { text: "✅1%", callback_data: `sd_${tokenAddress}_1` },
-          { text: "Custom %", callback_data: `sc_${tokenAddress}` }
-        ],
-        [{ text: "Start tracking", callback_data: `st_${tokenAddress}_1` }]
-      ]
-    };
+      if (!totalSupply || isNaN(initialSupplyPercentage)) {
+          throw new Error('Invalid supply information');
+      }
 
-    const sentMessage = await bot.sendMessage(chatId, message, { 
-      reply_markup: keyboard, 
-      parse_mode: 'HTML',
-      message_thread_id: messageThreadId
-    });
-    trackingInfo.messageId = sentMessage.message_id;
-    trackingInfo.trackType = trackType;
+      const message = `🔁 Ready to track ${ticker} ${supplyType} (${initialSupplyPercentage.toFixed(2)}%)\n\n` +
+                     `You will receive a notification when ${supplyType} changes by more than 1%`;
 
-    lastAnalysisResults[chatId] = trackingInfo;
-    const trackingId = `${chatId}_${tokenAddress}`;
-    pendingTracking.set(trackingId, trackingInfo);
+      const keyboard = {
+          inline_keyboard: [
+              [
+                  { text: "✅1%", callback_data: `sd_${tokenAddress}_1` },
+                  { text: "Custom %", callback_data: `sc_${tokenAddress}` }
+              ],
+              [{ text: "Start tracking", callback_data: `st_${tokenAddress}_1` }]
+          ]
+      };
 
-    logger.info('Track action message sent successfully');
+      const sentMessage = await bot.sendMessage(chatId, message, { 
+          reply_markup: keyboard, 
+          parse_mode: 'HTML',
+          message_thread_id: messageThreadId
+      });
+
+      trackingInfo.messageId = sentMessage.message_id;
+      trackingInfo.trackType = trackType; // Sauvegarder le trackType dans trackingInfo
+
+      lastAnalysisResults[chatId] = trackingInfo;
+      const trackingId = `${chatId}_${tokenAddress}`;
+      pendingTracking.set(trackingId, trackingInfo);
+
+      logger.info(`Track action message sent successfully for ${ticker} ${trackType}`);
   } catch (error) {
-    logger.error('Error in handleTrackAction:', error);
-    try {
-      await bot.sendMessage(chatId, `An error occurred while setting up tracking: ${error.message}. Please try again or contact support.`, { message_thread_id: messageThreadId });
-    } catch (sendError) {
-      logger.error('Error sending error message to user:', sendError);
-    }
+      logger.error('Error in handleTrackAction:', error);
+      try {
+          await bot.sendMessage(chatId, `An error occurred while setting up tracking: ${error.message}. Please try again or contact support.`, { 
+              message_thread_id: messageThreadId 
+          });
+      } catch (sendError) {
+          logger.error('Error sending error message to user:', sendError);
+      }
   }
 };
 
@@ -952,6 +1028,27 @@ const handleMessage = async (bot, msg) => {
     // Gérer d'autres messages ou ignorer
   }
 };
+
+// Fonction utilitaire pour valider les données de tracking
+function validateTrackingData(data) {
+  const requiredFields = {
+    tokenAddress: data.tokenAddress,
+    'tokenInfo.symbol': data.tokenInfo?.symbol,
+    'tokenInfo.totalSupply': data.tokenInfo?.totalSupply,
+    'tokenInfo.decimals': data.tokenInfo?.decimals,
+    totalSupplyControlled: data.totalSupplyControlled,
+    topHoldersWallets: data.topHoldersWallets
+  };
+
+  const missingFields = Object.entries(requiredFields)
+    .filter(([_, value]) => value === undefined || value === null)
+    .map(([key]) => key);
+
+  return {
+    isValid: missingFields.length === 0,
+    message: missingFields.length > 0 ? `Missing required fields: ${missingFields.join(', ')}` : ''
+  };
+}
 
 // Export all command handlers
 module.exports = {

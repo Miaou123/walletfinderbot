@@ -21,11 +21,21 @@ const formatNumber = (number, decimals = 1, isPercentage = false) => {
     formattedNumber = (number / 1e3).toFixed(decimals) + 'k';
   } else if (absNumber >= 1) {
     formattedNumber = number.toFixed(decimals);
+  } else if (absNumber > 0) {
+    // Gérer les nombres entre 0 et 1
+    formattedNumber = number.toFixed(decimals);
+  } else {
+    // Gérer le cas où le nombre est exactement 0
+    formattedNumber = '0';
   }
 
-  formattedNumber = formattedNumber.replace(/\.0+([kM%])?$/, '$1');
+  if (formattedNumber) {
+    formattedNumber = formattedNumber.replace(/\.0+([kM%])?$/, '$1');
+  }
+
   return `<code>${formattedNumber}</code>`;
 };
+
   
   const formatAge = (pairCreatedAt) => {
     if (!pairCreatedAt) return 'N/A';
