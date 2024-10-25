@@ -130,14 +130,14 @@ const validateSolanaAddress = (address) => {
     requiresAuth: true,
     description: 'Analyze fresh wallet ratio',
     dailyLimit: 10,
-    usage: '/freshratio [contract_address] [time_frame](1h)* [percentage](0.1%)*',
+    usage: '/freshratio [contract_address] [time_frame](1h)* [percentage](0.005%)*',
     helpMessage: 'Analyze the proportion of fresh wallets buying a token over a specific time frame.\n\n' +
-                 'Time frame is in hours or minutes (e.g., 1h or 30m). Default is 1 hour.\n' +
-                 'Percentage is the minimum percentage of total supply for a buy to be considered. Default is 0.1%.\n\n' +
+                 'Time frame is in hours or minutes (e.g., 1h, 30m, 5d). Default is 1 hour.\n' +
+                 'Percentage is the minimum percentage of total supply for a buy to be considered. Default is 0.005%.\n\n' +
                  'Examples:\n' +
                  '/freshratio tokenAddress\n' +
                  '/freshratio tokenAddress 2h\n' +
-                 '/freshratio tokenAddress 30m 0.5%\n' 
+                 '/freshratio tokenAddress 5d 0.01%\n' 
     },
     'tracker': { 
       aliases: ['tr'], 
