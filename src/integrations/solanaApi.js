@@ -114,17 +114,49 @@ class SolanaApi {
   }
 
   async getTokenAccountsByOwner(walletAddress, tokenAddress, mainContext = 'default', subContext = null) {
-    const result = await this.callHelius('getTokenAccountsByOwner', [
-      walletAddress,
-      { mint: tokenAddress },
-      { encoding: 'jsonParsed' }
-    ], 'rpc', mainContext, subContext);
-    if (!result || !Array.isArray(result.value)) {
-      console.error(`Unexpected result for getTokenAccountsByOwner for wallet ${walletAddress} and token ${tokenAddress}:`, result);
-      return [];
+    // Validation des paramètres
+    if (!walletAddress || !tokenAddress) {
+        console.error('Missing required parameters in getTokenAccountsByOwner:', { walletAddress, tokenAddress });
+        return [];
     }
-    return result.value;
-  }
+
+    // S'assurer que walletAddress est une chaîne de caractères valide
+    const validWalletAddress = typeof walletAddress === 'string' 
+        ? walletAddress 
+        : walletAddress?.address || null;
+
+    if (!validWalletAddress) {
+        console.error('Invalid wallet address format:', walletAddress);
+        return [];
+    }
+    
+    const validTokenAddress = typeof tokenAddress === 'string' 
+        ? tokenAddress 
+        : tokenAddress?.address || null;
+
+    if (!validTokenAddress) {
+        console.error('Invalid token address format:', tokenAddress);
+        return [];
+    }
+
+    try {
+        const result = await this.callHelius('getTokenAccountsByOwner', [
+            validWalletAddress,
+            { mint: validTokenAddress },
+            { encoding: 'jsonParsed' }
+        ], 'rpc', mainContext, subContext);
+
+        if (!result || !Array.isArray(result.value)) {
+            console.error(`Unexpected result structure from Helius for method getTokenAccountsByOwner:`, result);
+            return [];
+        }
+
+        return result.value;
+    } catch (error) {
+        console.error(`Error in getTokenAccountsByOwner for wallet ${validWalletAddress}:`, error);
+        return [];
+    }
+}
 
   async getTokenLargestAccounts(tokenMint, mainContext = 'default', subContext = null) {
     const response = await this.callHelius('getTokenLargestAccounts', [tokenMint], 'rpc', mainContext, subContext);
