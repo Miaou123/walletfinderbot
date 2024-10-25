@@ -184,14 +184,16 @@ For example "/help /eb", "/eb help" or "/eb" with no other arguments will give y
 /help - Show help
 /access - Show beta access information
 /ping - Check if bot is online
-/scan - Scan a token for a top holders analysis
-/bundle - Analyze bundle
-/eb - Analyze early buyers on a given timeframe
-/bt - Analyze the 100 best traders
-/th - Analyze top holders
-/cross - Find common holders between multiple tokens
-/team - Analyze team supply with an homemade algorithm (works for fresh launches and CTOs)
-/search - Search for specific wallets with only a part of their address
+/scan (/s) - Scan a token for a top holders analysis
+/bundle (/bd) - Analyze bundle
+/freshratio (/fr) - Analyze the proportion of fresh wallets buying a token over a specific time frame. 
+/earlybuyers (/eb) - Analyze early buyers on a given timeframe
+/besttraders (/bt) - Analyze the 100 best traders
+/topholders (/th) - Analyze top holders
+/cross (/c) - Find common holders between multiple tokens
+/crossbt (/cbt) - Find common holders between the top traders of multiple tokens (realized and unrealized PnL)
+/team (/t) - Analyze team supply with an homemade algorithm (works for fresh launches and CTOs)
+/search (/sh) - Search for specific wallets with only a part of their address
 /tracker - Show tracked supplies
 /cancel - Cancel the current active command
 
