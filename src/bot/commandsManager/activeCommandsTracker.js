@@ -3,7 +3,7 @@ const logger = require('../../utils/logger');
 class ActiveCommandsTracker {
   constructor() {
     this.activeCommands = new Map();
-    this.limitedCommands = new Set(['scan', 'bundle', 'bt', 'th', 'cross', 'team', 'search', 'eb']);
+    this.limitedCommands = new Set(['scan', 'bundle', 'bt', 'th', 'cross', 'team', 'search', 'eb', 'fr']);
     this.TIMEOUT = 10 * 60 * 1000; 
   }
 

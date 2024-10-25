@@ -1,7 +1,7 @@
 const logger = require('../../utils/logger');
 const { validateAndParseTimeFrame, validateAndParseMinAmountOrPercentage } = require('./utilityFn.js');
-const { ApiCallCounter } = require('../../utils/ApiCallCounter.js');
-const { ActiveCommandsTracker } = require('../commandsManager/activeCommandsTracker.js');
+const ApiCallCounter = require('../../utils/ApiCallCounter.js'); 
+const ActiveCommandsTracker = require('../commandsManager/activeCommandsTracker'); 
 const gmgnApi = require('../../integrations/gmgnApi');
 const { analyzeFreshRatio } = require('../../analysis/freshRatio');
 const { formatFreshRatioMessage } = require('../formatters/freshRatioFormatter');
