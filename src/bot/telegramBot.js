@@ -244,7 +244,7 @@ bot.on('message', async (msg) => {
             return;
         }
 
-        const limitedCommands = ['scan', 'bundle', 'bt', 'th', 'cross', 'team', 'search', 'eb'];
+        const limitedCommands = ['scan', 'bundle', 'bt', 'th', 'cross', 'team', 'search', 'eb', 'fr'];
 
         if (['start', 'ping', 'tracker', 'cancel', 'help', 'access', 'join'].includes(command)) {
             try {

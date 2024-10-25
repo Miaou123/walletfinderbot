@@ -960,9 +960,7 @@ const handleStartTracking = async (bot, chatId, trackingInfo, threshold, message
   const trackType = trackingInfo.trackType || (trackingInfo.analysisType === 'tokenScanner' ? 'topHolders' : 'team');
   const totalSupply = tokenInfo.totalSupply;
 
-  logger.debug(`Starting tracking for ${tokenAddress}`, { trackType, initialSupplyPercentage, totalSupply, threshold, username });
-
-  logger.debug('Extracted info for Handle tracking:', { trackType, tokenAddress, teamWallets, topHoldersWallets, initialSupplyPercentage, totalSupply, tokenInfo, username });
+  logger.debug(`Starting tracking for ${tokenAddress}`, { trackingInfo });
 
   const wallets = trackType === 'team' ? teamWallets : topHoldersWallets;
 

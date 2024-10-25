@@ -123,6 +123,22 @@ const validateSolanaAddress = (address) => {
       usage: '/eb [coin_address] [time_frame](1h)* [percentage](1%)* [pump or nopump]*',
       helpMessage: 'Analyze early buyers of a specific coin within a given time frame and percentage threshold.\n\nTime frame is in hours or minutes (e.g., 2h or 30m). Percentage is the minimum percentage of total supply bought in one or multiple transactions over the timeframe.If you only want to analyse pumpfun transactions, use the flag "pump" at the end of your command and if you only want to analyse raydium transactions use "nopump"'
     },
+    'freshratio': {
+    aliases: ['fr'],
+    minArgs: 1,
+    maxArgs: 3,
+    requiresAuth: true,
+    description: 'Analyze fresh wallet ratio',
+    dailyLimit: 10,
+    usage: '/freshratio [contract_address] [time_frame](1h)* [percentage](0.1%)*',
+    helpMessage: 'Analyze the proportion of fresh wallets buying a token over a specific time frame.\n\n' +
+                 'Time frame is in hours or minutes (e.g., 1h or 30m). Default is 1 hour.\n' +
+                 'Percentage is the minimum percentage of total supply for a buy to be considered. Default is 0.1%.\n\n' +
+                 'Examples:\n' +
+                 '/freshratio tokenAddress\n' +
+                 '/freshratio tokenAddress 2h\n' +
+                 '/freshratio tokenAddress 30m 0.5%\n' 
+    },
     'tracker': { 
       aliases: ['tr'], 
       minArgs: 0, 
