@@ -8,7 +8,7 @@ const { formatFreshRatioMessage } = require('../formatters/freshRatioFormatter')
 
 // Valeurs par défaut
 const DEFAULT_TIME_FRAME = '1h';
-const DEFAULT_SUPPLY_PERCENTAGE = '0.001%';
+const DEFAULT_SUPPLY_PERCENTAGE = '0.005%';
 
 class FreshRatioHandler {
     constructor(userManager, accessControl) {
@@ -97,7 +97,7 @@ class FreshRatioHandler {
                 `📊 Minimum buy: <b>${minPercentage}% of supply</b>`,
                 { parse_mode: 'HTML', disable_web_page_preview: true, message_thread_id: messageThreadId }
             );
-            
+
             const result = await analyzeFreshRatio(
                 coinAddress,
                 adjustedMinAmount,
