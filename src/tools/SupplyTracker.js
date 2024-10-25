@@ -7,6 +7,8 @@ const path = require('path');
 
 const CHECK_INTERVAL = 1 * 60 * 1000;
 const SAVE_INTERVAL = 0.5 * 60 * 1000;
+const CLEANUP_INTERVAL = 1 * 60 * 60 * 1000;  
+const EXPIRY_TIME = 48 * 60 * 60 * 1000;   
 
 const wait = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -26,96 +28,147 @@ async function retryWithBackoff(operation, maxRetries = 5, initialDelay = 1000) 
     }
 }
 
-    class SupplyTracker {
-        constructor(bot, accessControl) {
-            this.userTrackers = new Map();
-            this.bot = bot;
-            this.accessControl = accessControl;
-            this.saveFilePath = path.join(__dirname, '../data/trackers.json');
-            this.saveInterval = setInterval(() => this.saveTrackers(), SAVE_INTERVAL);
-        }
-    
-        async init() {
-            try {
-                await this.loadTrackers();
-            } catch (error) {
-                logger.error('Failed to initialize SupplyTracker:', error);
-                throw new Error('SupplyTracker initialization failed');
-            }
-        }    
-    
-        async saveTrackers() {
-            const trackersData = {};
-            for (const [username, trackers] of this.userTrackers.entries()) {
-                trackersData[username] = Array.from(trackers.entries()).map(([trackerId, tracker]) => ({
-                    trackerId,
-                    chatId: tracker.chatId,
-                    wallets: tracker.wallets,
-                    initialSupplyPercentage: tracker.initialSupplyPercentage.toString(),
-                    currentSupplyPercentage: tracker.currentSupplyPercentage.toString(),
-                    totalSupply: tracker.totalSupply.toString(),
-                    significantChangeThreshold: tracker.significantChangeThreshold.toString(),
-                    ticker: tracker.ticker,
-                    decimals: tracker.decimals,
-                    trackType: tracker.trackType,
-                    tokenAddress: tracker.tokenAddress,
-                }));
-            }
-            try {
-                await fs.writeFile(this.saveFilePath, JSON.stringify(trackersData, null, 2));
-            } catch (error) {
-                logger.error('Error saving trackers:', error);
+class SupplyTracker {
+    constructor(bot, accessControl) {
+        this.userTrackers = new Map();
+        this.bot = bot;
+        this.accessControl = accessControl;
+        this.saveFilePath = path.join(__dirname, '../data/trackers.json');
+        this.saveInterval = setInterval(() => this.saveTrackers(), SAVE_INTERVAL);
+        this.cleanupInterval = setInterval(() => this.cleanupExpiredTrackers(), CLEANUP_INTERVAL);
+    }
+
+    async cleanupExpiredTrackers() {
+        const now = Date.now();
+        let trackersRemoved = 0;
+
+        logger.debug('Starting cleanup check...'); // Log de debug pour le test
+
+        for (const [username, trackers] of this.userTrackers.entries()) {
+            for (const [trackerId, tracker] of trackers.entries()) {
+                const age = now - tracker.startTimestamp;
+                logger.debug(`Checking tracker ${trackerId} - Age: ${age / 1000}s / ${EXPIRY_TIME / 1000}s`); // Log de debug
+
+                if (age > EXPIRY_TIME) {
+                    logger.debug(`Removing expired tracker ${trackerId} for user ${username}`); // Log de debug
+                    await this.notifyExpiry(tracker);
+                    this.stopTracking(username, trackerId);
+                    trackersRemoved++;
+                }
             }
         }
+
+        if (trackersRemoved > 0) {
+            logger.debug(`Cleaned up ${trackersRemoved} expired trackers`);
+            await this.saveTrackers();
+        }
+    }
+
+    async init() {
+        try {
+            await this.loadTrackers();
+            // Vérifie immédiatement les trackers expirés au démarrage
+            await this.cleanupExpiredTrackers();
+        } catch (error) {
+            logger.error('Failed to initialize SupplyTracker:', error);
+            throw new Error('SupplyTracker initialization failed');
+        }
+    }
+
+    async notifyExpiry(tracker) {
+        const message = `⌛ Tracking expired for ${tracker.ticker}\n\n` +
+                       `The ${tracker.trackType} supply tracking has been automatically stopped after 48 hours.\n` +
+                       `If you want to continue tracking, please start a new tracking session.`;
+        try {
+            await this.bot.sendMessage(tracker.chatId, message);
+        } catch (error) {
+            logger.error(`Failed to send expiry notification for ${tracker.ticker}:`, error);
+        }
+    }
+
+    async saveTrackers() {
+        const trackersData = {};
+        for (const [username, trackers] of this.userTrackers.entries()) {
+            trackersData[username] = Array.from(trackers.entries()).map(([trackerId, tracker]) => ({
+                trackerId,
+                chatId: tracker.chatId,
+                wallets: tracker.wallets,
+                initialSupplyPercentage: tracker.initialSupplyPercentage.toString(),
+                currentSupplyPercentage: tracker.currentSupplyPercentage.toString(),
+                totalSupply: tracker.totalSupply.toString(),
+                significantChangeThreshold: tracker.significantChangeThreshold.toString(),
+                ticker: tracker.ticker,
+                decimals: tracker.decimals,
+                trackType: tracker.trackType,
+                tokenAddress: tracker.tokenAddress,
+                startTimestamp: tracker.startTimestamp // Ajout du timestamp
+            }));
+        }
+        try {
+            await fs.writeFile(this.saveFilePath, JSON.stringify(trackersData, null, 2));
+        } catch (error) {
+            logger.error('Error saving trackers:', error);
+        }
+    }
+
+    async loadTrackers() {
+        try {
+            const data = await fs.readFile(this.saveFilePath, 'utf8');
+            const trackersData = JSON.parse(data);
+            const now = Date.now();
+            logger.debug(`Creating new tracker with timestamp ${now} - Will expire at ${new Date(now + EXPIRY_TIME)}`);
     
-        async loadTrackers() {
-            try {
-                const data = await fs.readFile(this.saveFilePath, 'utf8');
-                const trackersData = JSON.parse(data);
-                for (const [username, trackers] of Object.entries(trackersData)) {
-                    const userTrackers = new Map();
-                    for (const tracker of trackers) {
-                        const restoredTracker = {
-                            ...tracker,
-                            initialSupplyPercentage: new BigNumber(tracker.initialSupplyPercentage),
-                            currentSupplyPercentage: new BigNumber(tracker.currentSupplyPercentage),
-                            totalSupply: new BigNumber(tracker.totalSupply),
-                            significantChangeThreshold: new BigNumber(tracker.significantChangeThreshold),
-                            intervalId: setInterval(() => this.checkSupply(username, tracker.trackerId), CHECK_INTERVAL)
-                        };
-                        userTrackers.set(tracker.trackerId, restoredTracker);
+            for (const [username, trackers] of Object.entries(trackersData)) {
+                const userTrackers = new Map();
+                for (const tracker of trackers) {
+                    // Ignore les trackers déjà expirés
+                    if (now - tracker.startTimestamp > EXPIRY_TIME) {
+                        logger.debug(`Skipping expired tracker ${tracker.trackerId} during load`);
+                        continue;
                     }
+                    
+                    const restoredTracker = {
+                        ...tracker,
+                        initialSupplyPercentage: new BigNumber(tracker.initialSupplyPercentage),
+                        currentSupplyPercentage: new BigNumber(tracker.currentSupplyPercentage),
+                        totalSupply: new BigNumber(tracker.totalSupply),
+                        significantChangeThreshold: new BigNumber(tracker.significantChangeThreshold),
+                        startTimestamp: tracker.startTimestamp,
+                        intervalId: setInterval(() => this.checkSupply(username, tracker.trackerId), CHECK_INTERVAL)
+                    };
+                    userTrackers.set(tracker.trackerId, restoredTracker);
+                }
+                if (userTrackers.size > 0) { 
                     this.userTrackers.set(username, userTrackers);
                 }
-                logger.debug('Trackers loaded successfully');
-            } catch (error) {
-                if (error.code === 'ENOENT') {
-                    logger.debug('No saved trackers found. Starting with empty tracker list.');
-                } else {
-                    logger.error('Error loading trackers:', error);
-                }
+            }
+            logger.debug('Trackers loaded successfully');
+        } catch (error) {
+            if (error.code === 'ENOENT') {
+                logger.debug('No saved trackers found. Starting with empty tracker list.');
+            } else {
+                logger.error('Error loading trackers:', error);
             }
         }
+    }
 
     startTracking(tokenAddress, chatId, wallets, initialSupplyPercentage, totalSupply, significantChangeThreshold, ticker, decimals, trackType, username) {
-
         logger.debug(`Starting tracking for user ${username}:`, { tokenAddress, chatId, wallets, initialSupplyPercentage, totalSupply, significantChangeThreshold, ticker, decimals, trackType });
+        
         if (!this.userTrackers.has(username)) {
             this.userTrackers.set(username, new Map());
         }
 
         const userTrackers = this.userTrackers.get(username);
-
-        // Obtenir le rôle de l'utilisateur
         const userRole = this.accessControl.getUserRole(username);
 
         let maxTrackers;
         if (userRole === 'admin') {
-            maxTrackers = Infinity; // Pas de limite pour les admins
+            maxTrackers = Infinity;
         } else if (userRole === 'vip') {
             maxTrackers = 10;
         } else {
-            maxTrackers = 2; // Limite par défaut pour les utilisateurs normaux
+            maxTrackers = 2;
         }
 
         if (userTrackers.size >= maxTrackers) {
@@ -128,9 +181,9 @@ async function retryWithBackoff(operation, maxRetries = 5, initialDelay = 1000) 
             throw new Error(`Already tracking ${trackType} for ${tokenAddress}`);
         }
 
-        if (!Array.isArray(wallets) || wallets.length === 0) {
-            logger.warn(`No ${trackType} wallets provided for ${tokenAddress}. This may cause issues with tracking.`);
-        }
+        const now = Date.now();
+        logger.debug(`Creating new tracker with timestamp ${now} - Will expire at ${new Date(now + EXPIRY_TIME)}`);
+        
 
         const tracker = {
             chatId,
@@ -144,6 +197,7 @@ async function retryWithBackoff(operation, maxRetries = 5, initialDelay = 1000) 
             trackType,
             tokenAddress,
             username,
+            startTimestamp: now,
             intervalId: setInterval(() => this.checkSupply(username, trackerId), CHECK_INTERVAL)
         };
 

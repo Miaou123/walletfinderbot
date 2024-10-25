@@ -154,7 +154,10 @@ const analyzeEarlyBuyers = async (coinAddress, minPercentage, timeFrameHours, to
                         cursor,
                         limitEvents,
                         mainContext,
-                        'getTokenEvents'
+                        'getTokenEvents',
+                        {
+                            amountNonLiquidityToken: 500,
+                        }
                     );
 
                     const events = eventsResponse.data.getTokenEvents;

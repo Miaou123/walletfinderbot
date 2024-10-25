@@ -38,7 +38,16 @@ class DefinedApi {
         return definedRateLimiter.enqueue(requestFunction);
     }
 
-    async getTokenEvents(address, fromTimestamp, toTimestamp, cursor = null, limit = 100, mainContext = 'default', subContext = null) {
+    async getTokenEvents(
+        address, 
+        fromTimestamp, 
+        toTimestamp, 
+        cursor = null, 
+        limit = 100, 
+        mainContext = 'default', 
+        subContext = null,
+        options = {} // Nouveau paramètre pour les options
+    ) {
         const maxAllowedLimit = 100;
         limit = Math.min(limit, maxAllowedLimit);
     
@@ -110,16 +119,18 @@ class DefinedApi {
     
         const variables = {
             cursor,
-            direction: "ASC",
+            direction: options.direction || "ASC",
             limit,
             query: {
                 address,
                 networkId: this.solanaNetworkId,
                 timestamp: { from: fromTimestamp, to: toTimestamp },
-                eventDisplayType: ["Buy", "Sell"],
-                amountNonLiquidityToken: {
-                    gte: 1000 // Utilise "gte" pour "greater than or equal to"
-                }
+                eventDisplayType: options.eventDisplayType || ["Buy", "Sell"],
+                ...(options.amountNonLiquidityToken && {
+                    amountNonLiquidityToken: {
+                        gte: options.amountNonLiquidityToken
+                    }
+                })
             }
         };
     
