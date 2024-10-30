@@ -179,6 +179,80 @@ Object.values(commandConfigs).forEach(config => {
   }
 });
 
+// Configuration des commandes admin
+const adminCommandConfigs = {
+  'adduser': {
+    aliases: [],
+    minArgs: 2,
+    maxArgs: 2,
+    requiresAuth: true,
+    description: 'Add a user to whitelist',
+    dailyLimit: Infinity,
+    usage: '/adduser <username> <type>',
+    helpMessage: 'Add a user to the whitelist.\nTypes: normal, vip, admin\n\nExample:\n/adduser username normal'
+  },
+  'removeuser': {
+    aliases: [],
+    minArgs: 1,
+    maxArgs: 1,
+    requiresAuth: true,
+    description: 'Remove a user from whitelist',
+    dailyLimit: Infinity,
+    usage: '/removeuser <username>',
+    helpMessage: 'Remove a user from the whitelist.\n\nExample:\n/removeuser username'
+  },
+  'addgroup': {
+    aliases: [],
+    minArgs: 0,
+    maxArgs: 2,
+    requiresAuth: true,
+    description: 'Add a group to whitelist',
+    dailyLimit: Infinity,
+    usage: '/addgroup [type]',
+    helpMessage: 'Add the current group to whitelist or specify group ID and type.\nTypes: normal, vip\n\nExamples:\n/addgroup\n/addgroup vip\n/addgroup -1001234567890 normal'
+  },
+  'removegroup': {
+    aliases: [],
+    minArgs: 1,
+    maxArgs: 1,
+    requiresAuth: true,
+    description: 'Remove a group from whitelist',
+    dailyLimit: Infinity,
+    usage: '/removegroup <group_id>',
+    helpMessage: 'Remove a group from the whitelist.\n\nExample:\n/removegroup -1001234567890'
+  },
+  'listgroups': {
+    aliases: [],
+    minArgs: 0,
+    maxArgs: 0,
+    requiresAuth: true,
+    description: 'List all whitelisted groups',
+    dailyLimit: Infinity,
+    usage: '/listgroups',
+    helpMessage: 'Display a list of all whitelisted groups and their types.'
+  },
+  'usagestats': {
+    aliases: [],
+    minArgs: 0,
+    maxArgs: 0,
+    requiresAuth: true,
+    description: 'Show command usage statistics',
+    dailyLimit: Infinity,
+    usage: '/usagestats',
+    helpMessage: 'Display statistics about command usage across all users.'
+  },
+  'broadcast': {
+    aliases: [],
+    minArgs: 1,
+    maxArgs: Infinity,
+    requiresAuth: true,
+    description: 'Send message to all users',
+    dailyLimit: Infinity,
+    usage: '/broadcast <message>',
+    helpMessage: 'Send a message to all whitelisted users.\n\nExample:\n/broadcast Hello everyone!'
+  }
+};
+
 const parseCommand = (text) => {
   const parts = text.trim().split(/\s+/);
   let commandWithSlash = parts[0].toLowerCase();
@@ -190,16 +264,17 @@ const parseCommand = (text) => {
     commandWithSlash = `/${match[1]}`;
   }
 
-    
   let args = parts.slice(1);
 
+  // Gestion spéciale pour la commande help
   if (commandWithSlash === '/help' && args.length > 0) {
     const potentialCommand = args[0].startsWith('/') ? args[0].slice(1) : args[0];
-    if (commandConfigs[potentialCommand]) {
+    if (commandConfigs[potentialCommand] || adminCommandConfigs[potentialCommand]) {
       return { command: 'help', args: [potentialCommand] };
     }
   }
 
+  // Gestion du suffixe 'help'
   if (args.length > 0 && args[args.length - 1].toLowerCase() === 'help') {
     const command = commandWithSlash.startsWith('/') ? commandWithSlash.slice(1) : commandWithSlash;
     return { command: 'help', args: [command] };
@@ -207,55 +282,84 @@ const parseCommand = (text) => {
 
   const command = commandWithSlash.startsWith('/') ? commandWithSlash.slice(1) : commandWithSlash;
 
-  for (const [cmd, config] of Object.entries(commandConfigs)) {
+  // Vérifier d'abord dans les commandes admin
+  for (const [cmd, config] of Object.entries(adminCommandConfigs)) {
     if (cmd === command || config.aliases.includes(command)) {
-      return { command: cmd, args };
+      return { command: cmd, args, isAdmin: true };
     }
   }
 
-  return { command: null, args };
-};
-
-const getCommandHelp = (command) => {
-  const config = commandConfigs[command];
-  if (!config) return  `Unknown command. Please use /help for a full list of commands.`;
-
-  if (!config.helpMessage) {
-      return `${config.description}\n\nUsage: ${config.usage}\n* = optional parameters\n() = default values`;
+  // Puis dans les commandes normales
+  for (const [cmd, config] of Object.entries(commandConfigs)) {
+    if (cmd === command || config.aliases.includes(command)) {
+      return { command: cmd, args, isAdmin: false };
+    }
   }
 
-  return `${config.description}\n\nUsage: ${config.usage}\n* = optional parameters\n() = default values\n\n${config.helpMessage}`;
+  return { command: null, args: [], isAdmin: false };
 };
 
-const validateArgs = (command, args) => {
-  const config = commandConfigs[command];
-  if (!config) return [ `Unknown command. Please use /help for a full list of commands.`];
 
-  if (args.length === 0 || (args.length === 1 && args[0].toLowerCase() === 'help')) {
-    return [getCommandHelp(command)];
-  }
+function validateArgs(command, args, isAdmin = false) {
+  // Sélectionner la configuration appropriée
+  const config = isAdmin ? adminCommandConfigs[command] : commandConfigs[command];
+  if (!config) return ['Unknown command. Please use /help for a full list of commands.'];
 
   const errors = [];
 
   if (args.length < config.minArgs) {
-    errors.push(`Too few arguments. ${getCommandHelp(command)}`);
+      errors.push(`Too few arguments. ${getCommandHelp(command, isAdmin)}`);
   }
+  
   if (args.length > config.maxArgs && config.maxArgs !== Infinity) {
-    errors.push(`Too many arguments. ${getCommandHelp(command)}`);
+      errors.push(`Too many arguments. ${getCommandHelp(command, isAdmin)}`);
   }
 
-  if (['scan', 'bundle', 'bt', 'th', 'team', 'search', 'eb'].includes(command)) {
-    if (!validateSolanaAddress(args[0])) {
-      errors.push(`Invalid contract address format. Please provide a valid Solana address.\n\n${getCommandHelp(command)}`);
-    }
+  // Validations spécifiques pour les commandes admin
+  if (isAdmin) {
+      switch (command) {
+          case 'adduser':
+              if (args.length < 2) {
+                  errors.push("Usage: /adduser <username> <type>\nTypes: normal, vip, admin");
+              } else if (!['normal', 'vip', 'admin'].includes(args[1].toLowerCase())) {
+                  errors.push("Invalid user type. Use 'normal', 'vip', or 'admin'");
+              }
+              break;
+          case 'addgroup':
+              if (args.length > 0 && !['normal', 'vip'].includes(args[0].toLowerCase())) {
+                  errors.push("Invalid group type. Use 'normal' or 'vip'");
+              }
+              break;
+      }
+  }
+  // Validations pour les commandes standards
+  else {
+      if (['scan', 'bundle', 'bt', 'th', 'team', 'search', 'eb'].includes(command)) {
+          if (args.length > 0 && !validateSolanaAddress(args[0])) {
+              errors.push(`Invalid contract address format. Please provide a valid Solana address.\n\n${getCommandHelp(command)}`);
+          }
+      }
   }
 
   return errors;
+}
+
+const getCommandHelp = (command, isAdmin = false) => {
+  const config = isAdmin ? adminCommandConfigs[command] : commandConfigs[command];
+  if (!config) return `Unknown command. Please use /help for a full list of commands.`;
+
+  return `${config.description}\n\nUsage: ${config.usage}\n${config.helpMessage || ''}`;
+};
+
+const isAdminCommand = (command) => {
+  return !!adminCommandConfigs[command];
 };
 
 module.exports = {
   commandConfigs,
+  adminCommandConfigs,
   parseCommand,
   validateArgs,
-  getCommandHelp
+  getCommandHelp,
+  isAdminCommand
 };
