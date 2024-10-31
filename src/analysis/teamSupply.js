@@ -13,33 +13,51 @@ const FRESH_WALLET_THRESHOLD = 100;
 const TRANSACTION_CHECK_LIMIT = 20;
 const MAX_ASSETS_THRESHOLD = 2;
 const SUPPLY_THRESHOLD = new BigNumber('0.001'); // 0.1%
+const BATCH_SIZE = 20; // Augmenté pour profiter du rate limit plus élevé
 
 async function analyzeTeamSupply(tokenAddress, mainContext = 'default') {
     logger.debug(`Starting team supply analysis for ${tokenAddress}`, { mainContext });
 
     try {
-        // 1. Récupérer les informations du token via GMGN API
-        const tokenInfoResponse = await gmgnApi.getTokenInfo(tokenAddress, mainContext, 'getTokenInfo');
-        if (!tokenInfoResponse || !tokenInfoResponse.data || !tokenInfoResponse.data.token) {
+        // Exécuter les appels initiaux en parallèle
+        const [tokenInfoResponse, allHolders] = await Promise.all([
+            gmgnApi.getTokenInfo(tokenAddress, mainContext, 'getTokenInfo'),
+            getHolders(tokenAddress, mainContext, 'getHolders')
+        ]);
+
+        if (!tokenInfoResponse?.data?.token) {
             throw new Error("Failed to fetch token information");
         }
         const tokenInfo = tokenInfoResponse.data.token;
         const totalSupply = new BigNumber(tokenInfo.total_supply);
 
-        // 2. Récupérer tous les holders
-        const allHolders = await getHolders(tokenAddress, mainContext, 'getHolders');
-        
-        // 3. Filtrer les holders significatifs
+        // Filtrer les holders significatifs
         const significantHolders = allHolders.filter(holder => {
             const balance = new BigNumber(holder.balance);
             const percentage = balance.dividedBy(totalSupply);
             return percentage.isGreaterThanOrEqualTo(SUPPLY_THRESHOLD);
         });
 
-        // 4. Analyser chaque wallet
-        const analyzedWallets = await analyzeWallets(significantHolders, tokenAddress, mainContext);
+        // Pré-fetch des données en masse
+        const solanaApi = getSolanaApi();
+        const walletsToAnalyze = significantHolders.map(h => h.address);
+        
+        // Récupérer toutes les signatures et asset counts en parallèle
+        const [allSignatures, allAssetCounts] = await Promise.all([
+            batchGetSignatures(walletsToAnalyze, mainContext),
+            batchGetAssetCounts(walletsToAnalyze, mainContext)
+        ]);
 
-        // 5. Identifier les wallets de l'équipe et calculer les totaux
+        // Analyser les wallets avec les données pré-fetchées
+        const analyzedWallets = await analyzeWalletsOptimized(
+            significantHolders,
+            tokenAddress,
+            mainContext,
+            allSignatures,
+            allAssetCounts
+        );
+
+        // Le reste du code reste identique
         const teamWallets = analyzedWallets
             .filter(w => w.category !== 'Unknown')
             .map(w => ({
@@ -51,7 +69,6 @@ async function analyzeTeamSupply(tokenAddress, mainContext = 'default') {
                     .toNumber()
             }));
 
-        // 6. Calculer le total contrôlé
         const teamSupplyHeld = analyzedWallets
             .filter(w => w.category !== 'Unknown')
             .reduce((total, wallet) => {
@@ -63,7 +80,6 @@ async function analyzeTeamSupply(tokenAddress, mainContext = 'default') {
             .multipliedBy(100)
             .toNumber();
 
-        // 7. Retourner les données
         return {
             scanData: {
                 tokenInfo: {
@@ -93,14 +109,58 @@ async function analyzeTeamSupply(tokenAddress, mainContext = 'default') {
     }
 }
 
-// Les fonctions auxiliaires restent identiques
-async function analyzeWallets(wallets, tokenAddress, mainContext) {
+// Nouvelle fonction pour récupérer les signatures en batch
+async function batchGetSignatures(addresses, mainContext) {
+    const solanaApi = getSolanaApi();
+    const signaturePromises = addresses.map(address => 
+        solanaApi.getSignaturesForAddress(
+            address,
+            { limit: FRESH_WALLET_THRESHOLD + 1 },
+            mainContext,
+            'batchSignatures'
+        ).catch(error => {
+            logger.error(`Error getting signatures for ${address}:`, error);
+            return [];
+        })
+    );
+
+    const signatures = await Promise.all(signaturePromises);
+    return addresses.reduce((acc, address, index) => {
+        acc[address] = signatures[index];
+        return acc;
+    }, {});
+}
+
+// Nouvelle fonction pour récupérer les asset counts en batch
+async function batchGetAssetCounts(addresses, mainContext) {
+    const solanaApi = getSolanaApi();
+    const assetCountPromises = addresses.map(address =>
+        solanaApi.getAssetCount(address, mainContext, 'batchAssetCounts')
+            .catch(error => {
+                logger.error(`Error getting asset count for ${address}:`, error);
+                return 0;
+            })
+    );
+
+    const assetCounts = await Promise.all(assetCountPromises);
+    return addresses.reduce((acc, address, index) => {
+        acc[address] = assetCounts[index];
+        return acc;
+    }, {});
+}
+
+// Version optimisée de analyzeWallets
+async function analyzeWalletsOptimized(wallets, tokenAddress, mainContext, preloadedSignatures, preloadedAssetCounts) {
     const analyzeWallet = async (wallet) => {
         try {
             let category = 'Unknown';
             let daysSinceLastActivity = null;
 
-            if (await isFreshWallet(wallet.address, mainContext, 'isFreshWallet')) {
+            // Utiliser les données pré-chargées
+            const signatures = preloadedSignatures[wallet.address] || [];
+            const assetCount = preloadedAssetCounts[wallet.address] || 0;
+
+            if (signatures.length <= FRESH_WALLET_THRESHOLD) {
                 category = 'Fresh';
             } else {
                 const inactivityCheck = await checkInactivityPeriod(wallet.address, tokenAddress, mainContext, 'checkInactivity');
@@ -111,8 +171,25 @@ async function analyzeWallets(wallets, tokenAddress, mainContext) {
                 } else if (inactivityCheck.isInactive) {
                     category = 'Inactive';
                     daysSinceLastActivity = inactivityCheck.daysSinceLastActivity;
-                } else if (await isTeamBot(wallet.address, tokenAddress, mainContext)) {
-                    category = 'Teambot';
+                } else if (assetCount <= MAX_ASSETS_THRESHOLD) {
+                    // Vérification simplifiée du teambot
+                    const solanaApi = getSolanaApi();
+                    const transactions = await solanaApi.getSignaturesForAddress(
+                        wallet.address,
+                        { limit: TRANSACTION_CHECK_LIMIT },
+                        mainContext,
+                        'teamBotCheck'
+                    );
+                    
+                    const hasOnlyTokenTransactions = transactions.every(tx => 
+                        tx?.meta?.postTokenBalances?.some(balance => 
+                            balance.mint === tokenAddress
+                        ) ?? false
+                    );
+
+                    if (hasOnlyTokenTransactions) {
+                        category = 'Teambot';
+                    }
                 }
             }
 
@@ -131,63 +208,15 @@ async function analyzeWallets(wallets, tokenAddress, mainContext) {
         }
     };
 
-    const batchSize = 10;
+    // Traitement en lots plus grands
     const analyzedWallets = [];
-
-    for (let i = 0; i < wallets.length; i += batchSize) {
-        const batch = wallets.slice(i, i + batchSize);
+    for (let i = 0; i < wallets.length; i += BATCH_SIZE) {
+        const batch = wallets.slice(i, i + BATCH_SIZE);
         const batchResults = await Promise.all(batch.map(analyzeWallet));
         analyzedWallets.push(...batchResults);
-
-        if (i + batchSize < wallets.length) {
-            await new Promise(resolve => setTimeout(resolve, 100));
-        }
     }
 
     return analyzedWallets;
-}
-
-async function isTeamBot(address, tokenAddress, mainContext) {
-    const solanaApi = getSolanaApi();
-    try {
-        const assetCount = await solanaApi.getAssetCount(address, mainContext, 'isTeamBot');
-        if (assetCount <= MAX_ASSETS_THRESHOLD) {
-            const transactions = await solanaApi.getSignaturesForAddress(
-                address, 
-                { limit: TRANSACTION_CHECK_LIMIT },
-                mainContext,
-                'getTeamBotTransactions'
-            );
-            
-            const hasOnlyTokenTransactions = transactions.every(tx => 
-                tx?.meta?.postTokenBalances?.some(balance => 
-                    balance.mint === tokenAddress
-                ) ?? false
-            );
-
-            return hasOnlyTokenTransactions;
-        }
-        return false;
-    } catch (error) {
-        logger.error(`Error checking if ${address} is a teambot:`, error);
-        return false;
-    }
-}
-
-async function isFreshWallet(address, mainContext, subContext) {
-    try {
-        const solanaApi = getSolanaApi();
-        const signatures = await solanaApi.getSignaturesForAddress(
-            address, 
-            { limit: FRESH_WALLET_THRESHOLD + 1 },
-            mainContext,
-            subContext
-        );
-        return signatures.length <= FRESH_WALLET_THRESHOLD;
-    } catch (error) {
-        logger.error(`Error checking if ${address} is a fresh wallet:`, error);
-        return false;
-    }
 }
 
 module.exports = {
