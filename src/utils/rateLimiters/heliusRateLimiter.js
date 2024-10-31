@@ -5,19 +5,19 @@ class HeliusRateLimiter {
   constructor() {
     // Limiteur pour les appels RPC
     this.rpcLimiter = new Bottleneck({
-      reservoir: 50, // Nombre de requêtes par seconde pour RPC
-      reservoirRefreshAmount: 50,
+      reservoir: 200, // Nombre de requêtes par seconde pour RPC
+      reservoirRefreshAmount: 200,
       reservoirRefreshInterval: 1000, // Rafraîchit chaque seconde
-      maxConcurrent: 5, // Nombre maximum de requêtes simultanées
+      maxConcurrent: 20, // Nombre maximum de requêtes simultanées
       minTime: 0, // Temps minimum entre les requêtes
     });
 
     // Limiteur pour les appels API
     this.apiLimiter = new Bottleneck({
-      reservoir: 10, // Nombre de requêtes par seconde pour API
-      reservoirRefreshAmount: 10,
+      reservoir: 50, // Nombre de requêtes par seconde pour API
+      reservoirRefreshAmount: 50,
       reservoirRefreshInterval: 1000,
-      maxConcurrent: 5,
+      maxConcurrent: 10,
       minTime: 0,
     });
 
