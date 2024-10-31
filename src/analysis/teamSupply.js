@@ -1,5 +1,5 @@
 const { getSolanaApi } = require('../integrations/solanaApi');
-const dexScreenerApi = require('../integrations/dexScreenerApi');
+const gmgnApi = require('../integrations/gmgnApi');
 const { checkInactivityPeriod } = require('../tools/inactivityPeriod');
 const { getHolders } = require('../tools/getHolders');
 const BigNumber = require('bignumber.js');
@@ -18,13 +18,13 @@ async function analyzeTeamSupply(tokenAddress, mainContext = 'default') {
     logger.debug(`Starting team supply analysis for ${tokenAddress}`, { mainContext });
 
     try {
-        // 1. Récupérer les informations du token
-        const tokenInfo = await dexScreenerApi.getTokenInfo(tokenAddress, mainContext);
-        if (!tokenInfo) {
+        // 1. Récupérer les informations du token via GMGN API
+        const tokenInfoResponse = await gmgnApi.getTokenInfo(tokenAddress, mainContext, 'getTokenInfo');
+        if (!tokenInfoResponse || !tokenInfoResponse.data || !tokenInfoResponse.data.token) {
             throw new Error("Failed to fetch token information");
         }
-
-        const totalSupply = new BigNumber(tokenInfo.totalSupply);
+        const tokenInfo = tokenInfoResponse.data.token;
+        const totalSupply = new BigNumber(tokenInfo.total_supply);
 
         // 2. Récupérer tous les holders
         const allHolders = await getHolders(tokenAddress, mainContext, 'getHolders');
@@ -63,10 +63,14 @@ async function analyzeTeamSupply(tokenAddress, mainContext = 'default') {
             .multipliedBy(100)
             .toNumber();
 
-        // 7. Retourner uniquement les données brutes
+        // 7. Retourner les données
         return {
             scanData: {
-                tokenInfo,
+                tokenInfo: {
+                    totalSupply: tokenInfo.total_supply,
+                    symbol: tokenInfo.symbol,
+                    decimals: tokenInfo.decimals
+                },
                 analyzedWallets,
                 teamWallets,
                 totalSupplyControlled,
@@ -75,7 +79,7 @@ async function analyzeTeamSupply(tokenAddress, mainContext = 'default') {
             trackingInfo: {
                 tokenAddress,
                 tokenSymbol: tokenInfo.symbol,
-                totalSupply: tokenInfo.totalSupply,
+                totalSupply: tokenInfo.total_supply,
                 decimals: tokenInfo.decimals,
                 totalSupplyControlled,
                 teamWallets,
@@ -89,18 +93,16 @@ async function analyzeTeamSupply(tokenAddress, mainContext = 'default') {
     }
 }
 
-// Analyse détaillée des wallets
+// Les fonctions auxiliaires restent identiques
 async function analyzeWallets(wallets, tokenAddress, mainContext) {
     const analyzeWallet = async (wallet) => {
         try {
             let category = 'Unknown';
             let daysSinceLastActivity = null;
 
-            // Vérifier si c'est un nouveau wallet
             if (await isFreshWallet(wallet.address, mainContext, 'isFreshWallet')) {
                 category = 'Fresh';
             } else {
-                // Vérifier l'inactivité
                 const inactivityCheck = await checkInactivityPeriod(wallet.address, tokenAddress, mainContext, 'checkInactivity');
                 if (inactivityCheck.category === 'No Token') {
                     category = 'No Token';
@@ -129,7 +131,6 @@ async function analyzeWallets(wallets, tokenAddress, mainContext) {
         }
     };
 
-    // Traiter les wallets par lots pour éviter de surcharger l'API
     const batchSize = 10;
     const analyzedWallets = [];
 
@@ -138,7 +139,6 @@ async function analyzeWallets(wallets, tokenAddress, mainContext) {
         const batchResults = await Promise.all(batch.map(analyzeWallet));
         analyzedWallets.push(...batchResults);
 
-        // Petit délai entre les lots pour ne pas surcharger l'API
         if (i + batchSize < wallets.length) {
             await new Promise(resolve => setTimeout(resolve, 100));
         }
@@ -147,7 +147,6 @@ async function analyzeWallets(wallets, tokenAddress, mainContext) {
     return analyzedWallets;
 }
 
-// Fonctions utilitaires
 async function isTeamBot(address, tokenAddress, mainContext) {
     const solanaApi = getSolanaApi();
     try {
@@ -160,7 +159,6 @@ async function isTeamBot(address, tokenAddress, mainContext) {
                 'getTeamBotTransactions'
             );
             
-            // Vérifier si toutes les transactions concernent le token
             const hasOnlyTokenTransactions = transactions.every(tx => 
                 tx?.meta?.postTokenBalances?.some(balance => 
                     balance.mint === tokenAddress
