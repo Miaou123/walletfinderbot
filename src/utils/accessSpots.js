@@ -10,7 +10,7 @@ const getAvailableSpots = () => {
     const rawData = fs.readFileSync(accessFilePath);
     accessData = JSON.parse(rawData);
     const totalAllowedUsers = accessData.allowedUsers.length;
-    const maxUsers = 100;
+    const maxUsers = 200;
     const availableSpots = maxUsers - totalAllowedUsers;
     return { availableSpots, maxUsers };
   } catch (error) {
