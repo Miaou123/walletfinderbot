@@ -4,6 +4,7 @@ const logger = require('../utils/logger');
 const solanaApi = getSolanaApi();
 const fs = require('fs').promises;
 const path = require('path');
+const { scanToken } = require('../analysis/topHoldersScanner');
 
 const CHECK_INTERVAL = 1 * 60 * 1000;
 const SAVE_INTERVAL = 0.5 * 60 * 1000;
@@ -153,7 +154,16 @@ class SupplyTracker {
     }
 
     startTracking(tokenAddress, chatId, wallets, initialSupplyPercentage, totalSupply, significantChangeThreshold, ticker, decimals, trackType, username) {
-        logger.debug(`Starting tracking for user ${username}:`, { tokenAddress, chatId, wallets, initialSupplyPercentage, totalSupply, significantChangeThreshold, ticker, decimals, trackType });
+        logger.debug(`Starting tracking for user ${username}:`, { 
+            tokenAddress, chatId, 
+            hasWallets: !!wallets, 
+            initialSupplyPercentage, 
+            totalSupply, 
+            significantChangeThreshold, 
+            ticker, 
+            decimals, 
+            trackType 
+        });
         
         if (!this.userTrackers.has(username)) {
             this.userTrackers.set(username, new Map());
@@ -183,11 +193,9 @@ class SupplyTracker {
 
         const now = Date.now();
         logger.debug(`Creating new tracker with timestamp ${now} - Will expire at ${new Date(now + EXPIRY_TIME)}`);
-        
 
         const tracker = {
             chatId,
-            wallets,
             initialSupplyPercentage: new BigNumber(initialSupplyPercentage),
             currentSupplyPercentage: new BigNumber(initialSupplyPercentage),
             totalSupply: new BigNumber(totalSupply),
@@ -198,6 +206,8 @@ class SupplyTracker {
             tokenAddress,
             username,
             startTimestamp: now,
+            // Ne stocker wallets que pour le tracking de team
+            ...(trackType === 'team' && { wallets }),
             intervalId: setInterval(() => this.checkSupply(username, trackerId), CHECK_INTERVAL)
         };
 
@@ -262,14 +272,33 @@ class SupplyTracker {
         try {
             await retryWithBackoff(async () => {
                 let newSupplyPercentage;
+
                 if (tracker.trackType === 'team') {
-                    newSupplyPercentage = await this.getTeamSupply(tracker.wallets, tracker.tokenAddress, tracker.totalSupply, tracker.decimals);
+                    // Pour le tracking team, utiliser les wallets
+                    newSupplyPercentage = await this.getTeamSupply(
+                        tracker.wallets,
+                        tracker.tokenAddress,
+                        tracker.totalSupply,
+                        tracker.decimals
+                    );
                 } else {
-                    newSupplyPercentage = await this.getControlledSupply(tracker.wallets, tracker.tokenAddress, tracker.totalSupply, tracker.decimals);
+                    // Pour les top holders, utiliser scanToken
+                    const scanResult = await scanToken(
+                        tracker.tokenAddress,
+                        20,  // nombre de holders par défaut
+                        false,
+                        'supplyCheck'
+                    );
+
+                    if (!scanResult || typeof scanResult.totalSupplyControlled !== 'number') {
+                        throw new Error(`Invalid scan result for ${tracker.tokenAddress}`);
+                    }
+
+                    newSupplyPercentage = new BigNumber(scanResult.totalSupplyControlled);
                 }
 
                 if (newSupplyPercentage.isNaN() || !newSupplyPercentage.isFinite()) {
-                    throw new Error(`Invalid supply percentage calculated for ${tracker.tokenAddress} (${tracker.trackType})`);
+                    throw new Error(`Invalid supply percentage calculated for ${tracker.tokenAddress}`);
                 }
 
                 const change = newSupplyPercentage.minus(tracker.initialSupplyPercentage);
@@ -282,7 +311,7 @@ class SupplyTracker {
                 tracker.currentSupplyPercentage = newSupplyPercentage;
             });
         } catch (error) {
-            logger.error(`Error checking ${tracker.trackType} supply for ${tracker.tokenAddress} after multiple retries:`, { 
+            logger.error(`Error checking supply for ${tracker.tokenAddress}:`, {
                 error: error.message,
                 stack: error.stack,
                 tokenAddress: tracker.tokenAddress,

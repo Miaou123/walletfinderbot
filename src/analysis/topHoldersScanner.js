@@ -19,7 +19,8 @@ async function scanToken(tokenAddress, requestedHolders = 10, trackSupply = fals
   }
   const tokenInfo = tokenInfoResponse.data.token;
 
-  const topHolders = await getTopHolders(tokenAddress, requestedHolders, mainContext, 'getTopHolders');
+  // On récupère plus de holders pour compenser la suppression des pools
+  const topHolders = await getTopHolders(tokenAddress, 20, mainContext, 'getTopHolders');
   const walletAddresses = topHolders.map(holder => holder.address);
   const assetsData = await getAssetsForMultipleWallets(walletAddresses, mainContext, 'getAssets');
 
@@ -98,11 +99,19 @@ async function scanToken(tokenAddress, requestedHolders = 10, trackSupply = fals
     }
   }));
 
-  // Filtre les wallets en excluant explicitement les pools de liquidité
-  const filteredWallets = analyzedWallets.filter(wallet => {
-    if (wallet.error) return false;
-    if (wallet.walletType === 'pool') return false; // Exclusion des pools
-    return new BigNumber(wallet.portfolioValue).isGreaterThan(0);
+  // Filtrer les wallets en excluant les pools et prendre exactement les 10 premiers
+  const filteredWallets = analyzedWallets
+    .filter(wallet => {
+      if (wallet.error) return false;
+      if (wallet.walletType === 'pool') return false;
+      return new BigNumber(wallet.portfolioValue).isGreaterThan(0);
+    })
+    .slice(0, 10); // Prendre exactement 10 wallets
+
+  logger.debug(`Wallet filtering results for ${tokenAddress}:`, {
+    totalAnalyzed: analyzedWallets.length,
+    nonPoolWallets: analyzedWallets.filter(w => w.walletType !== 'pool').length,
+    finalWallets: filteredWallets.length
   });
 
   if (filteredWallets.length > 0) {
@@ -113,7 +122,9 @@ async function scanToken(tokenAddress, requestedHolders = 10, trackSupply = fals
     }
   }
 
-  const totalSupplyControlled = filteredWallets.reduce((sum, wallet) => sum + parseFloat(wallet.supplyPercentage || 0), 0);
+  const totalSupplyControlled = filteredWallets.reduce((sum, wallet) => 
+    sum + parseFloat(wallet.supplyPercentage || 0), 0);
+
   const averagePortfolioValue = filteredWallets.length > 0 
     ? filteredWallets.reduce((sum, wallet) => sum + parseFloat(wallet.portfolioValue || 0), 0) / filteredWallets.length
     : 0;
