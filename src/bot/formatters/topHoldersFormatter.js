@@ -86,7 +86,7 @@ const formatSingleWallet = (wallet, index, tokenInfo) => {
     const portfolioValue = parseFloat(wallet.stats.totalValue);
     
     // 1. Ligne principale avec adresse, pourcentage et liens
-    let info = `${rank}. ${truncateAddress(wallet.address)} → ${formatNumber(wallet.supplyPercentage, 2, true)} ` +
+    let info = `${rank}.  <a href="https://solscan.io/account/${wallet.address}">${truncateAddress(wallet.address)}</a> → ${formatNumber(wallet.supplyPercentage, 2, true)} ` +
                `<a href="https://gmgn.ai/sol/address/${wallet.address}">gmgn</a>/` +
                `<a href="https://app.cielo.finance/profile/${wallet.address}/pnl/tokens">cielo</a>\n`;
 
