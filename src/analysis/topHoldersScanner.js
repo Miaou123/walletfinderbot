@@ -1,3 +1,4 @@
+// topHoldersScanner.js
 const { getSolanaApi } = require('../integrations/solanaApi');
 const gmgnApi = require('../integrations/gmgnApi');
 const { getAssetsForMultipleWallets } = require('../tools/walletValueCalculator');
@@ -12,19 +13,16 @@ const logger = require('../utils/logger');
 async function scanToken(tokenAddress, requestedHolders = 10, trackSupply = false, mainContext = 'default') {
   logger.debug(`Starting scan for token ${tokenAddress}`, { requestedHolders, trackSupply, mainContext });
 
-  // 1. Récupérer les informations du token
   const tokenInfoResponse = await gmgnApi.getTokenInfo(tokenAddress, mainContext);
   if (!tokenInfoResponse || !tokenInfoResponse.data || !tokenInfoResponse.data.token) {
     throw new Error("Failed to fetch token information");
   }
   const tokenInfo = tokenInfoResponse.data.token;
 
-  // 2. Récupérer les top holders
   const topHolders = await getTopHolders(tokenAddress, requestedHolders, mainContext, 'getTopHolders');
   const walletAddresses = topHolders.map(holder => holder.address);
   const assetsData = await getAssetsForMultipleWallets(walletAddresses, mainContext, 'getAssets');
 
-  // 3. Analyser chaque wallet
   const detector = new PoolAndBotDetector();
   
   const analyzedWallets = await Promise.all(topHolders.map(async (holder, index) => {
@@ -42,7 +40,6 @@ async function scanToken(tokenAddress, requestedHolders = 10, trackSupply = fals
       const totalValue = new BigNumber(walletData.totalValue || 0);
       const portfolioValueWithoutToken = totalValue.minus(tokenValue);
 
-      // Analyse du wallet
       const walletAnalysis = await detector.analyzeWallet({
         wallet: holder.address,
         data: { data: walletData }
@@ -101,14 +98,13 @@ async function scanToken(tokenAddress, requestedHolders = 10, trackSupply = fals
     }
   }));
 
-  // 4. Filtrer les wallets
+  // Filtre les wallets en excluant explicitement les pools de liquidité
   const filteredWallets = analyzedWallets.filter(wallet => {
     if (wallet.error) return false;
-    if (wallet.walletType === 'pool') return true;
+    if (wallet.walletType === 'pool') return false; // Exclusion des pools
     return new BigNumber(wallet.portfolioValue).isGreaterThan(0);
   });
 
-  // 5. Process avec walletChecker
   if (filteredWallets.length > 0) {
     try {
       await fetchMultipleWallets(filteredWallets.map(w => w.address), 5, mainContext, 'scanToken');
@@ -117,14 +113,12 @@ async function scanToken(tokenAddress, requestedHolders = 10, trackSupply = fals
     }
   }
 
-  // 6. Calculer les statistiques globales
   const totalSupplyControlled = filteredWallets.reduce((sum, wallet) => sum + parseFloat(wallet.supplyPercentage || 0), 0);
   const averagePortfolioValue = filteredWallets.length > 0 
     ? filteredWallets.reduce((sum, wallet) => sum + parseFloat(wallet.portfolioValue || 0), 0) / filteredWallets.length
     : 0;
   const notableAddresses = filteredWallets.filter(wallet => wallet.isInteresting).length;
 
-  // 7. Préparer les données de retour
   const scanData = {
     tokenInfo,
     filteredWallets,
@@ -134,7 +128,6 @@ async function scanToken(tokenAddress, requestedHolders = 10, trackSupply = fals
     tokenAddress
   };
 
-  // 8. Si le tracking est demandé, inclure les informations supplémentaires
   if (trackSupply) {
     logger.debug('Preparing tracking info:', {
       tokenAddress,
