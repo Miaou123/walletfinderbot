@@ -3,25 +3,22 @@ const logger = require('../../utils/logger');
 
 const formatAnalysisMessage = (analysisResult, tokenInfo) => {
   logger.info(`Formatting early buyers message for ${tokenInfo.symbol}`);
-  const messages = [];
+  let finalMessage = '';
   const errors = [];
 
   try {
     let analyzedWallets;
     
-    // Check the structure of analysisResult
     if (Array.isArray(analysisResult)) {
       analyzedWallets = analysisResult;
     } else if (analysisResult && Array.isArray(analysisResult.analyzedWallets)) {
       analyzedWallets = analysisResult.analyzedWallets;
     } else if (analysisResult && typeof analysisResult === 'object') {
-      // If it's an object, we'll try to extract the wallets
       analyzedWallets = Object.values(analysisResult).flat().filter(Array.isArray);
     } else {
       throw new Error('Invalid analysis result: unable to find analyzed wallets');
     }
 
-    // Catégoriser les portefeuilles
     const categorizedWallets = {
       'High Value': [],
       'Low Transactions': [],
@@ -34,6 +31,7 @@ const formatAnalysisMessage = (analysisResult, tokenInfo) => {
       }
     });
 
+    // Summary section
     let totalWhaleWallets = categorizedWallets['High Value'].length;
     let totalWhaleSupplyPercentage = categorizedWallets['High Value'].reduce((sum, wallet) => sum + parseFloat(wallet.supplyPercentage || 0), 0);
     let totalWhaleValue = categorizedWallets['High Value'].reduce((sum, wallet) => sum + parseFloat(wallet.tokenValueUsd || 0), 0);
@@ -46,66 +44,74 @@ const formatAnalysisMessage = (analysisResult, tokenInfo) => {
     let inactiveWalletsSupplyPercentage = categorizedWallets['Inactive'].reduce((sum, wallet) => sum + parseFloat(wallet.supplyPercentage || 0), 0);
     let inactiveWalletsValue = categorizedWallets['Inactive'].reduce((sum, wallet) => sum + parseFloat(wallet.tokenValueUsd || 0), 0);
 
-    let summaryMessage = `<b><a href="https://solscan.io/token/${tokenInfo.address}">${tokenInfo.name}</a></b> (${tokenInfo.symbol}) `;
-    summaryMessage += `<a href="https://dexscreener.com/solana/${tokenInfo.address}">📈</a>\n`;
-    summaryMessage += `<code>${tokenInfo.address}</code>\n\n`;
+    // Build the combined message
+    finalMessage = `<b><a href="https://solscan.io/token/${tokenInfo.address}">${tokenInfo.name}</a></b> (${tokenInfo.symbol}) `;
+    finalMessage += `<a href="https://dexscreener.com/solana/${tokenInfo.address}">📈</a>\n`;
+    finalMessage += `<code>${tokenInfo.address}</code>\n\n`;
 
-    summaryMessage += `🐳 ${totalWhaleWallets} whales wallets (calculated excluding ${tokenInfo.symbol}) (${totalWhaleSupplyPercentage.toFixed(2)}% worth $${formatNumber(totalWhaleValue)})\n`;
-    summaryMessage += `🆕 ${freshWallets} fresh wallets (${freshWalletsSupplyPercentage.toFixed(2)}% worth $${formatNumber(freshWalletsValue)})\n`;
-    summaryMessage += `💤 ${inactiveWallets} inactive wallets (${inactiveWalletsSupplyPercentage.toFixed(2)}% worth $${formatNumber(inactiveWalletsValue)})`;
+    finalMessage += `🐳 ${totalWhaleWallets} whales wallets (calculated excluding ${tokenInfo.symbol}) (${totalWhaleSupplyPercentage.toFixed(2)}% worth $${formatNumber(totalWhaleValue)})\n`;
+    finalMessage += `🆕 ${freshWallets} fresh wallets (${freshWalletsSupplyPercentage.toFixed(2)}% worth $${formatNumber(freshWalletsValue)})\n`;
+    finalMessage += `💤 ${inactiveWallets} inactive wallets (${inactiveWalletsSupplyPercentage.toFixed(2)}% worth $${formatNumber(inactiveWalletsValue)})\n\n`;
 
-    messages.push(summaryMessage);
-
-    const whaleMessage = formatWhaleMap({categorizedWallets}, tokenInfo, 'High Value', '🐳 Whale Wallets');
-    if (whaleMessage) {
-      messages.push(whaleMessage);
+    // Add Whale Wallets section
+    if (categorizedWallets['High Value'].length > 0) {
+      finalMessage += `🐳 Whale Wallets for <a href="https://solscan.io/token/${tokenInfo.address}">${tokenInfo.symbol}</a>\n\n`;
+      categorizedWallets['High Value']
+        .sort((a, b) => parseFloat(b.stats.totalValue) - parseFloat(a.stats.totalValue))
+        .forEach((wallet, index) => {
+          finalMessage += formatSingleWallet(wallet, index, tokenInfo);
+        });
     }
 
-    const freshWalletMessage = formatFreshWalletMessage({categorizedWallets}, tokenInfo);
-    if (freshWalletMessage) {
-      messages.push(freshWalletMessage);
+    // Add Fresh Wallets section
+    if (categorizedWallets['Low Transactions'].length > 0) {
+      finalMessage += `🆕 Fresh Wallets for <a href="https://solscan.io/token/${tokenInfo.address}">${tokenInfo.symbol}</a>\n\n`;
+      categorizedWallets['Low Transactions'].forEach((wallet, index) => {
+        finalMessage += formatSimpleWallet(wallet, index, tokenInfo);
+      });
     }
 
-    const inactiveWalletMessage = formatInactiveWalletMessage({categorizedWallets}, tokenInfo);
-    if (inactiveWalletMessage) {
-      messages.push(inactiveWalletMessage);
+    // Add Inactive Wallets section
+    if (categorizedWallets['Inactive'].length > 0) {
+      finalMessage += `💤 Inactive Wallets for <a href="https://solscan.io/token/${tokenInfo.address}">${tokenInfo.symbol}</a>\n\n`;
+      categorizedWallets['Inactive'].forEach((wallet, index) => {
+        finalMessage += formatSimpleWallet(wallet, index, tokenInfo);
+        finalMessage += `Last swap: ${Math.floor(wallet.daysSinceLastRelevantSwap)}d ago\n\n`;
+      });
     }
 
   } catch (error) {
     logger.error('Error in formatAnalysisMessage:', error);
     errors.push(`Error in analysis formatting: ${error.message}`);
-    messages.push('An error occurred while formatting the analysis results.');
+    finalMessage = 'An error occurred while formatting the analysis results.';
   }
 
-  return { messages, errors };
+  // Retourner un tableau avec un seul message pour maintenir la compatibilité
+  return { messages: [finalMessage], errors };
 };
 
+// Keep the existing helper functions unchanged
 const formatSingleWallet = (wallet, index, tokenInfo) => {
   try {
     const rank = index + 1;
     const portfolioValue = parseFloat(wallet.stats.totalValue);
     
-    // 1. Ligne principale avec adresse, pourcentage et liens
     let info = `${rank}.  <a href="https://solscan.io/account/${wallet.address}">${truncateAddress(wallet.address)}</a> → ${formatNumber(wallet.supplyPercentage, 2, true)} ` +
                `<a href="https://gmgn.ai/sol/address/${wallet.address}">gmgn</a>/` +
                `<a href="https://app.cielo.finance/profile/${wallet.address}/pnl/tokens">cielo</a>\n`;
 
-    // 2. Portfolio et SOL
     info += `├ 💼 Port: ${formatNumber(portfolioValue)} (SOL: ${formatNumber(wallet.solBalance, 2)})\n`;
 
-    // 3. P/L et unrealized P/L si disponible
     if (wallet.pnl30d !== undefined && wallet.unrealizedPnl !== undefined) {
       info += `├ 💰 P/L (30d): ${formatNumber(wallet.pnl30d)} 📈 uP/L: ${formatNumber(wallet.unrealizedPnl)}\n`;
     }
 
-    // 4. Winrate si disponible
     if (wallet.winrate !== undefined) {
       info += `└ 📊 Winrate (30d): ${formatNumber(wallet.winrate, 2, true)}`;
     } else {
       info += `└ 💼 Port: ${formatNumber(portfolioValue)}`;
     }
   
-    // 5. Ajouter les top tokens si disponibles
     if (wallet.stats.tokenInfos && wallet.stats.tokenInfos.length > 0) {
       const topTokens = wallet.stats.tokenInfos
         .filter(token => token.symbol !== 'SOL' && token.symbol !== tokenInfo.symbol && parseFloat(token.value) >= 1000)
@@ -126,7 +132,6 @@ const formatSingleWallet = (wallet, index, tokenInfo) => {
   }
 };
 
-
 const formatSimpleWallet = (wallet, index) => {
   try {
     const rank = index + 1;
@@ -138,82 +143,8 @@ const formatSimpleWallet = (wallet, index) => {
   }
 };
 
-const formatWhaleMap = (analysisResult, tokenInfo, category, title) => {
-  try {
-    if (!analysisResult || !analysisResult.categorizedWallets) {
-      logger.error('Invalid analysis result in formatWhaleMap:', analysisResult);
-      return null;
-    }
-
-    const wallets = analysisResult.categorizedWallets[category] || [];
-    if (wallets.length === 0) {
-      logger.log(`No wallets found for category: ${category}`);
-      return null;
-    }
-
-    wallets.sort((a, b) => parseFloat(b.stats.totalValue) - parseFloat(a.stats.totalValue));
-
-    let message = `${title} for <a href="https://solscan.io/token/${tokenInfo.address}">${tokenInfo.symbol}</a>\n\n`;
-
-    wallets.forEach((wallet, index) => {
-      message += formatSingleWallet(wallet, index, tokenInfo);
-    });
-
-    return message;
-  } catch (error) {
-    logger.error(`Error in formatWhaleMap for category ${category}:`, error);
-    return null;
-  }
-};
-
-const formatFreshWalletMessage = (analysisResult, tokenInfo) => {
-  try {
-    const freshWallets = analysisResult.categorizedWallets['Low Transactions'] || [];
-
-    if (freshWallets.length === 0) return null;
-
-    let message = `🆕Fresh Wallets for <a href="https://solscan.io/token/${tokenInfo.address}">${tokenInfo.symbol}</a>\n\n`;
-
-    freshWallets.forEach((wallet, index) => {
-      message += formatSimpleWallet(wallet, index, tokenInfo);
-    });
-
-    return message;
-  } catch (error) {
-    logger.error('Error in formatFreshWalletMessage:', error);
-    return null;
-  }
-};
-
-
-
-const formatInactiveWalletMessage = (analysisResult, tokenInfo) => {
-  try {
-    const inactiveWallets = analysisResult.categorizedWallets['Inactive'] || [];
-
-    if (inactiveWallets.length === 0) return null;
-
-    let message = `💤 Inactive Wallets for <a href="https://solscan.io/token/${tokenInfo.address}">${tokenInfo.symbol}</a>\n\n`;
-
-    inactiveWallets.forEach((wallet, index) => {
-      message += formatSimpleWallet(wallet, index, tokenInfo);
-      message += `Last swap: ${Math.floor(wallet.daysSinceLastRelevantSwap)}d ago\n\n`;
-    });
-
-    return message;
-  } catch (error) {
-    logger.error('Error in formatInactiveWalletMessage:', error);
-    return null;
-  }
-};
-
-
-
 module.exports = {
   formatNumber,
-  formatWhaleMap,
-  formatFreshWalletMessage,
-  formatInactiveWalletMessage,
   formatAnalysisMessage,
   formatSingleWallet
 };
