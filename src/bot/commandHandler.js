@@ -168,8 +168,6 @@ const handleScanCommand = async (bot, msg, args, messageThreadId) => {
       return;
     }
 
-    await bot.sendLongMessage(chatId, `Starting scan for token: ${tokenAddress}\nAnalyzing top ${numberOfHolders} holders. This may take a few minutes...`, { message_thread_id: messageThreadId });
-
     const scanResult = await scanToken(tokenAddress, numberOfHolders, true, 'scan');
     
     if (!scanResult || !scanResult.scanData) {
@@ -261,8 +259,6 @@ const handleTopHoldersCommand = async (bot, msg, args, messageThreadId) => {
       return;
     }
 
-    await bot.sendLongMessage(msg.chat.id, `Starting top holders analysis for coin: ${coinAddress}\nThis may take a few minutes...`, { message_thread_id: messageThreadId });
-    
     const { tokenInfo, analyzedWallets } = await analyzeToken(coinAddress, count, 'Analyze');
     
     if (analyzedWallets.length === 0) {
@@ -467,11 +463,6 @@ const handleTeamSupplyCommand = async (bot, msg, args, messageThreadId) => {
 
   try {
     const [tokenAddress] = args;
-
-    await bot.sendLongMessage(chatId, 
-      `Analyzing team supply for token: ${tokenAddress}\nThis may take a few minutes...`, 
-      { message_thread_id: messageThreadId }
-    );
 
     const { scanData, trackingInfo } = await analyzeTeamSupply(tokenAddress, 'teamSupply');
 
