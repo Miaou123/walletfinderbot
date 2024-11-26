@@ -4,11 +4,11 @@ const axios = require('axios');
 class DefinedRateLimiter {
   constructor() {
     this.limiter = new Bottleneck({
-      reservoir: 5, // Nombre initial de requêtes
-      reservoirRefreshAmount: 5,
-      reservoirRefreshInterval: 1000, // Rafraîchit chaque seconde
-      maxConcurrent: 5, // Nombre maximum de requêtes simultanées
-      minTime: 0, // Temps minimum entre les requêtes
+      reservoir: 300, // 300 requests per second
+      reservoirRefreshAmount: 300,
+      reservoirRefreshInterval: 1000, // Refresh every second
+      maxConcurrent: 500, // 500 concurrent requests
+      minTime: Math.ceil(1000 / 300), // Ensure we don't exceed 300 RPS
     });
 
     this.retryOptions = {
