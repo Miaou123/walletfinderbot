@@ -10,19 +10,53 @@ class DexScreenerApi {
 
     async getTokenInfo(tokenAddress, mainContext = 'default', subContext = null) {
         ApiCallCounter.incrementCall('DexScreener', 'getTokenInfo', mainContext, subContext);
-
+    
         try {
             const [tokenResponse, solResponse, tokenSupplyResponse] = await Promise.all([
                 this.fetchDexScreenerData(`tokens/${tokenAddress}`),
-                this.fetchDexScreenerData('tokens/So11111111111111111111111111111111111111112'),
+                this.fetchDexScreenerData('tokens/So11111111111111111111111111111112'),
                 this.solanaApi.getTokenSupply(tokenAddress)
             ]);
 
+            const pairData = tokenResponse.data?.pairs?.[0];
+            if (!pairData) {
+                throw new Error('No pair data found');
+            }
+    
             const { totalSupply, decimals } = this.extractTokenSupply(tokenSupplyResponse);
-            const tokenInfo = this.extractTokenInfo(tokenResponse, solResponse, totalSupply, decimals);
+            const tokenInfo = {
+                boosts: pairData.boosts?.active || 0,
+                pairData: this.extractTokenInfo(tokenResponse, solResponse, totalSupply, decimals)
+            };
+    
             return tokenInfo;
         } catch (error) {
             console.error('Error fetching token info:', error);
+            throw error;
+        }
+    }
+
+    async getTokenOrders(tokenAddress, mainContext = 'default', subContext = null) {
+        ApiCallCounter.incrementCall('DexScreener', 'getTokenOrders', mainContext, subContext);
+
+        try {
+            const response = await dexscreenerRateLimiter.enqueue({
+                method: 'get',
+                url: `https://api.dexscreener.com/orders/v1/solana/${tokenAddress}`
+            });
+
+            if (!response.data) {
+                console.error('Unexpected response structure:', response);
+                throw new Error('Unexpected response structure from DexScreener');
+            }
+
+            return response.data;
+        } catch (error) {
+            // Si c'est une 404, ça signifie probablement qu'il n'y a pas d'orders
+            if (error.response && error.response.status === 404) {
+                return [];
+            }
+            console.error('Error fetching token orders:', error);
             throw error;
         }
     }
@@ -94,7 +128,8 @@ class DexScreenerApi {
                 priceChange: pair.priceChange,
                 txns: pair.txns,
                 chainId: pair.chainId,
-                solPrice: solPrice
+                solPrice: solPrice,
+                boosts: pair.boosts?.active || 0
             };
         } else {
             throw new Error('No pair data found for the given token address');

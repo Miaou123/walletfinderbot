@@ -14,7 +14,7 @@ class MessageHandler {
         this.logger = dependencies.logger;
         this.ActiveCommandsTracker = dependencies.ActiveCommandsTracker;
         
-        this.limitedCommands = ['scan', 'bundle', 'bt', 'th', 'cross', 'team', 'search', 'eb', 'fr'];
+        this.limitedCommands = ['scan', 'dexpaid', 'bundle', 'bt', 'th', 'cross', 'team', 'search', 'eb', 'fr', 'entrymap'];
         this.basicCommands = ['start', 'ping', 'tracker', 'cancel', 'help', 'access', 'join'];
     }
 
@@ -280,6 +280,8 @@ For example "/help /eb", "/eb help" or "/eb" with no other arguments will give y
 /crossbt (/cbt) - Find common holders between the top traders of multiple tokens (realized and unrealized PnL)
 /team (/t) - Analyze team supply with an homemade algorithm (works for fresh launches and CTOs)
 /search (/sh) - Search for specific wallets with only a part of their address
+/dp - Show if dexscreener is paid for a token, also shows adds/boosts.
+/em - Show the entryMap for the top holders of a token.
 /tracker - Show tracked supplies
 /cancel - Cancel the current active command
 

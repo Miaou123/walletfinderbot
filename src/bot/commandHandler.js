@@ -1,4 +1,5 @@
 const dexScreenerApi = require('../integrations/dexScreenerApi');
+const gmgnApi = require('../integrations/gmgnApi');
 const ApiCallCounter = require('../utils/ApiCallCounter');
 const { formatEarlyBuyersMessage } = require('./formatters/earlyBuyersFormatter');
 const { analyzeEarlyBuyers } = require('../analysis/earlyBuyers');
@@ -336,7 +337,55 @@ const handleEarlyBuyersCommand = async (bot, msg, args, messageThreadId) => {
       throw new Error("Invalid time frame. Please enter a number between 0.25 and 5 hours, or 15 and 300 minutes.");
     }
 
-    const tokenInfo = await dexScreenerApi.getTokenInfo(coinAddress);
+    let tokenInfo;
+    try {
+      const gmgnResponse = await gmgnApi.getTokenInfo(coinAddress, 'earlyBuyers', 'getTokenInfo');
+      logger.debug('GMGN response:', JSON.stringify(gmgnResponse?.data?.token));
+      
+      if (gmgnResponse?.data?.token) {
+          const token = gmgnResponse.data.token;
+          logger.debug('Token values before transformation:', {
+              total_supply: token.total_supply,
+              quote_reserve_value: token.pool_info?.quote_reserve_value,
+              quote_reserve: token.pool_info?.quote_reserve
+          });
+  
+          tokenInfo = {
+              name: token.name,
+              symbol: token.symbol,
+              totalSupply: String(token.total_supply), // Convert to string for BigNumber
+              decimals: token.decimals,
+              priceUsd: token.price,
+              volume24h: token.volume_24h,
+              liquidityUsd: token.liquidity,
+              dexId: token.launchpad?.toLowerCase() || null,
+              pairCreatedAt: token.open_timestamp ? token.open_timestamp * 1000 : token.creation_timestamp * 1000,
+              priceChange: {
+                  h24: token.price_24h ? ((token.price - token.price_24h) / token.price_24h) * 100 : 0
+              },
+              txns: {
+                  h24: {
+                      buys: token.buys_24h || 0,
+                      sells: token.sells_24h || 0
+                  }
+              },
+              solPrice: token.pool_info?.quote_reserve_value && token.pool_info?.quote_reserve 
+                  ? token.pool_info.quote_reserve_value / token.pool_info.quote_reserve 
+                  : null,
+              chainId: 'solana'
+          };
+  
+          logger.debug('Transformed tokenInfo:', tokenInfo);
+      }
+  } catch (error) {
+      logger.error('GMGN API error:', error);
+      logger.warn(`GMGN API failed, falling back to DexScreener: ${error.message}`);
+  }
+
+    if (!tokenInfo) {
+        tokenInfo = await dexScreenerApi.getTokenInfo(coinAddress, 'earlyBuyers', 'getTokenInfo');
+    }
+
     if (!tokenInfo) {
       throw new Error("Failed to fetch token information");
     }
