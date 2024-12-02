@@ -33,6 +33,15 @@ const validateSolanaAddress = (address) => {
       usage: '/ping',
       helpMessage: ''
     },
+    'dexpaid': {
+      aliases: ['dp'],
+      minArgs: 1,
+      maxArgs: 1,
+      requiresAuth: false,
+      description: 'Check if a token has paid for DexScreener services',
+      usage: '/check [contract_address]',
+      helpMessage: 'Check if a token has paid for DexScreener services and display the status of other paid services if available.\n\nExample:\n/check tokenAddress'
+    },
     'scan': { 
       aliases: ['s'], 
       minArgs: 1, 
@@ -43,6 +52,19 @@ const validateSolanaAddress = (address) => {
       usage: '/scan [contract_address] [number_of_top_holders](10)*',
       helpMessage: 'Scan a token for a top holders breakdown.\n\nTip: Increasing the number of top holders analyzed is recommended for a better overview on high mcap tokens (max: 100).'
     },
+    'entrymap': {
+      aliases: ['em'],
+      minArgs: 1,
+      maxArgs: 2,
+      requiresAuth: true,
+      description: 'Analyze entry prices of top holders',
+      usage: '/entrymap [contract_address] [number_of_holders=20]',
+      helpMessage: 'Analyzes the entry prices of top holders for a given token.\n\n' +
+                  'Shows:\n' +
+                  '• Average entry prices and PnLs\n' +
+                  '• Current PnL/ average entry for each holder\n' +
+                  'Example:\n/entrymap tokenAddress'
+    },
     'bundle': { 
       aliases: ['bd'], 
       minArgs: 1, 
@@ -51,7 +73,7 @@ const validateSolanaAddress = (address) => {
       description: 'Analyze bundled trades', 
       dailyLimit: Infinity,
       usage: '/bundle [contract_address]',
-      helpMessage: 'Analyze bundled trades for a specific contract address (Raydium, Meteora and pumpfun supported).'
+      helpMessage: 'Analyze bundled trades for a specific contract address (Raydium, Meteora and pumpfun supported). A bundle means 2 wallets buying on the same block'
     },
     'bt': { 
       aliases: ['besttraders'], 
