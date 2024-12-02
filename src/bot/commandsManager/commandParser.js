@@ -39,8 +39,8 @@ const validateSolanaAddress = (address) => {
       maxArgs: 1,
       requiresAuth: false,
       description: 'Check if a token has paid for DexScreener services',
-      usage: '/check [contract_address]',
-      helpMessage: 'Check if a token has paid for DexScreener services and display the status of other paid services if available.\n\nExample:\n/check tokenAddress'
+      usage: '/dp [contract_address]',
+      helpMessage: 'Check if a token has paid for DexScreener services and display the status of other paid services if available.\n\nExample:\n/dp tokenAddress'
     },
     'scan': { 
       aliases: ['s'], 
