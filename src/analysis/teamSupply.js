@@ -18,28 +18,39 @@ async function analyzeTeamSupply(tokenAddress, mainContext = 'default') {
     logger.debug(`Starting team supply analysis for ${tokenAddress}`, { mainContext });
 
     try {
-        // 1. Récupérer les informations du token via GMGN API
-        const tokenInfoResponse = await gmgnApi.getTokenInfo(tokenAddress, mainContext, 'getTokenInfo');
-        if (!tokenInfoResponse || !tokenInfoResponse.data || !tokenInfoResponse.data.token) {
-            throw new Error("Failed to fetch token information");
+        // Attempt to get token info from GMGN first
+        let tokenInfo;
+        try {
+            logger.debug('Fetching token info from GMGN...');
+            const tokenInfoResponse = await gmgnApi.getTokenInfo(tokenAddress, mainContext, 'getTokenInfo');
+            if (!tokenInfoResponse?.data?.token) {
+                throw new Error("Invalid GMGN response");
+            }
+            tokenInfo = tokenInfoResponse.data.token;
+        } catch (error) {
+            // Fallback to DexScreener
+            logger.warn('GMGN API failed, falling back to DexScreener');
+            const dexInfo = await dexscreenerApi.getTokenInfo(tokenAddress);
+            const pair = dexInfo.pairData;
+            
+            tokenInfo = {
+                total_supply: pair.totalSupply,
+                symbol: pair.baseToken?.symbol || 'Unknown',
+                decimals: pair.decimals || 0
+            };
         }
-        const tokenInfo = tokenInfoResponse.data.token;
-        const totalSupply = new BigNumber(tokenInfo.total_supply);
 
-        // 2. Récupérer tous les holders
+        const totalSupply = new BigNumber(tokenInfo.total_supply);
         const allHolders = await getHolders(tokenAddress, mainContext, 'getHolders');
         
-        // 3. Filtrer les holders significatifs
         const significantHolders = allHolders.filter(holder => {
             const balance = new BigNumber(holder.balance);
             const percentage = balance.dividedBy(totalSupply);
             return percentage.isGreaterThanOrEqualTo(SUPPLY_THRESHOLD);
         });
 
-        // 4. Analyser chaque wallet
         const analyzedWallets = await analyzeWallets(significantHolders, tokenAddress, mainContext);
 
-        // 5. Identifier les wallets de l'équipe et calculer les totaux
         const teamWallets = analyzedWallets
             .filter(w => w.category !== 'Unknown')
             .map(w => ({
@@ -51,7 +62,6 @@ async function analyzeTeamSupply(tokenAddress, mainContext = 'default') {
                     .toNumber()
             }));
 
-        // 6. Calculer le total contrôlé
         const teamSupplyHeld = analyzedWallets
             .filter(w => w.category !== 'Unknown')
             .reduce((total, wallet) => {
@@ -63,7 +73,6 @@ async function analyzeTeamSupply(tokenAddress, mainContext = 'default') {
             .multipliedBy(100)
             .toNumber();
 
-        // 7. Retourner les données
         return {
             scanData: {
                 tokenInfo: {
