@@ -1,6 +1,6 @@
-// topHoldersScanner.js
 const { getSolanaApi } = require('../integrations/solanaApi');
 const gmgnApi = require('../integrations/gmgnApi');
+const dexscreenerApi = require('../integrations/dexScreenerApi');
 const { getAssetsForMultipleWallets } = require('../tools/walletValueCalculator');
 const { checkInactivityPeriod } = require('../tools/inactivityPeriod');
 const { getTopHolders } = require('../tools/getHolders');
@@ -13,13 +13,27 @@ const logger = require('../utils/logger');
 async function scanToken(tokenAddress, requestedHolders = 10, trackSupply = false, mainContext = 'default') {
   logger.debug(`Starting scan for token ${tokenAddress}`, { requestedHolders, trackSupply, mainContext });
 
-  const tokenInfoResponse = await gmgnApi.getTokenInfo(tokenAddress, mainContext);
-  if (!tokenInfoResponse || !tokenInfoResponse.data || !tokenInfoResponse.data.token) {
-    throw new Error("Failed to fetch token information");
+  let tokenInfo;
+  try {
+    logger.debug('Fetching token info from GMGN...');
+    const tokenInfoResponse = await gmgnApi.getTokenInfo(tokenAddress, mainContext);
+    if (!tokenInfoResponse?.data?.token) {
+      throw new Error("Invalid GMGN response");
+    }
+    tokenInfo = tokenInfoResponse.data.token;
+  } catch (error) {
+    logger.warn('GMGN API failed, falling back to DexScreener');
+    const dexInfo = await dexscreenerApi.getTokenInfo(tokenAddress);
+    const pair = dexInfo.pairData;
+    
+    tokenInfo = {
+      decimals: pair.decimals || 0,
+      symbol: pair.baseToken?.symbol || 'Unknown',
+      price: pair.priceUsd || 0,
+      total_supply: pair.totalSupply || 0
+    };
   }
-  const tokenInfo = tokenInfoResponse.data.token;
 
-  // On récupère plus de holders pour compenser la suppression des pools
   const topHolders = await getTopHolders(tokenAddress, 20, mainContext, 'getTopHolders');
   const walletAddresses = topHolders.map(holder => holder.address);
   const assetsData = await getAssetsForMultipleWallets(walletAddresses, mainContext, 'getAssets');
@@ -99,14 +113,13 @@ async function scanToken(tokenAddress, requestedHolders = 10, trackSupply = fals
     }
   }));
 
-  // Filtrer les wallets en excluant les pools et prendre exactement les 10 premiers
   const filteredWallets = analyzedWallets
     .filter(wallet => {
       if (wallet.error) return false;
       if (wallet.walletType === 'pool') return false;
       return new BigNumber(wallet.portfolioValue).isGreaterThan(0);
     })
-    .slice(0, 10); // Prendre exactement 10 wallets
+    .slice(0, 10);
 
   logger.debug(`Wallet filtering results for ${tokenAddress}:`, {
     totalAnalyzed: analyzedWallets.length,

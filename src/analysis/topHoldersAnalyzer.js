@@ -6,13 +6,29 @@ const { getTopHolders } = require('../tools/getHolders');
 const { fetchMultipleWallets } = require('../tools/walletChecker');
 const config = require('../utils/config');
 const BigNumber = require('bignumber.js');
+const logger = require('../utils/logger');
 
 async function analyzeToken(coinAddress, count, mainContext = 'default') {
-  const tokenInfoResponse = await gmgnApi.getTokenInfo(coinAddress, mainContext);
-  if (!tokenInfoResponse || !tokenInfoResponse.data || !tokenInfoResponse.data.token) {
-    throw new Error("Failed to fetch token information");
+  let tokenInfo;
+  try {
+    logger.debug('Fetching token info from GMGN...');
+    const tokenInfoResponse = await gmgnApi.getTokenInfo(coinAddress, mainContext);
+    if (!tokenInfoResponse?.data?.token) {
+      throw new Error("Invalid GMGN response");
+    }
+    tokenInfo = tokenInfoResponse.data.token;
+  } catch (error) {
+    logger.warn('GMGN API failed, falling back to DexScreener');
+    const dexInfo = await dexscreenerApi.getTokenInfo(coinAddress);
+    const pair = dexInfo.pairData;
+    
+    tokenInfo = {
+      decimals: pair.decimals || 0,
+      symbol: pair.baseToken?.symbol || 'Unknown',
+      price: pair.priceUsd || 0,
+      total_supply: pair.totalSupply || 0
+    };
   }
-  const tokenInfo = tokenInfoResponse.data.token;
 
   const topHolders = await getTopHolders(coinAddress, count, mainContext, 'getTopHolders');
   const walletInfos = topHolders.map(holder => ({ address: holder.address, tokenBalance: holder.amount }));

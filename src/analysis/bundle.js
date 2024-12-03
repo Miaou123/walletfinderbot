@@ -1,9 +1,11 @@
 const pumpfunApi = require('../integrations/pumpfunApi');
+const dexscreenerApi = require('../integrations/dexscreenerApi');
 const { getSolanaApi } = require('../integrations/solanaApi');
 const gmgnApi = require('../integrations/gmgnApi');
 const { analyzeFunding } = require('../tools/fundingAnalyzer');
 const config = require('../utils/config');
 const logger = require('../utils/logger');
+const BigNumber = require('bignumber.js');
 
 class UnifiedBundleAnalyzer {
     constructor() {
@@ -16,6 +18,71 @@ class UnifiedBundleAnalyzer {
         this.SOL_DECIMALS = config.SOL_DECIMALS;
         this.TOKEN_FACTOR = Math.pow(10, this.TOKEN_DECIMALS);
         this.SOL_FACTOR = Math.pow(10, this.SOL_DECIMALS);
+    }
+
+    // Modifiez le getTokenInfo existant pour utiliser getTokenMetadata
+    async getTokenInfo(address) {
+        try {
+            const tokenInfo = await this.getTokenMetadata(address, 'bundle', 'getTokenInfo');
+            return {
+                name: tokenInfo.symbol, // On utilise symbol comme name par défaut
+                symbol: tokenInfo.symbol,
+                total_supply: tokenInfo.totalSupply,
+                decimals: tokenInfo.decimals,
+                price: tokenInfo.priceUsd,
+                address: tokenInfo.address // Important pour les liens
+            };
+        } catch (error) {
+            logger.error(`Error in getTokenInfo: ${error.message}`);
+            throw error;
+        }
+    }
+
+    // Ajoutez la méthode getTokenMetadata
+    async getTokenMetadata(tokenAddress, mainContext, subContext) {
+        try {
+            logger.debug('Fetching token metadata from GMGN...');
+            const gmgnResponse = await gmgnApi.getTokenInfo(tokenAddress);
+            const solInfo = await dexscreenerApi.getTokenInfo(
+                "So11111111111111111111111111111111111111112"
+            );
+            
+            return {
+                decimals: gmgnResponse.data.token.decimals || 0,
+                symbol: gmgnResponse.data.token.symbol || 'Unknown',
+                priceUsd: Number(gmgnResponse.data.token.price) || 0,
+                solPriceUsd: Number(solInfo.pairData.priceUsd) || 0,
+                priceInSol: gmgnResponse.data.token.price && solInfo.pairData.priceUsd ? 
+                        new BigNumber(gmgnResponse.data.token.price)
+                            .div(solInfo.pairData.priceUsd)
+                            .toNumber() : 0,
+                address: tokenAddress,
+                totalSupply: Number(gmgnResponse.data.token.total_supply) || 0
+            };
+
+        } catch (error) {
+            logger.warn('GMGN API failed, falling back to DexScreener');
+            const [dexInfo, solInfo] = await Promise.all([
+                dexscreenerApi.getTokenInfo(tokenAddress),
+                dexscreenerApi.getTokenInfo("So11111111111111111111111111111111111111112")
+            ]);
+
+            const pair = dexInfo.pairData;
+            const solPair = solInfo.pairData;
+            
+            return {
+                decimals: pair.decimals || 0,
+                symbol: pair.baseToken?.symbol || 'Unknown',
+                priceUsd: Number(pair.priceUsd) || 0,
+                solPriceUsd: Number(solPair.priceUsd) || 0,
+                priceInSol: pair.priceUsd && solPair.priceUsd ? 
+                        new BigNumber(pair.priceUsd)
+                            .div(solPair.priceUsd)
+                            .toNumber() : 0,
+                address: tokenAddress,
+                totalSupply: Number(pair.totalSupply) || 0
+            };
+        }
     }
 
     async isPumpfunCoin(address) {
@@ -96,18 +163,11 @@ class UnifiedBundleAnalyzer {
             }))
             .sort((a, b) => b.tokensBought - a.tokensBought);
 
-        const gmgnTokenInfo = await gmgnApi.getTokenInfo(address);
-        const tokenInfo = {
-            name: gmgnTokenInfo.data.token.name,
-            symbol: gmgnTokenInfo.data.token.symbol,
-            totalSupply: gmgnTokenInfo.data.token.total_supply || 1000000000,
-            decimals: gmgnTokenInfo.data.token.decimals,
-            priceUsd: gmgnTokenInfo.data.token.price,
-        };
+        const tokenInfo = await this.getTokenInfo(address);
 
         logger.debug(`Token info: ${JSON.stringify(tokenInfo)}`);
 
-        const totalSupply = parseFloat(tokenInfo.totalSupply);
+        const totalSupply = parseFloat(tokenInfo.total_supply);
 
         if (isTeamAnalysis) {
             return this.performTeamAnalysis(filteredBundles, tokenInfo, totalSupply);
@@ -243,11 +303,11 @@ class UnifiedBundleAnalyzer {
         
         try {
             // Fetch token info
-            const tokenInfo = await this.gmgnApi.getTokenInfo(address);
+            const tokenInfo = await this.getTokenInfo(address);
             if (!tokenInfo || !tokenInfo.data || !tokenInfo.data.token) {
                 throw new Error('Invalid token info structure');
             }
-            const totalSupply = tokenInfo.data.token.total_supply || 1_000_000_000;
+            const totalSupply = tokenInfo.total_supply;
             this.logger.info(`Total supply for ${address}: ${totalSupply}`);
 
             // Fetch and analyze transactions
@@ -263,8 +323,8 @@ class UnifiedBundleAnalyzer {
             this.logger.info(`Bundle analysis completed for ${address}`);    
             return {
                 ...bundleData,
-                tokenInfo: tokenInfo.data.token,
-                totalSupply: totalSupply
+                tokenInfo, 
+                totalSupply
             };
         } catch (error) {
             this.logger.error(`Error in analyzeNonPumpfunBundle for address ${address}: ${error.message}`);

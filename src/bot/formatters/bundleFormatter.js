@@ -41,7 +41,7 @@ function formatMainMessage(results) {
 
             output += `<b>${isTeamAnalysis ? 'Buy' : 'Bundle'} ${index + 1} (Slot ${bundle.slot}):</b>\n`;
             output += `  <b>💼 Wallets:</b> ${walletLinks}\n`;
-            output += `  <b>🪙 Tokens Bought:</b> ${formatNumber(bundle.tokensBought)} ${tokenInfo.symbol} (${formatNumber((bundle.tokensBought / tokenInfo.totalSupply) * 100, 2, true)})\n`;
+            output += `  <b>🪙 Tokens Bought:</b> ${formatNumber(bundle.tokensBought)} ${tokenInfo.symbol} (${formatNumber((bundle.tokensBought / tokenInfo.total_supply) * 100, 2, true)})\n`;
             output += `  <b>💰 SOL Spent:</b> ${formatNumber(bundle.solSpent)} SOL\n`;
             if (bundle.holdingAmount !== undefined) {
                 output += `  <b>🔒 Holding Amount:</b> ${formatNumber(bundle.holdingAmount)} ${tokenInfo.symbol} (${formatNumber(bundle.holdingPercentage, 2, true)})\n`;
