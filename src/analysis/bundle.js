@@ -1,5 +1,5 @@
 const pumpfunApi = require('../integrations/pumpfunApi');
-const dexscreenerApi = require('../integrations/dexscreenerApi');
+const dexscreenerApi = require('../integrations/dexScreenerApi');
 const { getSolanaApi } = require('../integrations/solanaApi');
 const gmgnApi = require('../integrations/gmgnApi');
 const { analyzeFunding } = require('../tools/fundingAnalyzer');
