@@ -38,9 +38,9 @@ const validateSolanaAddress = (address) => {
       minArgs: 1,
       maxArgs: 1,
       requiresAuth: false,
-      description: 'Check if a token has paid for DexScreener services',
+      description: 'Check if a token profile has been updated on dexscreener and if there are other services running (ads or boosts)',
       usage: '/dp [contract_address]',
-      helpMessage: 'Check if a token has paid for DexScreener services and display the status of other paid services if available.\n\nExample:\n/dp tokenAddress'
+      helpMessage: 'Check if a token profile has been updated on dexscreener and if there are other services running (ads or boosts)\n\nExample:\n/dp tokenAddress'
     },
     'scan': { 
       aliases: ['s'], 
@@ -73,7 +73,7 @@ const validateSolanaAddress = (address) => {
       description: 'Analyze bundled trades', 
       dailyLimit: Infinity,
       usage: '/bundle [contract_address]',
-      helpMessage: 'Analyze bundled trades for a specific contract address (Raydium, Meteora and pumpfun supported). A bundle means 2 wallets buying on the same block'
+      helpMessage: `Analyze bundled trades for a specific contract address (Raydium, Meteora, and Pumpfun are supported). A bundle is defined as two wallets buying on the same block; it does not have to be the first block bundle. Most pumpfun developers sell and buy in bundles multiple times, so the total bundled amount can be greater than 100%. The "total holding amount" is the most important data to check; if it is close to 0, it means that all bundles have been sold.`
     },
     'bt': { 
       aliases: ['besttraders'], 

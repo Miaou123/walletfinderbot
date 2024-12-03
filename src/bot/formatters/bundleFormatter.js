@@ -52,8 +52,11 @@ function formatMainMessage(results) {
         output += "No bundles to display.\n";
     }
 
+    output += "⚠️Bundles shown for pump.fun coins aren't necessarily block 0 bundles. For more information on how the /bundle command works please use /help /bundle in private.";
+
     return output;
 }
+
 
 function formatNonPumpfunBundleResponse(bundleData, tokenInfo) {
     let output = `<b>Bundle Analysis</b> for <a href="https://solscan.io/token/${tokenInfo.address}">${tokenInfo.name}</a> (${tokenInfo.symbol}) <a href="https://dexscreener.com/solana/${tokenInfo.address}">📈</a>\n\n`;

@@ -18,12 +18,19 @@ class UnifiedBundleAnalyzer {
         this.SOL_FACTOR = Math.pow(10, this.SOL_DECIMALS);
     }
 
-    isPumpfunCoin(address) {
-        return address.toLowerCase().endsWith('pump');
+    async isPumpfunCoin(address) {
+        try {
+            const trades = await pumpfunApi.getAllTrades(address, 1, 0);
+            return Array.isArray(trades);
+        } catch (error) {
+            logger.debug(`Token ${address} not found in PumpFun API: ${error.message}`);
+            return false;
+        }
     }
 
     async analyzeBundle(address, limit = 50000, isTeamAnalysis = false) {
-        if (this.isPumpfunCoin(address)) {
+        const isPumpfun = await this.isPumpfunCoin(address);
+        if (isPumpfun) {
             return this.analyzePumpfunBundle(address, limit, isTeamAnalysis);
         } else {
             return this.analyzeNonPumpfunBundle(address);
