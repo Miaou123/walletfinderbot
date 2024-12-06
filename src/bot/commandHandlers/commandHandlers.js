@@ -5,6 +5,7 @@ const FreshRatioHandler = require('./freshRatioHandler');
 const AdminCommandHandler = require('./adminCommandHandler');
 const DexPaidHandler = require('./dexPaidHandler');
 const EntryMapHandler = require('./entryMapHandler');
+const DevCommandHandler = require('./devHandler');
 
 class CommandHandlers {
     constructor(userManager, accessControl, bot) {
@@ -15,6 +16,7 @@ class CommandHandlers {
         this.adminHandler = new AdminCommandHandler(userManager, accessControl, bot);
         this.dexpaid = new DexPaidHandler(userManager, accessControl);
         this.entrymap = new EntryMapHandler(userManager, accessControl);
+        this.dev = new DevCommandHandler(userManager, accessControl);
     }
 }
 
