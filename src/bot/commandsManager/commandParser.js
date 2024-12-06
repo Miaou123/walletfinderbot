@@ -135,8 +135,8 @@ const validateSolanaAddress = (address) => {
       usage: '/search [contract_address] [partial_address1] [partial_address2]*',
       helpMessage: 'Search for wallets that hold a specific token and match the partial addresses provided.\n\nTip: You can add multiple parts to one partial address by separating them with one or multiple dots.'
     },
-    'eb': { 
-      aliases: ['earlybuyers'], 
+    'earlybuyers': { 
+      aliases: ['eb'], 
       minArgs: 1, 
       maxArgs: 4, 
       requiresAuth: true, 

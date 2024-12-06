@@ -15,23 +15,26 @@ async function scanToken(tokenAddress, requestedHolders = 10, trackSupply = fals
 
   let tokenInfo;
   try {
-    logger.debug('Fetching token info from GMGN...');
-    const tokenInfoResponse = await gmgnApi.getTokenInfo(tokenAddress, mainContext);
-    if (!tokenInfoResponse?.data?.token) {
-      throw new Error("Invalid GMGN response");
-    }
-    tokenInfo = tokenInfoResponse.data.token;
-  } catch (error) {
-    logger.warn('GMGN API failed, falling back to DexScreener');
-    const dexInfo = await dexscreenerApi.getTokenInfo(tokenAddress);
-    const pair = dexInfo.pairData;
+    logger.debug('Fetching token info from Helius...');
+    const solanaApi = getSolanaApi();
+    const assetInfo = await solanaApi.getAsset(tokenAddress, mainContext, 'scanToken');
     
+    if (!assetInfo) {
+      throw new Error("No token info found");
+    }
+
     tokenInfo = {
-      decimals: pair.decimals || 0,
-      symbol: pair.baseToken?.symbol || 'Unknown',
-      price: pair.priceUsd || 0,
-      total_supply: pair.totalSupply || 0
+      decimals: assetInfo.decimals,
+      symbol: assetInfo.symbol,
+      name: assetInfo.name,
+      price: assetInfo.price,
+      total_supply: assetInfo.supply.total
     };
+
+    logger.debug('Token info received:', tokenInfo);
+  } catch (error) {
+    logger.error('Error fetching token info:', error);
+    throw error;
   }
 
   const topHolders = await getTopHolders(tokenAddress, 20, mainContext, 'getTopHolders');

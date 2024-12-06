@@ -2,7 +2,6 @@ const { analyzeFunding } = require('../tools/fundingAnalyzer');
 const pumpfunApi = require('../integrations/pumpfunApi');
 const gmgnApi = require('../integrations/gmgnApi');
 const { getSolanaApi } = require('../integrations/solanaApi');
-const tokenInfoFetcher = require('../tools/tokenInfoFetcher');
 const BigNumber = require('bignumber.js');
 const { getAssetsForMultipleWallets } = require('../tools/walletValueCalculator');
 const logger = require('../utils/logger');
@@ -33,7 +32,6 @@ class DevAnalyzer {
         this.solanaApi = getSolanaApi();
         this.pumpFunApi = pumpfunApi;
         this.gmgnApi = gmgnApi;
-        this.tokenInfoFetcher = tokenInfoFetcher;
         logger.info('DevAnalyzer initialized');
     }
 
@@ -41,14 +39,13 @@ class DevAnalyzer {
         try {
             logger.debug(`Starting analysis for token: ${tokenAddress}`);
     
-            const tokenInfo = await this.tokenInfoFetcher.getTokenInfo(tokenAddress);
+            const tokenInfo = await this.getTokenMetadata(tokenAddress);
             logger.debug('Token info retrieved:', { tokenInfo });
     
             const devAddress = await this.findDevAddress(tokenAddress);
             logger.info('Found dev address:', { devAddress });
     
             const createdCoins = await this.getAllCreatedCoins(devAddress);
-            logger.debug('Created coins:', { createdCoins });
             
             const coinsStats = this.analyzeCoinsStats(createdCoins);
             logger.debug('Coins stats:', { coinsStats });
@@ -64,7 +61,7 @@ class DevAnalyzer {
     
             logger.debug('Getting wallet assets...');
             const walletAssets = await getAssetsForMultipleWallets([devAddress]);
-            logger.debug('Wallet assets:', { walletAssets });
+            
             const ownerWalletData = walletAssets[devAddress];
             logger.debug('Owner wallet data:', { ownerWalletData });
     
@@ -134,67 +131,76 @@ class DevAnalyzer {
         }
     }
 
+    async getTokenMetadata(tokenAddress) {
+        try {
+            const solanaApi = getSolanaApi();
+            const assetInfo = await solanaApi.getAsset(tokenAddress, 'devAnalyzer', 'getTokenMetadata');
+            
+            if (!assetInfo) {
+                throw new Error("No token info found");
+            }
+    
+            return {
+                decimals: assetInfo.decimals || 0,
+                symbol: assetInfo.symbol || 'Unknown',
+                price: assetInfo.price || 0,
+                supply: {
+                    total: assetInfo.supply.total || 0
+                },
+                marketCap: assetInfo.price * assetInfo.supply.total || 0,
+                name: assetInfo.name || 'Unknown Token'
+            };
+        } catch (error) {
+            logger.error('Error fetching token metadata:', error);
+            throw error;
+        }
+    }
+
     async findDevAddress(tokenAddress) {
         try {
             let offset = 0;
             const limit = 200;
-            let oldestTx = null;
             let hasMore = true;
-            let totalTrades = 0;
-
+            let oldestTx = null;
+     
             logger.debug('Starting to fetch trades for token:', { tokenAddress });
             
             while (hasMore) {
                 const trades = await this.pumpFunApi.getAllTrades(tokenAddress, limit, offset);
                 
                 if (!trades || trades.length === 0) {
-                    logger.debug('No more trades found');
                     hasMore = false;
                     break;
                 }
-
-                totalTrades += trades.length;
-                //logger.debug('Fetched trades info:', { count: trades.length, totalTrades });
-
-                trades.forEach(trade => {
-                    if (!oldestTx || trade.timestamp < oldestTx.timestamp) {
-                        oldestTx = trade;
-                    }
-                });
-
+     
+                // Prendre la dernière transaction de la dernière page seulement
+                if (!oldestTx && trades.length < limit) {
+                    oldestTx = trades[trades.length - 1];
+                }
+     
                 if (trades.length < limit) {
-                    logger.debug('Reached end of trades (less than limit returned)');
                     hasMore = false;
                 } else {
                     offset += limit;
                 }
             }
-
+     
             if (!oldestTx) {
-                logger.error('No trades found for token:', { tokenAddress });
                 throw new Error("No trades found for this token");
             }
-
-            logger.info('Found oldest transaction:', { 
-                user: oldestTx.user, 
-                timestamp: oldestTx.timestamp 
-            });
-
+     
             this.initialBuy = {
                 user: oldestTx.user,
                 tokenAmount: oldestTx.token_amount,
                 timestamp: oldestTx.timestamp
             };
-
+     
             return oldestTx.user;
         } catch (error) {
-            logger.error('Error finding dev address:', { 
-                tokenAddress, 
-                error: error.message 
-            });
+            logger.error('Error finding dev address:', { tokenAddress, error: error.message });
             throw error;
         }
-    }
+     }
 
     async getAllCreatedCoins(address) {
         try {
@@ -202,15 +208,11 @@ class DevAnalyzer {
             const limit = 10; // On garde la limite à 10 comme dans l'API
             let allCoins = [];
             let hasMore = true;
-    
-            logger.debug('Starting to fetch created coins for address:', { address });
             
             while (hasMore) {
-                logger.debug('Fetching created coins with offset:', { offset });
                 const coins = await this.pumpFunApi.getCreatedCoins(address, limit, offset);
                 
                 if (!coins || !Array.isArray(coins) || coins.length === 0) {
-                    logger.debug('No more created coins found');
                     hasMore = false;
                     break;
                 }
@@ -346,9 +348,10 @@ class DevAnalyzer {
     
         try {
             logger.debug('Fetching detailed info for each bonded coin...');
-            const coinsInfo = await this.tokenInfoFetcher.getTokensInfo(
-                bondedCoins.map(coin => coin.mint)
+            const coinsInfoPromises = bondedCoins.map(coin => 
+                this.getTokenMetadata(coin.mint)
             );
+            const coinsInfo = await Promise.all(coinsInfoPromises);
             logger.debug('Retrieved info for coins:', { count: coinsInfo.length });
     
             if (!Array.isArray(coinsInfo)) {
