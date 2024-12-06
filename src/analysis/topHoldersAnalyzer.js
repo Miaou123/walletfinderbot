@@ -4,6 +4,7 @@ const { checkInactivityPeriod } = require('../tools/inactivityPeriod');
 const { getAssetsForMultipleWallets } = require('../tools/walletValueCalculator');
 const { getTopHolders } = require('../tools/getHolders');
 const { fetchMultipleWallets } = require('../tools/walletChecker');
+const dexscreenerApi = require('../integrations/dexScreenerApi');
 const config = require('../utils/config');
 const BigNumber = require('bignumber.js');
 const logger = require('../utils/logger');

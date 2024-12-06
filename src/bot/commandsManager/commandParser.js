@@ -145,6 +145,16 @@ const validateSolanaAddress = (address) => {
       usage: '/eb [coin_address] [time_frame](1h)* [min buy amount](1%)* [pump or nopump]*',
       helpMessage: 'Analyze early buyers of a specific coin within a given time frame and minimum buy amount threshold.\n\nTime frame is in hours or minutes (e.g., 2h or 30m). Percentage is the minimum percentage of total supply bought in one or multiple transactions over the timeframe.If you only want to analyse pumpfun transactions, use the flag "pump" at the end of your command and if you only want to analyse raydium transactions use "nopump"'
     },
+    'dev': {
+      aliases: ['d'], 
+      minArgs: 1,
+      maxArgs: 1,
+      requiresAuth: true,
+      description: 'Analyze pumpfun developer profile and previous coins',
+      dailyLimit: 10,
+      usage: '/dev [contract_address]',
+      helpMessage: 'Analyze a developer wallet to check their history of creating coins, including success rate, bonding rate, funding methods and connections to other successful projects.'
+    },
     'freshratio': {
     aliases: ['fr'],
     minArgs: 1,

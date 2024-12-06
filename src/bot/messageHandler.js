@@ -14,7 +14,7 @@ class MessageHandler {
         this.logger = dependencies.logger;
         this.ActiveCommandsTracker = dependencies.ActiveCommandsTracker;
         
-        this.limitedCommands = ['scan', 'dexpaid', 'bundle', 'bt', 'th', 'cross', 'team', 'search', 'eb', 'fr', 'entrymap'];
+        this.limitedCommands = ['scan', 'dexpaid', 'bundle', 'bt', 'th', 'cross', 'team', 'search', 'eb', 'fr', 'entrymap', 'dev'];
         this.basicCommands = ['start', 'ping', 'tracker', 'cancel', 'help', 'access', 'join'];
     }
 
