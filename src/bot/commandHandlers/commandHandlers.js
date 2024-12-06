@@ -6,6 +6,7 @@ const AdminCommandHandler = require('./adminCommandHandler');
 const DexPaidHandler = require('./dexPaidHandler');
 const EntryMapHandler = require('./entryMapHandler');
 const DevCommandHandler = require('./devHandler');
+const EarlyBuyersHandler = require('./earlyBuyersHandler'); 
 
 class CommandHandlers {
     constructor(userManager, accessControl, bot) {
@@ -17,6 +18,7 @@ class CommandHandlers {
         this.dexpaid = new DexPaidHandler(userManager, accessControl);
         this.entrymap = new EntryMapHandler(userManager, accessControl);
         this.dev = new DevCommandHandler(userManager, accessControl);
+        this.earlybuyers = new EarlyBuyersHandler(userManager, accessControl);
     }
 }
 

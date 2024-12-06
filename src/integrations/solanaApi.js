@@ -2,6 +2,7 @@ const { Connection, PublicKey } = require('@solana/web3.js');
 const config = require('../utils/config');
 const HeliusRateLimiter = require('../utils/rateLimiters/heliusRateLimiter');
 const ApiCallCounter = require('../utils/ApiCallCounter');
+const BigNumber = require('bignumber.js');
 
 class SolanaApi {
   constructor() {
@@ -63,6 +64,43 @@ class SolanaApi {
     } catch (error) {
       console.error(`Error getting asset count for ${address}:`, error.message);
       return 0;
+    }
+  }
+
+  async getAsset(tokenAddress, mainContext = 'default', subContext = null) {
+    try {
+      const result = await this.callHelius('getAsset', {
+        id: tokenAddress,
+        displayOptions: {
+          showFungible: true
+        }
+      }, 'api', mainContext, subContext);
+  
+      if (!result || !result.token_info) {
+        console.error(`No asset info found for token ${tokenAddress}`);
+        return null;
+      }
+  
+      console.log('Asset info from Helius:', result);
+  
+      // Ajuster la supply en tenant compte des décimales
+      const rawSupply = new BigNumber(result.token_info.supply || 0);
+      const decimals = result.token_info.decimals || 0;
+      const adjustedSupply = rawSupply.dividedBy(new BigNumber(10).pow(decimals));
+  
+      return {
+        address: tokenAddress,
+        decimals: result.token_info.decimals || 0,
+        symbol: result.token_info.symbol || result.content?.metadata?.symbol || 'Unknown',
+        name: result.content?.metadata?.name || 'Unknown Token',
+        supply: {
+          total: adjustedSupply
+        },
+        price: result.token_info.price_info?.price_per_token || 0
+      };
+    } catch (error) {
+      console.error(`Error fetching asset info for ${tokenAddress}:`, error);
+      return null;
     }
   }
 
@@ -192,6 +230,34 @@ class SolanaApi {
       return null;
     }
     return result;
+  }
+
+  async getTokenMetadata(tokenAddress, mainContext = 'default', subContext = null) {
+    try {
+      const accountInfo = await this.getAccountInfo(tokenAddress, { encoding: 'jsonParsed' }, mainContext, subContext);
+      if (!accountInfo?.value?.data?.parsed?.info) {
+        console.error(`No metadata found for token ${tokenAddress}`);
+        return null;
+      }
+  
+      const mintInfo = accountInfo.value.data.parsed.info;
+      console.log('Token mint info from Helius:', mintInfo);
+  
+      const supplyInfo = await this.getTokenSupply(tokenAddress, mainContext, subContext);
+      console.log('Token supply info from Helius:', supplyInfo);
+  
+      return {
+        address: tokenAddress,
+        decimals: mintInfo.decimals,
+        supply: {
+          total: supplyInfo?.value?.uiAmount || 0
+        },
+        symbol: mintInfo.symbol || 'Unknown',
+      };
+    } catch (error) {
+      console.error(`Error fetching token metadata for ${tokenAddress}:`, error);
+      return null;
+    }
   }
 
   async getTokenSupply(tokenAddress, mainContext = 'default', subContext = null) {
