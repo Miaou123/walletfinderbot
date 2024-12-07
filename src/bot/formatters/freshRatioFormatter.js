@@ -22,7 +22,7 @@ const formatFreshRatioMessage = (result, tokenInfo) => {
             freshWallets.forEach((wallet, index) => {
 
                 const buyAmountNumber = Number(wallet.firstBuyAmount);
-                const supplyPercent = (buyAmountNumber / tokenInfo.total_supply) * 100;
+                const supplyPercent = (buyAmountNumber / tokenInfo.supply.total) * 100;
                 
                 const truncatedAddr = truncateAddress(wallet.address);
                 message += `${index + 1}. <a href="https://solscan.io/account/${wallet.address}">${truncatedAddr}</a> - ${formatNumber(supplyPercent, 3, true)}\n`;
