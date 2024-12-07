@@ -24,6 +24,17 @@ class MessageHandler {
         const isGroup = msg.chat.type === 'group' || msg.chat.type === 'supergroup';
         const messageThreadId = msg.message_thread_id;
 
+        // Vérification de l'ancienneté du message
+        const currentTimestamp = Math.floor(Date.now() / 1000); // Timestamp actuel en secondes
+        const messageAge = currentTimestamp - msg.date;
+
+        // Ignorer les messages de plus de 30 secondes
+        const MAX_MESSAGE_AGE = 600; // secondes
+        if (messageAge > MAX_MESSAGE_AGE) {
+            this.logger.info(`Ignored old message from user ${msg.from.username || msg.from.id}: ${msg.text}`);
+            return;
+        }
+
         if (isGroup && msg.text) {
             groupMessageLogger.logGroupMessage(msg);
         }
