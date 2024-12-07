@@ -280,42 +280,64 @@ async function fetchDexScreenerPrices(tokenAddresses, chunkSize = 10) {
   const prices = {};
 
   for (const chunk of tokenChunks) {
-    try {
-      const chunkPrices = await dexScreenerApi.getMultipleTokenPrices(chunk);
-      Object.assign(prices, chunkPrices);
-    } catch (error) {
-      //logger.error(`Error fetching prices for chunk: ${chunk.join(',')}`, error);
-    }
+      try {
+          const chunkPrices = await dexScreenerApi.getMultipleTokenPrices(chunk);
+          
+          // Pour chaque token dans la réponse
+          for (const [tokenAddress, tokenData] of Object.entries(chunkPrices)) {
+              // Vérifier si la réponse contient des paires valides
+              if (!tokenData.pairs || tokenData.pairs.length === 0) {
+                  logger.debug(`No valid pairs found for token ${tokenAddress}`);
+                  prices[tokenAddress] = { priceUsd: 0 };
+                  continue;
+              }
+
+              // Vérifier la liquidité
+              const hasValidLiquidity = tokenData.pairs.some(pair => {
+                  const liquidity = parseFloat(pair.liquidity?.usd || 0);
+                  return liquidity >= 5000;
+              });
+
+              if (hasValidLiquidity) {
+                  prices[tokenAddress] = tokenData;
+              } else {
+                  logger.debug(`Insufficient liquidity for token ${tokenAddress}`);
+                  prices[tokenAddress] = { priceUsd: 0 };
+              }
+          }
+      } catch (error) {
+          logger.error(`Error fetching prices for chunk: ${chunk.join(',')}`, error);
+      }
   }
 
   return prices;
 }
 
-/**
- * Updates wallet data with prices from DexScreener.
- * @param {Object} results - Processed data for all wallets.
- * @param {Set} uniqueTokensWithoutPrice - Set of tokens without price.
- */
+// Dans updatePricesWithDexScreener, forcer la mise à jour de toutes les valeurs
 async function updatePricesWithDexScreener(results, uniqueTokensWithoutPrice) {
   if (uniqueTokensWithoutPrice.size > 0) {
-    logger.info('Fetching prices from DexScreener');
-    const dexScreenerPrices = await fetchDexScreenerPrices(Array.from(uniqueTokensWithoutPrice));
-    
-    for (const wallet of Object.values(results)) {
-      if (wallet.tokenInfos) {
-        wallet.tokenInfos.forEach(token => {
-          const dexScreenerInfo = dexScreenerPrices[token.mint];
-          if (dexScreenerInfo && dexScreenerInfo.priceUsd) {
-            const newValue = new BigNumber(token.balance).multipliedBy(dexScreenerInfo.priceUsd);
-            token.value = newValue.toFixed(2);
-            token.valueNumber = newValue.toNumber();
+      logger.info('Fetching prices from DexScreener');
+      const dexScreenerPrices = await fetchDexScreenerPrices(Array.from(uniqueTokensWithoutPrice));
+      
+      for (const wallet of Object.values(results)) {
+          if (wallet.tokenInfos) {
+              wallet.tokenInfos.forEach(token => {
+                  // Ne pas se fier aux valeurs précédentes pour les tokens qu'on vérifie
+                  if (uniqueTokensWithoutPrice.has(token.mint)) {
+                      const dexScreenerInfo = dexScreenerPrices[token.mint];
+                      const price = dexScreenerInfo?.priceUsd || 0;
+                      const newValue = new BigNumber(token.balance).multipliedBy(price);
+                      token.value = newValue.toFixed(2);
+                      token.valueNumber = newValue.toNumber();
+                  }
+              });
+              
+              wallet.tokenInfos.sort((a, b) => b.valueNumber - a.valueNumber);
+              wallet.totalValue = wallet.tokenInfos
+                  .reduce((sum, token) => sum.plus(new BigNumber(token.value)), new BigNumber(0))
+                  .toString();
           }
-        });
-        
-        wallet.tokenInfos.sort((a, b) => b.valueNumber - a.valueNumber);
-        wallet.totalValue = wallet.tokenInfos.reduce((sum, token) => sum.plus(new BigNumber(token.value)), new BigNumber(0)).toString();
       }
-    }
   }
 }
 

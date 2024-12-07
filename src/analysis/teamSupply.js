@@ -1,5 +1,4 @@
 const { getSolanaApi } = require('../integrations/solanaApi');
-const gmgnApi = require('../integrations/gmgnApi');
 const { checkInactivityPeriod } = require('../tools/inactivityPeriod');
 const { getHolders } = require('../tools/getHolders');
 const BigNumber = require('bignumber.js');
@@ -18,56 +17,83 @@ async function analyzeTeamSupply(tokenAddress, mainContext = 'default') {
     logger.debug(`Starting team supply analysis for ${tokenAddress}`, { mainContext });
 
     try {
-        // Attempt to get token info from GMGN first
-        let tokenInfo;
-        try {
-            logger.debug('Fetching token info from GMGN...');
-            const tokenInfoResponse = await gmgnApi.getTokenInfo(tokenAddress, mainContext, 'getTokenInfo');
-            if (!tokenInfoResponse?.data?.token) {
-                throw new Error("Invalid GMGN response");
-            }
-            tokenInfo = tokenInfoResponse.data.token;
-        } catch (error) {
-            // Fallback to DexScreener
-            logger.warn('GMGN API failed, falling back to DexScreener');
-            const dexInfo = await dexscreenerApi.getTokenInfo(tokenAddress);
-            const pair = dexInfo.pairData;
-            
-            tokenInfo = {
-                total_supply: pair.totalSupply,
-                symbol: pair.baseToken?.symbol || 'Unknown',
-                decimals: pair.decimals || 0
-            };
+        // Utiliser la nouvelle méthode getAsset de Helius
+        logger.debug('Fetching token info from Helius...');
+        const solanaApi = getSolanaApi();
+        const assetInfo = await solanaApi.getAsset(tokenAddress, mainContext, 'analyzeTeamSupply');
+        
+        if (!assetInfo) {
+            throw new Error("No token info found");
         }
+
+        const tokenInfo = {
+            total_supply: assetInfo.supply.total, // Déjà ajusté avec les décimales
+            symbol: assetInfo.symbol,
+            name: assetInfo.name,
+            decimals: assetInfo.decimals
+        };
+
+        logger.debug('Token info received:', tokenInfo);
 
         const totalSupply = new BigNumber(tokenInfo.total_supply);
         const allHolders = await getHolders(tokenAddress, mainContext, 'getHolders');
         
-        const significantHolders = allHolders.filter(holder => {
-            const balance = new BigNumber(holder.balance);
-            const percentage = balance.dividedBy(totalSupply);
-            return percentage.isGreaterThanOrEqualTo(SUPPLY_THRESHOLD);
-        });
+             // Ajout de logs pour le filtrage
+             const significantHolders = allHolders.filter(holder => {
+                const rawBalance = new BigNumber(holder.balance);
+                const percentage = rawBalance.dividedBy(totalSupply);
+                const percentageNumber = percentage.multipliedBy(100).toNumber();
+            
+                logger.debug('Detailed holder analysis:', {
+                    address: holder.address,
+                    rawBalance: rawBalance.toString(),
+                    decimals: tokenInfo.decimals,
+                    totalSupply: totalSupply.toString(),
+                    percentage: percentageNumber,
+                    calculation: {
+                        step1_rawBalance: rawBalance.toString(),
+                        step2_powerOfDecimals: new BigNumber(10).pow(tokenInfo.decimals).toString(),
+                        step4_totalSupply: totalSupply.toString(),
+                    },
+                    threshold: SUPPLY_THRESHOLD.multipliedBy(100).toNumber(),
+                    isSignificant: percentage.isGreaterThanOrEqualTo(SUPPLY_THRESHOLD)
+                });
+            
+                return percentage.isGreaterThanOrEqualTo(SUPPLY_THRESHOLD);
+            });
+    
+    
+            logger.debug('Significant holders found:', {
+                count: significantHolders.length,
+                threshold: SUPPLY_THRESHOLD.multipliedBy(100).toString() + '%'
+            });
+    
+            const analyzedWallets = await analyzeWallets(significantHolders, tokenAddress, mainContext);
+            logger.debug('Analyzed wallets results:', {
+                total: analyzedWallets.length,
+                byCategory: analyzedWallets.reduce((acc, w) => {
+                    acc[w.category] = (acc[w.category] || 0) + 1;
+                    return acc;
+                }, {})
+            });    
 
-        const analyzedWallets = await analyzeWallets(significantHolders, tokenAddress, mainContext);
-
-        const teamWallets = analyzedWallets
+            const teamWallets = analyzedWallets
             .filter(w => w.category !== 'Unknown')
             .map(w => ({
                 address: w.address,
-                balance: w.balance,
+                balance: w.balance.toString(),
                 percentage: new BigNumber(w.balance)
                     .dividedBy(totalSupply)
                     .multipliedBy(100)
                     .toNumber()
             }));
-
+        
         const teamSupplyHeld = analyzedWallets
             .filter(w => w.category !== 'Unknown')
             .reduce((total, wallet) => {
                 return total.plus(new BigNumber(wallet.balance));
             }, new BigNumber(0));
-
+        
         const totalSupplyControlled = teamSupplyHeld
             .dividedBy(totalSupply)
             .multipliedBy(100)
@@ -78,6 +104,7 @@ async function analyzeTeamSupply(tokenAddress, mainContext = 'default') {
                 tokenInfo: {
                     totalSupply: tokenInfo.total_supply,
                     symbol: tokenInfo.symbol,
+                    name: tokenInfo.name,
                     decimals: tokenInfo.decimals
                 },
                 analyzedWallets,

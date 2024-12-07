@@ -1,5 +1,4 @@
 const { getSolanaApi } = require('../integrations/solanaApi');
-const gmgnApi = require('../integrations/gmgnApi');
 const { checkInactivityPeriod } = require('../tools/inactivityPeriod');
 const { getAssetsForMultipleWallets } = require('../tools/walletValueCalculator');
 const { getTopHolders } = require('../tools/getHolders');
@@ -9,32 +8,51 @@ const BigNumber = require('bignumber.js');
 const logger = require('../utils/logger');
 
 async function analyzeToken(coinAddress, count, mainContext = 'default') {
-  let tokenInfo;
   try {
-    logger.debug('Fetching token info from GMGN...');
-    const tokenInfoResponse = await gmgnApi.getTokenInfo(coinAddress, mainContext);
-    if (!tokenInfoResponse?.data?.token) {
-      throw new Error("Invalid GMGN response");
-    }
-    tokenInfo = tokenInfoResponse.data.token;
-  } catch (error) {
-    logger.warn('GMGN API failed, falling back to DexScreener');
-    const dexInfo = await dexscreenerApi.getTokenInfo(coinAddress);
-    const pair = dexInfo.pairData;
+    logger.debug('Fetching token metadata...');
+    const solanaApi = getSolanaApi();
+    const tokenMetadata = await solanaApi.getAsset(coinAddress, mainContext, 'getAsset');
     
-    tokenInfo = {
-      decimals: pair.decimals || 0,
-      symbol: pair.baseToken?.symbol || 'Unknown',
-      price: pair.priceUsd || 0,
-      total_supply: pair.totalSupply || 0
+    if (!tokenMetadata) {
+      throw new Error("No token metadata found");
+    }
+
+    logger.debug('Token metadata received:', tokenMetadata);
+
+    // Adapter les données pour correspondre au format attendu
+    const formattedTokenInfo = {
+      decimals: tokenMetadata.decimals,
+      symbol: tokenMetadata.symbol,
+      name: tokenMetadata.name,
+      address: coinAddress,
+      price: tokenMetadata.price,
+      total_supply: tokenMetadata.supply.total,
+      // Ces valeurs peuvent être calculées si nécessaire
+      market_cap: tokenMetadata.price * tokenMetadata.supply.total,
     };
+
+    const topHolders = await getTopHolders(coinAddress, count, mainContext, 'getTopHolders');
+    const walletInfos = topHolders.map(holder => ({ 
+      address: holder.address, 
+      tokenBalance: holder.amount 
+    }));
+
+    const analyzedWallets = await analyzeAndFormatMultipleWallets(
+      walletInfos, 
+      coinAddress, 
+      formattedTokenInfo, 
+      mainContext
+    );
+
+    return { 
+      tokenInfo: formattedTokenInfo, 
+      analyzedWallets 
+    };
+
+  } catch (error) {
+    logger.error('Error analyzing token:', { coinAddress, error: error.message });
+    throw error;
   }
-
-  const topHolders = await getTopHolders(coinAddress, count, mainContext, 'getTopHolders');
-  const walletInfos = topHolders.map(holder => ({ address: holder.address, tokenBalance: holder.amount }));
-
-  const analyzedWallets = await analyzeAndFormatMultipleWallets(walletInfos, coinAddress, tokenInfo, mainContext);
-  return { tokenInfo, analyzedWallets };
 }
 
 const analyzeAndFormatMultipleWallets = async (walletInfos, coinAddress, tokenInfo, mainContext) => {

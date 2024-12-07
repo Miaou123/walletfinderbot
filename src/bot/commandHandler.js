@@ -1,10 +1,5 @@
-const dexScreenerApi = require('../integrations/dexScreenerApi');
-const gmgnApi = require('../integrations/gmgnApi');
+
 const ApiCallCounter = require('../utils/ApiCallCounter');
-const { formatEarlyBuyersMessage } = require('./formatters/earlyBuyersFormatter');
-const { analyzeEarlyBuyers } = require('../analysis/earlyBuyers');
-const { crossAnalyze } = require('../analysis/crossAnalyzer');
-const { sendFormattedCrossAnalysisMessage } = require('./formatters/crossAnalysisFormatter');
 const { formatBestTraders } = require('./formatters/bestTradersFormatter');
 const { scanToken } = require('../analysis/topHoldersScanner');
 const { formatAnalysisMessage } = require('./formatters/topHoldersFormatter');
@@ -19,7 +14,6 @@ const SupplyTracker = require('../tools/SupplyTracker');
 const UserManager = require('./accessManager/userManager');
 const ActiveCommandsTracker = require('./commandsManager/activeCommandsTracker'); 
 const path = require('path');  
-const fs = require('fs');
 const logger = require('../utils/logger');
 
 let lastAnalysisResults = {};
@@ -42,40 +36,6 @@ const initializeSupplyTracker = async (bot, accessControlInstance) => {
     logger.error('Error initializing SupplyTracker:', error);
     throw error;
   }
-};
-
-const validateAndParseTimeFrame = (timeFrame) => {
-  if (!timeFrame) return 1;
-  
-  let value = parseFloat(timeFrame);
-  let unit = timeFrame.replace(/[0-9.]/g, '').toLowerCase();
-
-  if (unit === 'm' || unit === 'min') {
-    value /= 60;
-  }
-
-  if (isNaN(value) || value < 0.25 || value > 5) {
-    throw new Error("Invalid time frame. Please enter a number between 0.25 and 5 hours, or 15 and 300 minutes.");
-  }
-
-  return Math.round(value * 100) / 100;
-};
-
-const validateAndParseMinAmountOrPercentage = (input, totalSupply, decimals) => {
-  if (!input) {
-    return { minAmount: BigInt(Math.floor((totalSupply * 0.01) * Math.pow(10, decimals))), minPercentage: 1 };
-  }
-
-  const value = parseFloat(input.replace('%', ''));
-
-  if (isNaN(value) || value < 0.1 || value > 2) {
-    throw new Error("Invalid input. Please enter a percentage between 0.1% and 2%.");
-  }
-
-  const minPercentage = value;
-  const minAmount = BigInt(Math.floor((totalSupply * minPercentage / 100) * Math.pow(10, decimals)));
-
-  return { minAmount, minPercentage };
 };
 
 const handleStartCommand = async (bot, msg, args, messageThreadId) => {
@@ -286,223 +246,6 @@ const handleTopHoldersCommand = async (bot, msg, args, messageThreadId) => {
     ApiCallCounter.logApiCalls('Analyze');
     ActiveCommandsTracker.removeCommand(userId, 'th');
   }
-};
-
-const handleEarlyBuyersCommand = async (bot, msg, args, messageThreadId) => {
-  const userId = msg.from.id; 
-  logger.info(`Starting EarlyBuyers command for user ${msg.from.username}`);
-  try {
-    let coinAddress, timeFrame, percentage, pumpFlag;
-    
-    const recognizeArgType = (arg) => {
-      const lowerArg = arg.toLowerCase();
-      if (/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(arg)) {
-        return { type: 'address', value: arg };
-      } else if (/^(\d+(\.\d+)?)(h|m|min)$/.test(lowerArg)) {
-        return { type: 'time', value: lowerArg };
-      } else if (/^(\d+(\.\d+)?%?)$/.test(lowerArg)) {
-        return { type: 'percentage', value: lowerArg.endsWith('%') ? lowerArg : lowerArg + '%' };
-      } else if (lowerArg === 'pump' || lowerArg === 'nopump') {
-        return { type: 'flag', value: lowerArg };
-      }
-      return { type: 'unknown', value: arg };
-    };
-
-    args.forEach(arg => {
-      const { type, value } = recognizeArgType(arg);
-      switch (type) {
-        case 'address':
-          coinAddress = value;
-          break;
-        case 'time':
-          timeFrame = value;
-          break;
-        case 'percentage':
-          percentage = value;
-          break;
-        case 'flag':
-          pumpFlag = value;
-          break;
-        default:
-          logger.warn(`Unknown argument type: ${arg}`);
-      }
-    });
-
-    if (!coinAddress) {
-      throw new Error("Please provide a valid coin address.");
-    }
-
-    const hours = timeFrame ? validateAndParseTimeFrame(timeFrame) : 1;
-    if (hours === null) {
-      throw new Error("Invalid time frame. Please enter a number between 0.25 and 5 hours, or 15 and 300 minutes.");
-    }
-
-    let tokenInfo;
-    try {
-      const gmgnResponse = await gmgnApi.getTokenInfo(coinAddress, 'earlyBuyers', 'getTokenInfo');
-      logger.debug('GMGN response:', JSON.stringify(gmgnResponse?.data?.token));
-      
-      if (gmgnResponse?.data?.token) {
-          const token = gmgnResponse.data.token;
-          logger.debug('Token values before transformation:', {
-              total_supply: token.total_supply,
-              quote_reserve_value: token.pool_info?.quote_reserve_value,
-              quote_reserve: token.pool_info?.quote_reserve
-          });
-  
-          tokenInfo = {
-              name: token.name,
-              symbol: token.symbol,
-              totalSupply: String(token.total_supply), // Convert to string for BigNumber
-              decimals: token.decimals,
-              priceUsd: token.price,
-              volume24h: token.volume_24h,
-              liquidityUsd: token.liquidity,
-              dexId: token.launchpad?.toLowerCase() || null,
-              pairCreatedAt: token.open_timestamp ? token.open_timestamp * 1000 : token.creation_timestamp * 1000,
-              priceChange: {
-                  h24: token.price_24h ? ((token.price - token.price_24h) / token.price_24h) * 100 : 0
-              },
-              txns: {
-                  h24: {
-                      buys: token.buys_24h || 0,
-                      sells: token.sells_24h || 0
-                  }
-              },
-              solPrice: token.pool_info?.quote_reserve_value && token.pool_info?.quote_reserve 
-                  ? token.pool_info.quote_reserve_value / token.pool_info.quote_reserve 
-                  : null,
-              chainId: 'solana'
-          };
-  
-          logger.debug('Transformed tokenInfo:', tokenInfo);
-      }
-  } catch (error) {
-      logger.error('GMGN API error:', error);
-      logger.warn(`GMGN API failed, falling back to DexScreener: ${error.message}`);
-  }
-
-    if (!tokenInfo) {
-        tokenInfo = await dexScreenerApi.getTokenInfo(coinAddress, 'earlyBuyers', 'getTokenInfo');
-    }
-
-    if (!tokenInfo) {
-      throw new Error("Failed to fetch token information");
-    }
-
-    const { minPercentage } = validateAndParseMinAmountOrPercentage(percentage, tokenInfo.totalSupply, tokenInfo.decimals);
-
-    let analysisType = "Standard";
-    if (pumpFlag === 'pump') analysisType = "Pumpfun";
-    if (pumpFlag === 'nopump') analysisType = "Pumpfun excluded";
-
-    await bot.sendLongMessage(
-      msg.chat.id,
-      `🔎 Analyzing early buyers for <b>${tokenInfo.symbol}</b>\n` +
-      `⏳ Time frame: <b>${hours} hours</b>\n` +
-      `📊 Minimum percentage: <b>${minPercentage}%</b>\n` +
-      `🚩 Analysis type: <b>${analysisType}</b>`,
-      { parse_mode: 'HTML', disable_web_page_preview: true, message_thread_id: messageThreadId }
-    );      
-
-    const result = await analyzeEarlyBuyers(coinAddress, minPercentage, hours, tokenInfo, 'earlyBuyers', pumpFlag || '');
-
-    if (!result || !result.earlyBuyers) {
-      throw new Error("Invalid result from analyzeEarlyBuyers");
-    }
-
-    let formattedMessage = await formatEarlyBuyersMessage(result.earlyBuyers, tokenInfo, hours, coinAddress, pumpFlag);
-    if (!formattedMessage || formattedMessage.length === 0) {
-      formattedMessage = "No early buyers found or error in formatting the message.";
-    }
-
-    await bot.sendLongMessage(msg.chat.id, formattedMessage, { parse_mode: 'HTML', disable_web_page_preview: true, message_thread_id: messageThreadId });
-
-  } catch (error) {
-    logger.error(`Error in handleEarlyBuyersCommand:`, error);
-    let errorMessage = `An error occurred during early buyers analysis: ${error.message}.`;
-    if (error.stack) {
-      logger.error("Error stack:", error.stack);
-    }
-    await bot.sendLongMessage(msg.chat.id, errorMessage, { message_thread_id: messageThreadId });
-  } finally {
-    logger.debug('EarlyBuyers command completed');
-    ApiCallCounter.logApiCalls('earlyBuyers');
-    ActiveCommandsTracker.removeCommand(userId, 'eb');
-  }
-};
-
-const handleCrossCommand = async (bot, msg, args, messageThreadId) => {
-  const userId = msg.from.id; 
-  logger.info(`Starting Cross command for user ${msg.from.username}`);
-  const DEFAULT_MIN_COMBINED_VALUE = 1000; 
-  try {
-    if (args.length < 2) {
-      await bot.sendLongMessage(msg.chat.id, "Please provide at least two coin addresses and optionally a minimum combined value. Usage: /cross <coin_address1> <coin_address2> [coin_address3...] [min_value]", { message_thread_id: messageThreadId });
-      return;
-    }
-
-    let minCombinedValue = DEFAULT_MIN_COMBINED_VALUE;
-    let contractAddresses = [];
-
-    for (const item of args) {
-      if (!isNaN(Number(item)) && contractAddresses.length >= 2) {
-        minCombinedValue = parseFloat(item);
-      } else if (/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(item)) {
-        contractAddresses.push(item);
-      } else {
-        logger.info('Invalid input:', item);
-        await bot.sendLongMessage(msg.chat.id, `Invalid input: ${item}. Please provide valid Solana addresses.`, { message_thread_id: messageThreadId });
-        return;
-      }
-    }
-
-    if (contractAddresses.length < 2) {
-      await bot.sendLongMessage(msg.chat.id, "Please provide at least two valid coin addresses.", { message_thread_id: messageThreadId });
-      return;
-    }
-
-    await bot.sendLongMessage(msg.chat.id, `Starting cross-analysis for ${contractAddresses.length} coins with minimum combined value of $${minCombinedValue}...`, { message_thread_id: messageThreadId });
-
-    const relevantHolders = await crossAnalyze(contractAddresses, minCombinedValue, 'crossWallet');
-  
-    if (!Array.isArray(relevantHolders) || relevantHolders.length === 0) {
-      await bot.sendLongMessage(msg.chat.id, "No relevant holders found matching the criteria.", { message_thread_id: messageThreadId });
-      return;
-    }
-
-    const tokenInfos = await Promise.all(contractAddresses.map(async (address) => {
-      try {
-        const tokenInfo = await dexScreenerApi.getTokenInfo(address);
-        return {
-          address: address,
-          symbol: tokenInfo.symbol,
-          name: tokenInfo.name
-        };
-      } catch (error) {
-        logger.error(`Error fetching token info for ${address}:`, error);
-        return {
-          address: address,
-          symbol: 'Unknown',
-          name: 'Unknown'
-        };
-      }
-    }));
-
-    await sendFormattedCrossAnalysisMessage(bot, msg.chat.id, relevantHolders, contractAddresses, tokenInfos, messageThreadId);
-
-  } catch (error) {
-    logger.error('Error in handleCrossCommand:', error);
-    if (error.response && error.response.statusCode === 400 && error.response.body && error.response.body.description.includes('message is too long')) {
-      await bot.sendLongMessage(msg.chat.id, "An error occurred during cross-analysis: The resulting message is too long to send via Telegram.\n\nPlease try with a higher minimum combined value or reduce the number of coins. Usage: /cross [coin_address1] [coin_address2] ... [Combined_value_min]", { message_thread_id: messageThreadId });
-    } else {
-      await bot.sendLongMessage(msg.chat.id, `An error occurred during cross-analysis: ${error.message}`, { message_thread_id: messageThreadId });
-    }
-  } finally {
-    logger.debug('Cross command completed');
-    ApiCallCounter.logApiCalls('crossWallet');
-    ActiveCommandsTracker.removeCommand(userId, 'cross');
-  }  
 };
 
 const handleTeamSupplyCommand = async (bot, msg, args, messageThreadId) => {
@@ -1096,10 +839,6 @@ module.exports = {
   s: handleScanCommand,
   th: handleTopHoldersCommand,
   topholders: handleTopHoldersCommand,
-  eb: handleEarlyBuyersCommand,
-  earlybuyers: handleEarlyBuyersCommand,
-  cross: handleCrossCommand,
-  c: handleCrossCommand,
   team: handleTeamSupplyCommand,
   t: handleTeamSupplyCommand,
   search: handleSearchCommand,

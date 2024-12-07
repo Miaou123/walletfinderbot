@@ -36,6 +36,26 @@ class DexScreenerApi {
         }
     }
 
+    async getSolPrice(mainContext = 'default', subContext = null) {
+        ApiCallCounter.incrementCall('DexScreener', 'getSolPrice', mainContext, subContext);
+    
+        try {
+            const response = await this.fetchDexScreenerData('tokens/So11111111111111111111111111111111111111112');
+    
+            if (!response.data || !response.data.pairs || response.data.pairs.length === 0) {
+                throw new Error('No pair data found for SOL');
+            }
+    
+            const solPair = response.data.pairs[0];
+            const solPrice = parseFloat(solPair.priceUsd);
+            return solPrice;
+        } catch (error) {
+            console.error('Error fetching SOL price:', error);
+            throw error;
+        }
+    }
+    
+
     async getTokenOrders(tokenAddress, mainContext = 'default', subContext = null) {
         ApiCallCounter.incrementCall('DexScreener', 'getTokenOrders', mainContext, subContext);
 
