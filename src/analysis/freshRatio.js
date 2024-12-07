@@ -1,13 +1,15 @@
 const definedApi = require('../integrations/definedApi');
 const logger = require('../utils/logger');
 const { isFreshWallet } = require('../tools/freshWalletChecker');
+const dexscreenerApi = require('../integrations/dexScreenerApi');
 
 async function analyzeFreshRatio(coinAddress, minAmount, hours, tokenInfo, mainContext = 'default') {
     try {
         logger.info(`Starting fresh ratio analysis for ${coinAddress}`);
         logger.debug(`Analysis parameters: minAmount=${minAmount}, hours=${hours}, mainContext=${mainContext}`);
         
-        const creationTimestamp = Math.floor(tokenInfo.creation_timestamp);
+        const dextokenInfo = await dexscreenerApi.getTokenInfo(coinAddress, mainContext, 'getTokenInfo');
+        creationTimestamp = Math.floor(dextokenInfo.pairData.pairCreatedAt / 1000);
         const endTimestamp = creationTimestamp + (hours * 3600);
         logger.debug(`Analysis timeframe: ${new Date(creationTimestamp * 1000)} to ${new Date(endTimestamp * 1000)}`);
 
@@ -15,6 +17,9 @@ async function analyzeFreshRatio(coinAddress, minAmount, hours, tokenInfo, mainC
         let cursor = null;
         let hasMoreEvents = true;
         let paginationCount = 0;
+
+        const decimals = tokenInfo.decimals || 6;
+        const minAmountInTokens = Number(minAmount) / (10 ** decimals);
         
         while (hasMoreEvents) {
             paginationCount++;
@@ -25,16 +30,18 @@ async function analyzeFreshRatio(coinAddress, minAmount, hours, tokenInfo, mainC
                     coinAddress,
                     creationTimestamp,
                     endTimestamp,
-                    cursor,
-                    100,
+                    cursor, 
+                    100, 
                     mainContext,
                     'getTokenEvents',
                     {
                         eventDisplayType: ["Buy"],
-                        amountNonLiquidityToken: minAmount
+                        direction: "ASC",
+                        amountNonLiquidityToken: Number(minAmountInTokens)
                     }
                 );
 
+                
                 const events = eventsResponse.data.getTokenEvents;
                 logger.debug(`Received ${events?.items?.length || 0} events in this batch`);
                 

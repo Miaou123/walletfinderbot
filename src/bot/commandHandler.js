@@ -1,7 +1,5 @@
-const dexScreenerApi = require('../integrations/dexScreenerApi');
+
 const ApiCallCounter = require('../utils/ApiCallCounter');
-const { crossAnalyze } = require('../analysis/crossAnalyzer');
-const { sendFormattedCrossAnalysisMessage } = require('./formatters/crossAnalysisFormatter');
 const { formatBestTraders } = require('./formatters/bestTradersFormatter');
 const { scanToken } = require('../analysis/topHoldersScanner');
 const { formatAnalysisMessage } = require('./formatters/topHoldersFormatter');
@@ -16,7 +14,6 @@ const SupplyTracker = require('../tools/SupplyTracker');
 const UserManager = require('./accessManager/userManager');
 const ActiveCommandsTracker = require('./commandsManager/activeCommandsTracker'); 
 const path = require('path');  
-const fs = require('fs');
 const logger = require('../utils/logger');
 
 let lastAnalysisResults = {};
@@ -39,40 +36,6 @@ const initializeSupplyTracker = async (bot, accessControlInstance) => {
     logger.error('Error initializing SupplyTracker:', error);
     throw error;
   }
-};
-
-const validateAndParseTimeFrame = (timeFrame) => {
-  if (!timeFrame) return 1;
-  
-  let value = parseFloat(timeFrame);
-  let unit = timeFrame.replace(/[0-9.]/g, '').toLowerCase();
-
-  if (unit === 'm' || unit === 'min') {
-    value /= 60;
-  }
-
-  if (isNaN(value) || value < 0.25 || value > 5) {
-    throw new Error("Invalid time frame. Please enter a number between 0.25 and 5 hours, or 15 and 300 minutes.");
-  }
-
-  return Math.round(value * 100) / 100;
-};
-
-const validateAndParseMinAmountOrPercentage = (input, totalSupply, decimals) => {
-  if (!input) {
-    return { minAmount: BigInt(Math.floor((totalSupply * 0.01) * Math.pow(10, decimals))), minPercentage: 1 };
-  }
-
-  const value = parseFloat(input.replace('%', ''));
-
-  if (isNaN(value) || value < 0.1 || value > 2) {
-    throw new Error("Invalid input. Please enter a percentage between 0.1% and 2%.");
-  }
-
-  const minPercentage = value;
-  const minAmount = BigInt(Math.floor((totalSupply * minPercentage / 100) * Math.pow(10, decimals)));
-
-  return { minAmount, minPercentage };
 };
 
 const handleStartCommand = async (bot, msg, args, messageThreadId) => {
@@ -283,79 +246,6 @@ const handleTopHoldersCommand = async (bot, msg, args, messageThreadId) => {
     ApiCallCounter.logApiCalls('Analyze');
     ActiveCommandsTracker.removeCommand(userId, 'th');
   }
-};
-
-const handleCrossCommand = async (bot, msg, args, messageThreadId) => {
-  const userId = msg.from.id; 
-  logger.info(`Starting Cross command for user ${msg.from.username}`);
-  const DEFAULT_MIN_COMBINED_VALUE = 1000; 
-  try {
-    if (args.length < 2) {
-      await bot.sendLongMessage(msg.chat.id, "Please provide at least two coin addresses and optionally a minimum combined value. Usage: /cross <coin_address1> <coin_address2> [coin_address3...] [min_value]", { message_thread_id: messageThreadId });
-      return;
-    }
-
-    let minCombinedValue = DEFAULT_MIN_COMBINED_VALUE;
-    let contractAddresses = [];
-
-    for (const item of args) {
-      if (!isNaN(Number(item)) && contractAddresses.length >= 2) {
-        minCombinedValue = parseFloat(item);
-      } else if (/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(item)) {
-        contractAddresses.push(item);
-      } else {
-        logger.info('Invalid input:', item);
-        await bot.sendLongMessage(msg.chat.id, `Invalid input: ${item}. Please provide valid Solana addresses.`, { message_thread_id: messageThreadId });
-        return;
-      }
-    }
-
-    if (contractAddresses.length < 2) {
-      await bot.sendLongMessage(msg.chat.id, "Please provide at least two valid coin addresses.", { message_thread_id: messageThreadId });
-      return;
-    }
-
-    await bot.sendLongMessage(msg.chat.id, `Starting cross-analysis for ${contractAddresses.length} coins with minimum combined value of $${minCombinedValue}...`, { message_thread_id: messageThreadId });
-
-    const relevantHolders = await crossAnalyze(contractAddresses, minCombinedValue, 'crossWallet');
-  
-    if (!Array.isArray(relevantHolders) || relevantHolders.length === 0) {
-      await bot.sendLongMessage(msg.chat.id, "No relevant holders found matching the criteria.", { message_thread_id: messageThreadId });
-      return;
-    }
-
-    const tokenInfos = await Promise.all(contractAddresses.map(async (address) => {
-      try {
-        const tokenInfo = await dexScreenerApi.getTokenInfo(address);
-        return {
-          address: address,
-          symbol: tokenInfo.symbol,
-          name: tokenInfo.name
-        };
-      } catch (error) {
-        logger.error(`Error fetching token info for ${address}:`, error);
-        return {
-          address: address,
-          symbol: 'Unknown',
-          name: 'Unknown'
-        };
-      }
-    }));
-
-    await sendFormattedCrossAnalysisMessage(bot, msg.chat.id, relevantHolders, contractAddresses, tokenInfos, messageThreadId);
-
-  } catch (error) {
-    logger.error('Error in handleCrossCommand:', error);
-    if (error.response && error.response.statusCode === 400 && error.response.body && error.response.body.description.includes('message is too long')) {
-      await bot.sendLongMessage(msg.chat.id, "An error occurred during cross-analysis: The resulting message is too long to send via Telegram.\n\nPlease try with a higher minimum combined value or reduce the number of coins. Usage: /cross [coin_address1] [coin_address2] ... [Combined_value_min]", { message_thread_id: messageThreadId });
-    } else {
-      await bot.sendLongMessage(msg.chat.id, `An error occurred during cross-analysis: ${error.message}`, { message_thread_id: messageThreadId });
-    }
-  } finally {
-    logger.debug('Cross command completed');
-    ApiCallCounter.logApiCalls('crossWallet');
-    ActiveCommandsTracker.removeCommand(userId, 'cross');
-  }  
 };
 
 const handleTeamSupplyCommand = async (bot, msg, args, messageThreadId) => {
@@ -949,8 +839,6 @@ module.exports = {
   s: handleScanCommand,
   th: handleTopHoldersCommand,
   topholders: handleTopHoldersCommand,
-  cross: handleCrossCommand,
-  c: handleCrossCommand,
   team: handleTeamSupplyCommand,
   t: handleTeamSupplyCommand,
   search: handleSearchCommand,

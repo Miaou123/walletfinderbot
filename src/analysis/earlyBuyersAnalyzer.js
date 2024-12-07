@@ -71,8 +71,6 @@ class EarlyBuyersAnalyzer {
            transactions: []
        };
 
-       const beforeBought = currentData.bought_amount_token;
-       const beforeSold = currentData.sold_amount_token;
    
        if (isBuy) {
            currentData.bought_amount_token += tokenAmount;

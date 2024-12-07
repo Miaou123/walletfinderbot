@@ -26,9 +26,9 @@ async function analyzeToken(coinAddress, count, mainContext = 'default') {
       name: tokenMetadata.name,
       address: coinAddress,
       price: tokenMetadata.price,
-      total_supply: tokenMetadata.supply,
+      total_supply: tokenMetadata.supply.total,
       // Ces valeurs peuvent être calculées si nécessaire
-      market_cap: tokenMetadata.price * tokenMetadata.supply,
+      market_cap: tokenMetadata.price * tokenMetadata.supply.total,
     };
 
     const topHolders = await getTopHolders(coinAddress, count, mainContext, 'getTopHolders');

@@ -32,14 +32,14 @@ const sendFormattedCrossAnalysisMessage = async (bot, chatId, filteredHolders, c
 
         const holderStats = calculateHolderStats(filteredHolders, tokenInfos);
 
-        let message = `<b>Cross-Analysis Results</b>\n\n`;
-        message += `Total common holders: ${holderStats.total}\n\n`;
+        let message = `<b>Cross-Analysis Results for ${tokenInfos.map(t => `<a href="https://solscan.io/token/${t.address}">${t.symbol}</a>`).join(' ')}</b>\n\n`;
+        message += `Total common holders: <code><b>${holderStats.total}</b></code>\n\n`;
 
         // Add combination statistics
         Object.entries(holderStats.combinations)
             .sort((a, b) => b[1] - a[1])
             .forEach(([combination, count]) => {
-                message += `${combination}: ${count}\n`;
+                message += `${combination}: <b>${formatNumber(count)}</b>\n`;
             });
 
         message += `\n`;
@@ -70,23 +70,23 @@ const formatCrossAnalysisWallet = (wallet, contractAddresses, tokenInfos, rank) 
         const pnlEmoji = getEmojiForPnl(wallet.walletCheckerData?.total_value || 0);
 
         let result = `${rank}. <a href="https://solscan.io/account/${wallet.address}">${shortAddress}</a> ${pnlEmoji} <a href="https://gmgn.ai/sol/address/${wallet.address}">gmgn</a>/<a href="https://app.cielo.finance/profile/${wallet.address}/pnl/tokens">cielo</a>\n`;
-        result += `├ 🪙 Tokens held: ${wallet.tokensHeld.size}/${contractAddresses.length}\n`;
+        result += `├ 🪙 Tokens held: <b>${wallet.tokensHeld.size}/${contractAddresses.length}</b>\n`;
 
         if (wallet.walletCheckerData) {
             const { total_value, sol_balance, realized_profit_30d, unrealized_profit, winrate } = wallet.walletCheckerData;
             const winratePercentage = (winrate * 100).toFixed(2);
 
-            result += `├ 💼 Port: $${formatNumber(total_value, 0)} (SOL: ${formatNumber(sol_balance, 2)})\n`;
-            result += `├ 💰 P/L (30d): $${formatNumber(realized_profit_30d, 0)} 📈 uP/L: $${formatNumber(unrealized_profit, 0)}\n`;
-            result += `├ 📊 Winrate (30d): ${winratePercentage}%\n`;
+            result += `├ 💼 Port: $<b>${formatNumber(total_value, 0)}</b> (SOL: <b>${formatNumber(sol_balance, 2)}</b>)\n`;
+            result += `├ 💰 P/L (30d): $<b>${formatNumber(realized_profit_30d, 0)}</b> 📈 uP/L: $<b>${formatNumber(unrealized_profit, 0)}</b>\n`;
+            result += `├ 📊 Winrate (30d): <b>${winratePercentage}%</b>\n`;
         }
 
-        result += `└ 🔗 Combined Value: $${formatNumber(wallet.combinedValue)} (`;
+        result += `└ 🔗 Combined Value: $<b>${formatNumber(wallet.combinedValue)}</b> (`;
         result += contractAddresses.map(address => {
             const tokenInfo = tokenInfos.find(t => t.address === address);
             const value = wallet[`value_${address}`] || 0;
             if (value > 0) {
-                return `${tokenInfo.symbol}: $${formatNumber(value)}`;
+                return `<a href="https://solscan.io/token/${address}">${tokenInfo.symbol}</a>: $${formatNumber(value)}`;
             }
             return null;
         }).filter(Boolean).join(', ');
