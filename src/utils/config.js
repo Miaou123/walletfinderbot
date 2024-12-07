@@ -29,7 +29,7 @@ const nonSensitiveConfig = {
 const config = {
   ...sensitiveConfig,
   ...nonSensitiveConfig,
-  HELIUS_RPC_URL: sensitiveConfig.HELIUS_API_KEY ? `https://rpc.helius.xyz/?api-key=${sensitiveConfig.HELIUS_API_KEY}` : '',
+  HELIUS_RPC_URL: sensitiveConfig.HELIUS_API_KEY ? `https://mainnet.helius-rpc.com/?api-key=${sensitiveConfig.HELIUS_API_KEY}` : '',
 };
 
 const requiredEnvVars = ['TELEGRAM_TOKEN', 'HELIUS_API_KEY', 'MONGODB_URI'];

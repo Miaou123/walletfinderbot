@@ -9,7 +9,7 @@ puppeteer.use(StealthPlugin());
 
 class PumpFunApi {
     constructor() {
-        this.baseUrl = 'https://frontend-api.pump.fun';
+        this.baseUrl = 'https://frontend-api-v2.pump.fun';
         this.browser = null;
     }
 
@@ -87,6 +87,35 @@ class PumpFunApi {
         };
 
         return pumpfunRateLimiter.enqueue(requestFunction);
+    }
+
+    async getUserInfo(address, mainContext = 'default', subContext = null) {
+        const url = `${this.baseUrl}/users/${address}`;
+        return this.fetchData(url, 'getUserInfo', mainContext, subContext);
+    }
+
+    async getBalances(address, mainContext = 'default', subContext = null) {
+        const url = `${this.baseUrl}/balances/${address}?limit=50&offset=0&minBalance=-1`;
+        return this.fetchData(url, 'getBalances', mainContext, subContext);
+    }
+
+    async getFollowers(address, mainContext = 'default', subContext = null) {
+        const url = `${this.baseUrl}/following/followers/${address}`;
+        return this.fetchData(url, 'getFollowers', mainContext, subContext);
+    }
+
+    async getFollowing(address, mainContext = 'default', subContext = null) {
+        const url = `${this.baseUrl}/following/${address}`;
+        return this.fetchData(url, 'getFollowing', mainContext, subContext);
+    }
+
+    async getCreatedCoins(address, limit = 10, offset = 0, mainContext = 'default', subContext = null) {
+        if (!address) {
+            throw new Error("Vous devez fournir une adresse.");
+        }
+    
+        const url = `${this.baseUrl}/coins/user-created-coins/${address}?offset=${offset}&limit=${limit}&includeNsfw=false`;
+        return this.fetchData(url, 'getCreatedCoins', mainContext, subContext);
     }
 
     async getAllTrades(address, limit = 200, offset = 0, minimumSize = 0, mainContext = 'default', subContext = null) {

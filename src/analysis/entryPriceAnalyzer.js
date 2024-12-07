@@ -1,8 +1,7 @@
 // EntryPriceAnalyzer.js
-
+const { getSolanaApi } = require('../integrations/solanaApi');
 const definedApi = require('../integrations/definedApi');
 const dexscreenerApi = require('../integrations/dexScreenerApi');
-const gmgnApi = require('../integrations/gmgnApi');
 const pumpfunApi = require('../integrations/pumpfunApi'); // Importation de l'API PumpFun
 const { getTopHolders } = require('../tools/getHolders');
 const BigNumber = require('bignumber.js');
@@ -18,30 +17,39 @@ class EntryPriceAnalyzer {
 
     async getTokenMetadata(tokenAddress, mainContext, subContext) {
         try {
-            // GMGN API
-            logger.debug('Fetching token metadata from GMGN...');
-            const gmgnResponse = await gmgnApi.getTokenInfo(tokenAddress);
+            logger.debug('Fetching token metadata from Helius...');
+            const solanaApi = getSolanaApi();
+            
+            // Récupérer les infos du token
+            const assetInfo = await solanaApi.getAsset(tokenAddress, mainContext, 'entryPriceAnalyzer');
+            
+            // Récupérer le prix du SOL pour les conversions
             const solInfo = await dexscreenerApi.getTokenInfo(
                 "So11111111111111111111111111111111111111112"
             );
-            
-            // Extraire les données GMGN
+    
+            if (!assetInfo) {
+                throw new Error("No token info found");
+            }
+    
+            // Extraire les données
             return {
-                decimals: gmgnResponse.data.token.decimals || 0,
-                symbol: gmgnResponse.data.token.symbol || 'Unknown',
-                priceUsd: Number(gmgnResponse.data.token.price) || 0,
+                decimals: assetInfo.decimals || 0,
+                symbol: assetInfo.symbol || 'Unknown',
+                priceUsd: assetInfo.price || 0,
                 solPriceUsd: Number(solInfo.pairData.priceUsd) || 0,
-                priceInSol: gmgnResponse.data.token.price && solInfo.pairData.priceUsd ? 
-                           new BigNumber(gmgnResponse.data.token.price)
-                               .div(solInfo.pairData.priceUsd)
-                               .toNumber() : 0,
+                priceInSol: assetInfo.price && solInfo.pairData.priceUsd ? 
+                            new BigNumber(assetInfo.price)
+                                .div(solInfo.pairData.priceUsd)
+                                .toNumber() : 0,
                 address: tokenAddress,
-                totalSupply: Number(gmgnResponse.data.token.total_supply) || 0
+                totalSupply: assetInfo.supply.total || 0  // Supply déjà ajustée avec les décimales
             };
     
         } catch (error) {
-            // Fallback DexScreener
-            logger.warn('GMGN API failed, falling back to DexScreener');
+            logger.error('Error fetching token metadata:', error);
+            // On peut garder DexScreener comme fallback si nécessaire
+            logger.warn('Helius API failed, falling back to DexScreener');
             const [dexInfo, solInfo] = await Promise.all([
                 dexscreenerApi.getTokenInfo(tokenAddress),
                 dexscreenerApi.getTokenInfo("So11111111111111111111111111111111111111112")
@@ -57,11 +65,11 @@ class EntryPriceAnalyzer {
                 priceUsd: Number(pair.priceUsd) || 0,
                 solPriceUsd: Number(solPair.priceUsd) || 0,
                 priceInSol: pair.priceUsd && solPair.priceUsd ? 
-                           new BigNumber(pair.priceUsd)
-                               .div(solPair.priceUsd)
-                               .toNumber() : 0,
+                            new BigNumber(pair.priceUsd)
+                                .div(solPair.priceUsd)
+                                .toNumber() : 0,
                 address: tokenAddress,
-                totalSupply: Number(pair.totalSupply) || 0
+                totalSupply: pair.totalSupply || 0
             };
         }
     }
