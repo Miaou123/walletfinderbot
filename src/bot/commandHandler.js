@@ -1,13 +1,10 @@
 
 const ApiCallCounter = require('../utils/ApiCallCounter');
-const { formatBestTraders } = require('./formatters/bestTradersFormatter');
 const { scanToken } = require('../analysis/topHoldersScanner');
 const { formatAnalysisMessage } = require('./formatters/topHoldersFormatter');
 const { formatScanResult} = require('./formatters/scanResultFormatter');
 const {formatTeamSupplyResult, formatWalletDetails} = require('./formatters/teamSupplyFormatter');
 const { analyzeToken } = require('../analysis/topHoldersAnalyzer');
-const { searchWallets } = require('../analysis/walletSearcher');
-const { analyzeBestTraders } = require('../analysis/bestTraders');
 const { analyzeTeamSupply } = require('../analysis/teamSupply');
 const { getAvailableSpots } = require('../utils/accessSpots');
 const SupplyTracker = require('../tools/SupplyTracker');
@@ -347,89 +344,6 @@ const handleTeamSupplyCommand = async (bot, msg, args, messageThreadId) => {
     logger.debug('handleTeamSupplyCommand completed');
     ApiCallCounter.logApiCalls('teamSupply');
     ActiveCommandsTracker.removeCommand(userId, 'team');
-  }
-};
-
-const handleSearchCommand = async (bot, msg, args, messageThreadId) => {
-  const userId = msg.from.id; 
-  logger.info(`Starting Search command for user ${msg.from.username}`);
-  try {
-    const [tokenAddress, ...searchCriteria] = args;
-
-    if (searchCriteria.length === 0) {
-      await bot.sendLongMessage(msg.chat.id, "Please provide search criteria.", { message_thread_id: messageThreadId });
-      return;
-    }
-
-    await bot.sendLongMessage(msg.chat.id, `Searching wallets for coin: ${tokenAddress}`, { message_thread_id: messageThreadId });
-
-    const results = await searchWallets(tokenAddress, searchCriteria, 'searchWallet');
-
-    if (results.length === 0) {
-      await bot.sendLongMessage(msg.chat.id, "No matching wallets found.", { message_thread_id: messageThreadId });
-      return;
-    }
-
-    let message = `Found ${results.length} matching wallet(s):\n\n`;
-    message += results.join('');
-
-    await bot.sendLongMessage(msg.chat.id, message, { parse_mode: 'HTML', disable_web_page_preview: true, message_thread_id: messageThreadId });
-
-  } catch (error) {
-    logger.error(`Error in handleSearchCommand:`, error);
-    await bot.sendLongMessage(msg.chat.id, `An error occurred during the search: ${error.message}`, { message_thread_id: messageThreadId });
-  } finally {
-    logger.debug('Search command completed');
-    ApiCallCounter.logApiCalls('searchWallet');
-    ActiveCommandsTracker.removeCommand(userId, 'search');
-  }
-};
-
-const handleBestTradersCommand = async (bot, msg, args, messageThreadId) => {
-  const userId = msg.from.id; 
-  logger.info(`Starting BestTrader command for user ${msg.from.username}`);
-  try {
-    const [contractAddress, ...otherArgs] = args;
-    let winrateThreshold = 50;
-    let portfolioThreshold = 10000;
-    let sortOption = 'winrate';
-
-    for (const arg of otherArgs) {
-      const lowercaseArg = arg.toLowerCase();
-      if (['pnl', 'winrate', 'wr', 'portfolio', 'port', 'sol'].includes(lowercaseArg)) {
-        sortOption = lowercaseArg;
-      } else {
-        const num = parseFloat(arg);
-        if (!isNaN(num)) {
-          if (num >= 0 && num <= 100) {
-            winrateThreshold = num;
-          } else if (num > 100 && num <= 1000000) {
-            portfolioThreshold = num;
-          }
-        }
-      }
-    }
-
-    await bot.sendLongMessage(msg.chat.id, `Analyzing best traders for contract: ${contractAddress} with winrate >${winrateThreshold}% and portfolio value >$${portfolioThreshold}, sorted by ${sortOption}`, { message_thread_id: messageThreadId });
-
-    const bestTraders = await analyzeBestTraders(contractAddress, winrateThreshold, portfolioThreshold, sortOption, 'bestTraders');
-        
-    if (bestTraders.length === 0) {
-      await bot.sendLongMessage(msg.chat.id, "No traders found meeting the criteria.", { message_thread_id: messageThreadId });
-      return;
-    }
-
-    const message = formatBestTraders(bestTraders, sortOption);
-
-    await bot.sendLongMessage(msg.chat.id, message, { parse_mode: 'HTML', disable_web_page_preview: true, message_thread_id: messageThreadId });
-
-  } catch (error) {
-    logger.error('Error in handleBestTradersCommand:', error);
-    await bot.sendLongMessage(msg.chat.id, `An error occurred while processing your request: ${error.message}`, { message_thread_id: messageThreadId });
-  } finally {
-    logger.debug('bestTraders command completed');
-    ApiCallCounter.logApiCalls('bestTraders');
-    ActiveCommandsTracker.removeCommand(userId, 'bt');
   }
 };
 
@@ -841,10 +755,6 @@ module.exports = {
   topholders: handleTopHoldersCommand,
   team: handleTeamSupplyCommand,
   t: handleTeamSupplyCommand,
-  search: handleSearchCommand,
-  sh: handleSearchCommand,
-  bt: handleBestTradersCommand,
-  besttraders: handleBestTradersCommand,
   tracker: handleTrackerCommand,
   tr: handleTrackerCommand,
   stop: handleStopCommand,
