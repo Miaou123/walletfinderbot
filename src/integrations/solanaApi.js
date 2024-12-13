@@ -81,8 +81,6 @@ class SolanaApi {
         return null;
       }
   
-      console.log('Asset info from Helius:', result);
-  
       // Ajuster la supply en tenant compte des décimales
       const rawSupply = new BigNumber(result.token_info.supply || 0);
       const decimals = result.token_info.decimals || 0;
@@ -241,10 +239,8 @@ class SolanaApi {
       }
   
       const mintInfo = accountInfo.value.data.parsed.info;
-      console.log('Token mint info from Helius:', mintInfo);
   
       const supplyInfo = await this.getTokenSupply(tokenAddress, mainContext, subContext);
-      console.log('Token supply info from Helius:', supplyInfo);
   
       return {
         address: tokenAddress,

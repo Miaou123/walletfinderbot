@@ -28,9 +28,23 @@ async function getAllWallets() {
     return await collection.find({}).toArray();
 }
 
+async function getRecentWallet(address) {
+    const db = await getDatabase();
+    const collection = db.collection('wallets');
+    const fifteenMinutesAgo = new Date(Date.now() - 15 * 60 * 1000);
+
+    const wallet = await collection.findOne({
+        address,
+        refresh_date: { $gt: fifteenMinutesAgo }
+    });
+
+    return wallet;
+}
+
 module.exports = {
     getWalletsByWinrate,
     getWalletsByCriteria,
     exportWalletsToJson,
-    getAllWallets
+    getAllWallets,
+    getRecentWallet
 };

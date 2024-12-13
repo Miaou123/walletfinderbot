@@ -58,9 +58,9 @@ async function saveInterestingWallet(address, walletData) {
     
     // Vérifier si le wallet existe déjà et si sa refresh_date est plus récente que 7 jours
     const existingWallet = await collection.findOne({ address });
-    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    const fifteenMinutesAgo = new Date(Date.now() - 15 * 60 * 1000); // 15 minutes en millisecondes
     
-    if (existingWallet && existingWallet.refresh_date > sevenDaysAgo) {
+    if (existingWallet && existingWallet.refresh_date > fifteenMinutesAgo) {
         logger.debug(`Wallet ${address} was refreshed recently. Skipping update.`);
         return null;
     }
@@ -79,18 +79,30 @@ async function saveInterestingWallet(address, walletData) {
         }
     }
 
-    // Créer un objet avec seulement les champs définis dans le schéma
+    // Fonction helper pour convertir null/undefined en 0
+    const normalizeValue = (value) => {
+        if (value === null || value === undefined || isNaN(value)) {
+            return 0;
+        }
+        // Si c'est une chaîne numérique, la convertir en nombre
+        if (typeof value === 'string' && !isNaN(value)) {
+            return parseFloat(value);
+        }
+        return value;
+    };
+
+    // Créer un objet avec les valeurs normalisées
     const walletToSave = {
         address,
-        balance: walletData.balance,
-        total_value: walletData.total_value,
-        realized_profit_30d: walletData.realized_profit_30d,
-        winrate: walletData.winrate,
-        buy_30d: walletData.buy_30d,
-        token_avg_cost: walletData.token_avg_cost,
-        token_sold_avg_profit: walletData.token_sold_avg_profit,
-        pnl_2x_5x_num: walletData.pnl_2x_5x_num,
-        pnl_gt_5x_num: walletData.pnl_gt_5x_num,
+        balance: normalizeValue(walletData.balance),
+        total_value: normalizeValue(walletData.total_value),
+        realized_profit_30d: normalizeValue(walletData.realized_profit_30d),
+        winrate: normalizeValue(walletData.winrate),
+        buy_30d: normalizeValue(walletData.buy_30d),
+        token_avg_cost: normalizeValue(walletData.token_avg_cost),
+        token_sold_avg_profit: normalizeValue(walletData.token_sold_avg_profit),
+        pnl_2x_5x_num: normalizeValue(walletData.pnl_2x_5x_num),
+        pnl_gt_5x_num: normalizeValue(walletData.pnl_gt_5x_num),
         twitter_bind: twitterBind,
         refresh_date: new Date(),
         lastUpdated: new Date()
