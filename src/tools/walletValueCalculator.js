@@ -306,7 +306,7 @@ async function fetchDexScreenerPrices(tokenAddresses, chunkSize = 10) {
               }
           }
       } catch (error) {
-          logger.error(`Error fetching prices for chunk: ${chunk.join(',')}`, error);
+          //logger.error(`Error fetching prices for chunk: ${chunk.join(',')}`, error);
       }
   }
 

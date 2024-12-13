@@ -1,15 +1,14 @@
 
 const ApiCallCounter = require('../utils/ApiCallCounter');
 const { scanToken } = require('../analysis/topHoldersScanner');
-const { formatAnalysisMessage } = require('./formatters/topHoldersFormatter');
 const { formatScanResult} = require('./formatters/scanResultFormatter');
 const {formatTeamSupplyResult, formatWalletDetails} = require('./formatters/teamSupplyFormatter');
-const { analyzeToken } = require('../analysis/topHoldersAnalyzer');
 const { analyzeTeamSupply } = require('../analysis/teamSupply');
 const { getAvailableSpots } = require('../utils/accessSpots');
 const SupplyTracker = require('../tools/SupplyTracker');
 const UserManager = require('./accessManager/userManager');
 const ActiveCommandsTracker = require('./commandsManager/activeCommandsTracker'); 
+const { RequestCache, cachedCommand } = require('../utils/requestCache');
 const path = require('path');  
 const logger = require('../utils/logger');
 
@@ -17,6 +16,9 @@ let lastAnalysisResults = {};
 let supplyTrackerInstance;
 let pendingTracking = new Map();
 let userManager;
+
+const scanCache = new RequestCache(3 * 60 * 1000);
+const teamSupplyCache = new RequestCache(2 * 60 * 1000); 
 
 const initializeUserManager = async () => {
   const userFilePath = path.join(__dirname, '../data/all_users.json');
@@ -126,8 +128,19 @@ const handleScanCommand = async (bot, msg, args, messageThreadId) => {
       return;
     }
 
-    const scanResult = await scanToken(tokenAddress, numberOfHolders, true, 'scan');
-    
+    // Définition de la fonction de récupération si non présent dans le cache
+    const fetchScanData = async () => {
+      return await scanToken(tokenAddress, numberOfHolders, true, 'scan');
+    };
+
+    // On tente de récupérer les données dans le cache
+    const scanResult = await cachedCommand(
+      scanCache,
+      '/scan',
+      { tokenAddress, numberOfHolders },
+      fetchScanData
+    );
+
     if (!scanResult || !scanResult.scanData) {
       throw new Error("Scan result is incomplete or invalid.");
     }
@@ -156,7 +169,7 @@ const handleScanCommand = async (bot, msg, args, messageThreadId) => {
       message_thread_id: messageThreadId
     });
 
-    // Sauvegarder les données pour le tracking
+    // Sauvegarder les données pour le tracking, si présent
     if (scanResult.trackingInfo) {
       const trackingData = {
         tokenAddress: scanResult.trackingInfo.tokenAddress,
@@ -205,46 +218,6 @@ const handleScanCommand = async (bot, msg, args, messageThreadId) => {
   }
 };
 
-const handleTopHoldersCommand = async (bot, msg, args, messageThreadId) => {
-  const userId = msg.from.id; 
-  logger.info(`Starting TopHolders command for user ${msg.from.username}`);
-  try {
-    const [coinAddress, topHoldersCountStr] = args;
-    const count = parseInt(topHoldersCountStr) || 20;
-
-    if (isNaN(count) || count < 1 || count > 100) {
-      await bot.sendLongMessage(msg.chat.id, "Invalid number of holders. Please provide a number between 1 and 100.", { message_thread_id: messageThreadId });
-      return;
-    }
-
-    const { tokenInfo, analyzedWallets } = await analyzeToken(coinAddress, count, 'Analyze');
-    
-    if (analyzedWallets.length === 0) {
-      await bot.sendLongMessage(msg.chat.id, "No wallets found for analysis.", { message_thread_id: messageThreadId });
-      return;
-    }
-
-    const { messages, errors } = formatAnalysisMessage(analyzedWallets, tokenInfo);
-
-    for (const message of messages) {
-      if (typeof message === 'string' && message.trim() !== '') {
-        await bot.sendLongMessage(msg.chat.id, message, {
-          parse_mode: 'HTML',
-          disable_web_page_preview: true,
-          message_thread_id: messageThreadId
-        });
-      }
-    }
-  } catch (error) {
-    logger.error('Error in handleTopHoldersCommand:', error);
-    await bot.sendLongMessage(msg.chat.id, `An error occurred during analysis: ${error.message}`, { message_thread_id: messageThreadId });
-  } finally {
-    logger.debug('TopHolders command completed');
-    ApiCallCounter.logApiCalls('Analyze');
-    ActiveCommandsTracker.removeCommand(userId, 'th');
-  }
-};
-
 const handleTeamSupplyCommand = async (bot, msg, args, messageThreadId) => {
   const chatId = msg.chat.id;
   const userId = msg.from.id; 
@@ -253,7 +226,17 @@ const handleTeamSupplyCommand = async (bot, msg, args, messageThreadId) => {
   try {
     const [tokenAddress] = args;
 
-    const { scanData, trackingInfo } = await analyzeTeamSupply(tokenAddress, 'teamSupply');
+    // Fonction de fetch si pas en cache
+    const fetchTeamSupply = async () => {
+      return await analyzeTeamSupply(tokenAddress, 'teamSupply');
+    };
+
+    const { scanData, trackingInfo } = await cachedCommand(
+      teamSupplyCache,
+      '/teamSupply', // nom de la commande
+      { tokenAddress }, // paramètres uniques
+      fetchTeamSupply
+    );
 
     // Log les données reçues
     logger.debug('Team supply analysis data received:', {
@@ -751,8 +734,6 @@ module.exports = {
   ping: handlePingCommand,
   scan: handleScanCommand,
   s: handleScanCommand,
-  th: handleTopHoldersCommand,
-  topholders: handleTopHoldersCommand,
   team: handleTeamSupplyCommand,
   t: handleTeamSupplyCommand,
   tracker: handleTrackerCommand,

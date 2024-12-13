@@ -85,8 +85,8 @@ const validateSolanaAddress = (address) => {
       usage: '/bt [contract_address] [winrate_threshold](50%)* [portfolio_threshold]($10000)* [sort_option](port)*',
       helpMessage: 'Analyse the 100 best traders for a specific contract with given winrate and portfolio thresholds.\n\nSort options:\n- winrate/wr: Sort by win rate\n- pnl: Sort by profit and loss\n- portfolio/port: Sort by portfolio value\n- sol: Sort by SOL balance'
     },
-    'th': { 
-      aliases: ['topholders'], 
+    'topholders': { 
+      aliases: ['th'], 
       minArgs: 1, 
       maxArgs: 2, 
       requiresAuth: true, 
