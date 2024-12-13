@@ -75,8 +75,8 @@ const validateSolanaAddress = (address) => {
       usage: '/bundle [contract_address]',
       helpMessage: `Analyze bundled trades for a specific contract address (Raydium, Meteora, and Pumpfun are supported). A bundle is defined as two wallets buying on the same block; it does not have to be the first block bundle. Most pumpfun developers sell and buy in bundles multiple times, so the total bundled amount can be greater than 100%. The "total holding amount" is the most important data to check; if it is close to 0, it means that all bundles have been sold. Finally, not just the team can bundle a coin (for example, some tools with multi-wallet purchases will be detected as a bundle).`
     },
-    'bt': { 
-      aliases: ['besttraders'], 
+    'besttraders': { 
+      aliases: ['bt'], 
       minArgs: 1, 
       maxArgs: 4, 
       requiresAuth: true, 
