@@ -69,7 +69,6 @@ class PoolAndBotDetector {
         const buy = new BigNumber(walletInfo.buy || 0);
         const sell = new BigNumber(walletInfo.sell || 0);
         const totalTransactions = buy.plus(sell);
-        console.log("total tx is:", totalTransactions);
         const upl = new BigNumber(walletInfo.unrealized_profit || 0);
 
         logger.debug(`Total transactions for ${wallet}: ${totalTransactions.toString()}`);

@@ -2,11 +2,13 @@ const logger = require('../../utils/logger');
 const { analyzeBestTraders } = require('../../analysis/bestTraders');
 const { formatBestTraders } = require('../formatters/bestTradersFormatter');
 const ActiveCommandsTracker = require('../commandsManager/activeCommandsTracker');
+const { RequestCache, cachedCommand } = require('../../utils/requestCache');
 
 class BestTradersHandler {
     constructor(userManager, accessControl) {
         this.userManager = userManager;
         this.accessControl = accessControl;
+        this.cache = new RequestCache(5 * 60 * 1000);
     }
 
     async handleCommand(bot, msg, args, messageThreadId) {
@@ -17,15 +19,33 @@ class BestTradersHandler {
             const parsedArgs = this._parseArguments(args);
             
             await this._sendInitialMessage(bot, msg.chat.id, parsedArgs, messageThreadId);
-            
-            const bestTraders = await analyzeBestTraders(
-                parsedArgs.contractAddress,
-                parsedArgs.winrateThreshold,
-                parsedArgs.portfolioThreshold,
-                parsedArgs.sortOption,
-                'bestTraders'
+
+            const cacheParams = {
+                contractAddress: parsedArgs.contractAddress,
+                winrateThreshold: parsedArgs.winrateThreshold,
+                portfolioThreshold: parsedArgs.portfolioThreshold,
+                sortOption: parsedArgs.sortOption
+            };
+
+            // Fonction de récupération des données (fetchFunction)
+            const fetchFunction = async () => {
+                return await analyzeBestTraders(
+                    parsedArgs.contractAddress,
+                    parsedArgs.winrateThreshold,
+                    parsedArgs.portfolioThreshold,
+                    parsedArgs.sortOption,
+                    'bestTraders'
+                );
+            };
+
+            // Utilisation du cachedCommand
+            const bestTraders = await cachedCommand(
+                this.cache,
+                '/bt',         // le nom de la commande
+                cacheParams,   // paramètres uniques pour cette requête
+                fetchFunction
             );
-            
+
             if (bestTraders.length === 0) {
                 await bot.sendLongMessage(
                     msg.chat.id,
@@ -36,7 +56,7 @@ class BestTradersHandler {
             }
 
             const message = formatBestTraders(bestTraders);
-            
+
             await bot.sendLongMessage(
                 msg.chat.id,
                 message,
