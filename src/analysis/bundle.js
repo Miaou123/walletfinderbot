@@ -38,50 +38,53 @@ class UnifiedBundleAnalyzer {
         }
     }
 
-    // Ajoutez la méthode getTokenMetadata
     async getTokenMetadata(tokenAddress, mainContext, subContext) {
         try {
-            logger.debug('Fetching token metadata from GMGN...');
-            const gmgnResponse = await gmgnApi.getTokenInfo(tokenAddress);
-            const solInfo = await dexscreenerApi.getTokenInfo(
-                "So11111111111111111111111111111111111111112"
-            );
+            logger.debug('Fetching token metadata from Helius API...');
+            const solanaApi = getSolanaApi();
             
-            return {
-                decimals: gmgnResponse.data.token.decimals || 0,
-                symbol: gmgnResponse.data.token.symbol || 'Unknown',
-                priceUsd: Number(gmgnResponse.data.token.price) || 0,
-                solPriceUsd: Number(solInfo.pairData.priceUsd) || 0,
-                priceInSol: gmgnResponse.data.token.price && solInfo.pairData.priceUsd ? 
-                        new BigNumber(gmgnResponse.data.token.price)
-                            .div(solInfo.pairData.priceUsd)
-                            .toNumber() : 0,
-                address: tokenAddress,
-                totalSupply: Number(gmgnResponse.data.token.total_supply) || 0
-            };
-
-        } catch (error) {
-            logger.warn('GMGN API failed, falling back to DexScreener');
-            const [dexInfo, solInfo] = await Promise.all([
-                dexscreenerApi.getTokenInfo(tokenAddress),
-                dexscreenerApi.getTokenInfo("So11111111111111111111111111111111111111112")
+            // Récupérer les infos du token et de SOL en parallèle
+            const [tokenAsset, solAsset] = await Promise.all([
+                solanaApi.getAsset(tokenAddress, mainContext, `${subContext}_token`),
+                solanaApi.getAsset(
+                    "So11111111111111111111111111111111111111112",
+                    mainContext,
+                    `${subContext}_sol`
+                )
             ]);
-
-            const pair = dexInfo.pairData;
-            const solPair = solInfo.pairData;
-            
-            return {
-                decimals: pair.decimals || 0,
-                symbol: pair.baseToken?.symbol || 'Unknown',
-                priceUsd: Number(pair.priceUsd) || 0,
-                solPriceUsd: Number(solPair.priceUsd) || 0,
-                priceInSol: pair.priceUsd && solPair.priceUsd ? 
-                        new BigNumber(pair.priceUsd)
-                            .div(solPair.priceUsd)
-                            .toNumber() : 0,
+    
+            logger.debug(`Processing token asset:`, tokenAsset);
+            logger.debug(`Processing SOL asset:`, solAsset);
+    
+            if (!tokenAsset) {
+                logger.error('Token asset missing:', tokenAsset);
+                throw new Error('Token metadata not found');
+            }
+    
+            // Utiliser directement les données formatées par getAsset
+            const tokenPrice = tokenAsset.price || 0;
+            const solPrice = solAsset?.price || 0;
+    
+            const result = {
+                decimals: tokenAsset.decimals || 0,
+                symbol: tokenAsset.symbol || 'Unknown',
+                priceUsd: tokenPrice,
+                solPriceUsd: solPrice,
+                priceInSol: tokenPrice && solPrice ? 
+                    new BigNumber(tokenPrice)
+                        .div(solPrice)
+                        .toNumber() : 0,
                 address: tokenAddress,
-                totalSupply: Number(pair.totalSupply) || 0
+                totalSupply: tokenAsset.supply?.total ? 
+                    new BigNumber(tokenAsset.supply.total).toNumber() : 0
             };
+    
+            logger.debug('Processed token metadata:', result);
+            return result;
+    
+        } catch (error) {
+            logger.error(`Error fetching token metadata for ${tokenAddress}:`, error);
+            throw error;
         }
     }
 
