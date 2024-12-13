@@ -8,6 +8,9 @@ const EntryMapHandler = require('./entryMapHandler');
 const DevCommandHandler = require('./devHandler');
 const EarlyBuyersHandler = require('./earlyBuyersHandler'); 
 const CrossHandler = require('./crossHandler');
+const BestTradersHandler = require('./bestTradersHandler');
+const SearchHandler = require('./searchHandler');
+//const ScanHandler = require('./scanHandler');
 
 class CommandHandlers {
     constructor(userManager, accessControl, bot) {
@@ -21,6 +24,9 @@ class CommandHandlers {
         this.dev = new DevCommandHandler(userManager, accessControl);
         this.earlybuyers = new EarlyBuyersHandler(userManager, accessControl);
         this.cross = new CrossHandler (userManager, accessControl);
+        this.besttraders = new BestTradersHandler(userManager, accessControl);
+        this.search = new SearchHandler(userManager, accessControl);
+        //this.scan = new ScanHandler(userManager, accessControl);
     }
 }
 
