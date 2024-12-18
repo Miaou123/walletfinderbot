@@ -1,5 +1,3 @@
-// handlers/DevCommandHandler.js
-const logger = require('../../utils/logger');
 const { formatDevAnalysis } = require('../formatters/devFormatter');
 const devAnalyzer = require('../../analysis/devAnalyzer');
 
@@ -7,18 +5,34 @@ class DevCommandHandler {
     constructor(userManager, accessControl) {
         this.userManager = userManager;
         this.accessControl = accessControl;
+        this.COMMAND_NAME = 'dev';
     }
 
     async handleCommand(bot, msg, args) {
+        const userId = msg.from.id;
+        logger.info(`Starting Dev command for user ${msg.from.username}`);
+
         try {
+            if (!ActiveCommandsTracker.canAddCommand(userId, this.COMMAND_NAME)) {
+                await bot.sendMessage(msg.chat.id,
+                    "You already have 3 active commands. Please wait for them to complete."
+                );
+                return;
+            }
+
+            if (!ActiveCommandsTracker.addCommand(userId, this.COMMAND_NAME)) {
+                await bot.sendMessage(msg.chat.id,
+                    "Unable to add a new command at this time."
+                );
+                return;
+            }
+
             if (!args || args.length === 0) {
                 await bot.sendMessage(msg.chat.id, 'Please provide a token address to analyze.');
                 return;
             }
 
             const address = args[0];
-            logger.info(`Starting Dev analysis for user ${msg.from.username} with token ${address}`);
-
             const loadingMsg = await bot.sendMessage(msg.chat.id, '🔍 Analyzing developer profile...');
             const analysis = await devAnalyzer.analyzeDevProfile(address);
             
@@ -49,8 +63,16 @@ class DevCommandHandler {
                 msg.chat.id,
                 'An error occurred while analyzing the developer profile. Please try again later.'
             );
+        } finally {
+            this._finalizeCommand(userId);
         }
     }
+
+    _finalizeCommand(userId) {
+        logger.debug('Dev command completed');
+        ActiveCommandsTracker.removeCommand(userId, this.COMMAND_NAME);
+    }
 }
+
 
 module.exports = DevCommandHandler;

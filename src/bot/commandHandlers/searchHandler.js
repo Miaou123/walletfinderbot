@@ -6,6 +6,7 @@ class SearchHandler {
     constructor(userManager, accessControl) {
         this.userManager = userManager;
         this.accessControl = accessControl;
+        this.COMMAND_NAME = 'search';
     }
 
     async handleCommand(bot, msg, args, messageThreadId) {
@@ -13,7 +14,34 @@ class SearchHandler {
         logger.info(`Starting Search command for user ${msg.from.username}`);
 
         try {
+            // Vérifier si l'utilisateur peut exécuter une nouvelle commande
+            if (!ActiveCommandsTracker.canAddCommand(userId, this.COMMAND_NAME)) {
+                await bot.sendMessage(msg.chat.id,
+                    "You already have 3 active commands. Please wait for them to complete.",
+                    { message_thread_id: messageThreadId }
+                );
+                return;
+            }
+
+            // Ajouter la commande au tracker
+            if (!ActiveCommandsTracker.addCommand(userId, this.COMMAND_NAME)) {
+                await bot.sendMessage(msg.chat.id,
+                    "Unable to add a new command at this time.",
+                    { message_thread_id: messageThreadId }
+                );
+                return;
+            }
+
             const { tokenAddress, searchCriteria } = this._parseArgs(args);
+
+            if (!tokenAddress) {
+                await bot.sendLongMessage(
+                    msg.chat.id,
+                    "Please provide a token address.",
+                    { message_thread_id: messageThreadId }
+                );
+                return;
+            }
             
             if (searchCriteria.length === 0) {
                 await bot.sendLongMessage(
@@ -83,7 +111,7 @@ class SearchHandler {
 
     _finalizeCommand(userId) {
         logger.debug('Search command completed');
-        ActiveCommandsTracker.removeCommand(userId, 'search');
+        ActiveCommandsTracker.removeCommand(userId, this.COMMAND_NAME);
     }
 }
 
