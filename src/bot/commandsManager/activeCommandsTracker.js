@@ -1,10 +1,15 @@
 const logger = require('../../utils/logger');
+const { commandConfigs } = require('./commandParser');
 
 class ActiveCommandsTracker {
   constructor() {
     this.activeCommands = new Map();
-    this.limitedCommands = new Set(['scan', 'bundle', 'bt', 'th', 'cross', 'team', 'search', 'eb', 'fr']);
-    this.TIMEOUT = 10 * 60 * 1000; 
+    this.TIMEOUT = 10 * 60 * 1000;
+    this.limitedCommands = new Set([
+      ...Object.entries(commandConfigs)
+        .filter(([_, config]) => config.requiresAuth)
+        .map(([command, _]) => command)
+    ]);
   }
 
   canAddCommand(userId, command) {
@@ -16,7 +21,7 @@ class ActiveCommandsTracker {
     const userCommands = this.activeCommands.get(userId) || new Map();
     const totalCommands = Array.from(userCommands.values()).reduce((sum, cmd) => sum + cmd.count, 0);
     logger.debug(`User ${userId} has ${totalCommands} active commands`);
-    return totalCommands < 2;
+    return totalCommands < 3;
   }
 
   addCommand(userId, command) {
@@ -33,7 +38,7 @@ class ActiveCommandsTracker {
     const userCommands = this.activeCommands.get(userId);
     const currentCommand = userCommands.get(command) || { count: 0, timeouts: [] };
 
-    if (currentCommand.count >= 2) {
+    if (currentCommand.count >= 3) {
       logger.warn(`User ${userId} attempted to start a third instance of command ${command}`);
       return false;
     }

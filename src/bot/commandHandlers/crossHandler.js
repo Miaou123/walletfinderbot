@@ -1,11 +1,9 @@
 const logger = require('../../utils/logger');
-const {
-    validateAndFormatAddress,
-    recognizeArgType
-} = require('./helpers');
+const { validateAndFormatAddress, recognizeArgType } = require('./helpers');
 const { getSolanaApi } = require('../../integrations/solanaApi');
 const crossAnalyzer = require('../../analysis/crossAnalyzer');
 const { sendFormattedCrossAnalysisMessage } = require('../formatters/crossAnalysisFormatter');
+const ActiveCommandsTracker = require('../commandsManager/activeCommandsTracker');
 
 class CrossHandler {
     constructor(userManager, accessControl) {
@@ -14,29 +12,48 @@ class CrossHandler {
         this.DEFAULT_MIN_VALUE = 1000;
         this.analyzer = new crossAnalyzer();
         this.solanaApi = getSolanaApi();
+        this.COMMAND_NAME = 'cross';
     }
 
     async handleCommand(bot, msg, args, messageThreadId) {
-
-        if (args.length < 2) {
-            await bot.sendMessage(msg.chat.id, 
-                "Please provide at least two valid addresses and optionally a minimum combined value.", 
-                { message_thread_id: messageThreadId }
-            );
-            return;
-        }
-
-        const { contractAddresses, minValue } = this.parseArgs(args);
-
-        if (contractAddresses.length < 2) {
-            await bot.sendMessage(msg.chat.id, 
-                "Please provide at least two valid addresses.", 
-                { message_thread_id: messageThreadId }
-            );
-            return;
-        }
+        const userId = msg.from.id;
+        logger.info(`Starting Cross command for user ${msg.from.username}`);
 
         try {
+            if (!ActiveCommandsTracker.canAddCommand(userId, this.COMMAND_NAME)) {
+                await bot.sendMessage(msg.chat.id, 
+                    "You already have 3 active commands. Please wait for them to complete.",
+                    { message_thread_id: messageThreadId }
+                );
+                return;
+            }
+
+            if (!ActiveCommandsTracker.addCommand(userId, this.COMMAND_NAME)) {
+                await bot.sendMessage(msg.chat.id,
+                    "Unable to add a new command at this time.",
+                    { message_thread_id: messageThreadId }
+                );
+                return;
+            }
+
+            if (args.length < 2) {
+                await bot.sendMessage(msg.chat.id, 
+                    "Please provide at least two valid addresses and optionally a minimum combined value.", 
+                    { message_thread_id: messageThreadId }
+                );
+                return;
+            }
+
+            const { contractAddresses, minValue } = this.parseArgs(args);
+
+            if (contractAddresses.length < 2) {
+                await bot.sendMessage(msg.chat.id, 
+                    "Please provide at least two valid addresses.", 
+                    { message_thread_id: messageThreadId }
+                );
+                return;
+            }
+
             const statusMsg = await bot.sendMessage(msg.chat.id, 
                 `Starting cross-analysis for ${contractAddresses.length} tokens with minimum combined value of $${minValue}...`, 
                 { message_thread_id: messageThreadId }
@@ -44,11 +61,7 @@ class CrossHandler {
 
             const tokenDetails = await Promise.all(contractAddresses.map(async (addr) => {
                 const { isValid, formattedAddress } = validateAndFormatAddress(addr, 'solana');
-                if (isValid) {
-                    return this.solanaApi.getAsset(formattedAddress, 'earlyBuyers');
-                } else {
-                    return getAsset(addr);
-                }
+                return isValid ? this.solanaApi.getAsset(formattedAddress, 'earlyBuyers') : getAsset(addr);
             }));
 
             if (tokenDetails.some(detail => !detail)) {
@@ -69,7 +82,6 @@ class CrossHandler {
                 return;
             }
 
-            // Use the formatter to generate and send the response
             await sendFormattedCrossAnalysisMessage(bot, msg.chat.id, relevantHolders, contractAddresses, tokenDetails);
 
         } catch (error) {
@@ -78,7 +90,14 @@ class CrossHandler {
                 `An error occurred during analysis: ${error.message}`, 
                 { message_thread_id: messageThreadId }
             );
+        } finally {
+            this._finalizeCommand(userId);
         }
+    }
+
+    _finalizeCommand(userId) {
+        logger.debug('Cross command completed');
+        ActiveCommandsTracker.removeCommand(userId, this.COMMAND_NAME);
     }
 
     parseArgs(args) {

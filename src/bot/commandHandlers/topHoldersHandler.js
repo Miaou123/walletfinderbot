@@ -1,9 +1,8 @@
 const logger = require('../../utils/logger');
 const TokenAnalyzer = require('../../analysis/topHoldersAnalyzer');
 const { formatAnalysisMessage } = require('../formatters/topHoldersFormatter');
-
-// Import du cache
 const { RequestCache, cachedCommand } = require('../../utils/requestCache');
+const ActiveCommandsTracker = require('../commandsManager/activeCommandsTracker');
 
 class TopHoldersHandler {
     constructor(userManager, accessControl) {
@@ -12,9 +11,8 @@ class TopHoldersHandler {
         this.tokenAnalyzer = new TokenAnalyzer();
         this.MAX_HOLDERS = 100;
         this.DEFAULT_HOLDERS = 20;
-
-        // Instancier le cache (TTL par défaut de 5 minutes, ajustable si nécessaire)
         this.cache = new RequestCache(5 * 60 * 1000);
+        this.COMMAND_NAME = 'topholders';
     }
 
     async handleCommand(bot, msg, args, messageThreadId) {
@@ -22,42 +20,70 @@ class TopHoldersHandler {
         logger.info(`Starting TopHolders command for user ${msg.from.username}`);
 
         try {
-            const [coinAddress, topHoldersCountStr] = args;
-            const count = parseInt(topHoldersCountStr) || this.DEFAULT_HOLDERS;
-
-            if (isNaN(count) || count < 1 || count > this.MAX_HOLDERS) {
-                await bot.sendLongMessage(
-                    msg.chat.id, 
-                    "Invalid number of holders. Please provide a number between 1 and 100.", 
+            // Vérifier si l'utilisateur peut exécuter une nouvelle commande
+            if (!ActiveCommandsTracker.canAddCommand(userId, this.COMMAND_NAME)) {
+                await bot.sendMessage(msg.chat.id,
+                    "You already have 3 active commands. Please wait for them to complete.",
                     { message_thread_id: messageThreadId }
                 );
                 return;
             }
 
-            // Construction de la clé pour le cache en incluant tous les arguments
+            // Ajouter la commande au tracker
+            if (!ActiveCommandsTracker.addCommand(userId, this.COMMAND_NAME)) {
+                await bot.sendMessage(msg.chat.id,
+                    "Unable to add a new command at this time.",
+                    { message_thread_id: messageThreadId }
+                );
+                return;
+            }
+
+            const [coinAddress, topHoldersCountStr] = args;
+
+            if (!coinAddress) {
+                await bot.sendLongMessage(
+                    msg.chat.id,
+                    "Please provide a token address.",
+                    { message_thread_id: messageThreadId }
+                );
+                return;
+            }
+
+            const count = parseInt(topHoldersCountStr) || this.DEFAULT_HOLDERS;
+
+            if (isNaN(count) || count < 1 || count > this.MAX_HOLDERS) {
+                await bot.sendLongMessage(
+                    msg.chat.id,
+                    "Invalid number of holders. Please provide a number between 1 and 100.",
+                    { message_thread_id: messageThreadId }
+                );
+                return;
+            }
+
+            // Construction de la clé pour le cache
             const cacheParams = { coinAddress, count };
 
             // Fonction de fetch si le résultat n'est pas trouvé dans le cache
             const fetchFunction = async () => {
                 return await this.tokenAnalyzer.analyzeToken(
-                    coinAddress, 
-                    count, 
+                    coinAddress,
+                    count,
                     'Analyze'
                 );
             };
 
-            // On tente de récupérer depuis le cache ou de fetcher si absent
+            // Récupération depuis le cache ou fetch si absent
             const { tokenInfo, analyzedWallets } = await cachedCommand(
-                this.cache, 
-                '/th',      // nom de la commande
-                cacheParams, 
+                this.cache,
+                '/th',
+                cacheParams,
                 fetchFunction
             );
 
             if (analyzedWallets.length === 0) {
                 await bot.sendLongMessage(
-                    msg.chat.id, 
-                    "No wallets found for analysis.", 
+                    msg.chat.id,
+                    "No wallets found for analysis.",
                     { message_thread_id: messageThreadId }
                 );
                 return;
@@ -74,16 +100,22 @@ class TopHoldersHandler {
                     });
                 }
             }
+
         } catch (error) {
             logger.error('Error in TopHoldersHandler:', error);
             await bot.sendLongMessage(
-                msg.chat.id, 
-                `An error occurred during analysis: ${error.message}`, 
+                msg.chat.id,
+                `An error occurred during analysis: ${error.message}`,
                 { message_thread_id: messageThreadId }
             );
         } finally {
-            logger.debug('TopHolders command completed');
+            this._finalizeCommand(userId);
         }
+    }
+
+    _finalizeCommand(userId) {
+        logger.debug('TopHolders command completed');
+        ActiveCommandsTracker.removeCommand(userId, this.COMMAND_NAME);
     }
 }
 
