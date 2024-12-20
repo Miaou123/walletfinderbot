@@ -2,12 +2,9 @@ const logger = require('../../utils/logger');
 const TokenAnalyzer = require('../../analysis/topHoldersAnalyzer');
 const { formatAnalysisMessage } = require('../formatters/topHoldersFormatter');
 const { RequestCache, cachedCommand } = require('../../utils/requestCache');
-const ActiveCommandsTracker = require('../commandsManager/activeCommandsTracker');
 
 class TopHoldersHandler {
-    constructor(userManager, accessControl) {
-        this.userManager = userManager;
-        this.accessControl = accessControl;
+    constructor() {
         this.tokenAnalyzer = new TokenAnalyzer();
         this.MAX_HOLDERS = 100;
         this.DEFAULT_HOLDERS = 20;
@@ -20,23 +17,6 @@ class TopHoldersHandler {
         logger.info(`Starting TopHolders command for user ${msg.from.username}`);
 
         try {
-            // Vérifier si l'utilisateur peut exécuter une nouvelle commande
-            if (!ActiveCommandsTracker.canAddCommand(userId, this.COMMAND_NAME)) {
-                await bot.sendMessage(msg.chat.id,
-                    "You already have 3 active commands. Please wait for them to complete.",
-                    { message_thread_id: messageThreadId }
-                );
-                return;
-            }
-
-            // Ajouter la commande au tracker
-            if (!ActiveCommandsTracker.addCommand(userId, this.COMMAND_NAME)) {
-                await bot.sendMessage(msg.chat.id,
-                    "Unable to add a new command at this time.",
-                    { message_thread_id: messageThreadId }
-                );
-                return;
-            }
 
             const [coinAddress, topHoldersCountStr] = args;
 
@@ -102,20 +82,9 @@ class TopHoldersHandler {
             }
 
         } catch (error) {
-            logger.error('Error in TopHoldersHandler:', error);
-            await bot.sendLongMessage(
-                msg.chat.id,
-                `An error occurred during analysis: ${error.message}`,
-                { message_thread_id: messageThreadId }
-            );
-        } finally {
-            this._finalizeCommand(userId);
+            logger.error('Error in topholders command:', error);
+            throw error;
         }
-    }
-
-    _finalizeCommand(userId) {
-        logger.debug('TopHolders command completed');
-        ActiveCommandsTracker.removeCommand(userId, this.COMMAND_NAME);
     }
 }
 

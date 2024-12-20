@@ -5,19 +5,10 @@ class ActiveCommandsTracker {
   constructor() {
     this.activeCommands = new Map();
     this.TIMEOUT = 10 * 60 * 1000;
-    this.limitedCommands = new Set([
-      ...Object.entries(commandConfigs)
-        .filter(([_, config]) => config.requiresAuth)
-        .map(([command, _]) => command)
-    ]);
   }
 
   canAddCommand(userId, command) {
     logger.debug(`Checking if command ${command} can be added for user ${userId}`);
-    if (!this.limitedCommands.has(command)) {
-      logger.debug(`Command ${command} is not limited, can be added`);
-      return true;
-    }
     const userCommands = this.activeCommands.get(userId) || new Map();
     const totalCommands = Array.from(userCommands.values()).reduce((sum, cmd) => sum + cmd.count, 0);
     logger.debug(`User ${userId} has ${totalCommands} active commands`);
@@ -26,10 +17,6 @@ class ActiveCommandsTracker {
 
   addCommand(userId, command) {
     logger.debug(`Attempting to add command ${command} for user ${userId}`);
-    if (!this.limitedCommands.has(command)) {
-      logger.debug(`Command ${command} is not limited, skipping`);
-      return true;
-    }
 
     if (!this.activeCommands.has(userId)) {
       this.activeCommands.set(userId, new Map());

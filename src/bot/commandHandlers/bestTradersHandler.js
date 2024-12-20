@@ -1,45 +1,32 @@
 const logger = require('../../utils/logger');
 const { analyzeBestTraders } = require('../../analysis/bestTraders');
 const { formatBestTraders } = require('../formatters/bestTradersFormatter');
-const ActiveCommandsTracker = require('../commandsManager/activeCommandsTracker');
 const { RequestCache, cachedCommand } = require('../../utils/requestCache');
+const { validateSolanaAddress } = require('./helpers');
 
 class BestTradersHandler {
-    constructor(userManager, accessControl) {
-        this.userManager = userManager;
-        this.accessControl = accessControl;
+    constructor() {
         this.cache = new RequestCache(5 * 60 * 1000);
-        this.COMMAND_NAME = 'bt';
+        this.COMMAND_NAME = 'besttraders';
     }
 
     async handleCommand(bot, msg, args, messageThreadId) {
-        const userId = msg.from.id;
-        logger.info(`Starting BestTrader command for user ${msg.from.username}`);
+        const username = msg.from.username;
+        logger.info(`Starting BestTrader command for user ${username}`);
 
         try {
-            // Vérifier si l'utilisateur peut exécuter une nouvelle commande
-            if (!ActiveCommandsTracker.canAddCommand(userId, this.COMMAND_NAME)) {
-                await bot.sendLongMessage(
-                    msg.chat.id,
-                    "You already have 3 active commands. Please wait for them to complete.",
-                    { message_thread_id: messageThreadId }
-                );
-                return;
-            }
-
-            // Ajouter la commande au tracker
-            if (!ActiveCommandsTracker.addCommand(userId, this.COMMAND_NAME)) {
-                await bot.sendLongMessage(
-                    msg.chat.id,
-                    "Unable to add a new command.",
-                    { message_thread_id: messageThreadId }
-                );
-                return;
-            }
-
-            // Parse les arguments
             const parsedArgs = this._parseArguments(args);
-            
+
+            // Validation de l'adresse solana
+            if (!validateSolanaAddress(parsedArgs.contractAddress)) {
+                await bot.sendLongMessage(
+                    msg.chat.id,
+                    "Invalid Solana address. Please provide a valid Solana address.",
+                    { message_thread_id: messageThreadId }
+                );
+                return;
+            }
+
             await this._sendInitialMessage(bot, msg.chat.id, parsedArgs, messageThreadId);
 
             const cacheParams = {
@@ -49,7 +36,6 @@ class BestTradersHandler {
                 sortOption: parsedArgs.sortOption
             };
 
-            // Fonction de récupération des données
             const fetchFunction = async () => {
                 return await analyzeBestTraders(
                     parsedArgs.contractAddress,
@@ -60,7 +46,6 @@ class BestTradersHandler {
                 );
             };
 
-            // Utilisation du cachedCommand
             const bestTraders = await cachedCommand(
                 this.cache,
                 '/bt',
@@ -91,14 +76,7 @@ class BestTradersHandler {
 
         } catch (error) {
             logger.error('Error in handleBestTradersCommand:', error);
-            await bot.sendLongMessage(
-                msg.chat.id,
-                `An error occurred while processing your request: ${error.message}`,
-                { message_thread_id: messageThreadId }
-            );
-        } finally {
-            // S'assurer que la commande est toujours supprimée à la fin
-            this._finalizeCommand(userId);
+            throw error;
         }
     }
 
@@ -141,11 +119,6 @@ class BestTradersHandler {
         ].join('\n');
 
         await bot.sendLongMessage(chatId, message, { message_thread_id: messageThreadId });
-    }
-
-    _finalizeCommand(userId) {
-        logger.debug('bestTraders command completed');
-        ActiveCommandsTracker.removeCommand(userId, this.COMMAND_NAME);
     }
 }
 

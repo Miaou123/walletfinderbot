@@ -5,7 +5,7 @@ const groupMessageLogger = require('./messageDataManager/groupMessageLogger');
 class MessageHandler {
     constructor(dependencies) {
         this.bot = dependencies.bot;
-        this.commandHandlers = dependencies.commandHandlers;
+        this.commandHandlers = dependencies.commandHandlers.getHandlers();
         this.commandHandler = dependencies.commandHandler;
         this.accessControl = dependencies.accessControl;
         this.rateLimiter = dependencies.rateLimiter;
@@ -13,32 +13,82 @@ class MessageHandler {
         this.config = dependencies.config;
         this.logger = dependencies.logger;
         this.ActiveCommandsTracker = dependencies.ActiveCommandsTracker;
-        
-        this.limitedCommands = ['scan', 'dexpaid', 'bundle', 'bt', 'th', 'cross', 'team', 'search', 'eb', 'fr', 'entrymap', 'dev'];
-        this.basicCommands = ['start', 'ping', 'tracker', 'cancel', 'help', 'access', 'join'];
+        this.MAX_MESSAGE_AGE = 600;
+        this.commandConfigs = dependencies.commandConfigs;
+        console.log('MessageHandler: commandHandlers:', this.commandHandlers);
+    }
+    
+    // Getter pour les commandes limitées (requiresAuth: true)
+    get limitedCommands() {
+        return Object.entries(this.commandConfigs)
+            .filter(([_, config]) => config.requiresAuth)
+            .map(([command, _]) => command);
+    }
+    
+    // Getter pour les commandes de base (requiresAuth: false)
+    get basicCommands() {
+        return Object.entries(this.commandConfigs)
+            .filter(([_, config]) => !config.requiresAuth)
+            .map(([command, _]) => command);
     }
 
     async handleMessage(msg) {
-        if (!msg.text) return;
-
-        const isGroup = msg.chat.type === 'group' || msg.chat.type === 'supergroup';
-        const messageThreadId = msg.message_thread_id;
-
-        // Vérification de l'ancienneté du message
-        const currentTimestamp = Math.floor(Date.now() / 1000); // Timestamp actuel en secondes
-        const messageAge = currentTimestamp - msg.date;
-
-        // Ignorer les messages de plus de 30 secondes
-        const MAX_MESSAGE_AGE = 600; // secondes
-        if (messageAge > MAX_MESSAGE_AGE) {
-            this.logger.info(`Ignored old message from user ${msg.from.username || msg.from.id}: ${msg.text}`);
+        if (!msg.text || !msg.from.username) {
+            if (!msg.from.username) {
+                await this.bot.sendMessage(msg.chat.id, 
+                    "Please set a username in your Telegram settings to use this bot."
+                );
+            }
             return;
         }
+    
+        const isGroup = msg.chat.type === 'group' || msg.chat.type === 'supergroup';
+        const messageThreadId = msg.message_thread_id;
+        const username = msg.from.username;
+        const chatId = msg.chat.id;
+    
+        // Vérification de l'ancienneté du message
+        const currentTimestamp = Math.floor(Date.now() / 1000);
+        const messageAge = currentTimestamp - msg.date;
+        
+        if (messageAge > this.MAX_MESSAGE_AGE) {
+            this.logger.info(`Ignored old message from user ${username || msg.from.id}: ${msg.text}`);
+            return;
+        }
+    
+        // Vérification initiale des permissions
+        if (msg.text.startsWith('/')) {
+            const { command } = parseCommand(msg.text);
+            
+            // Vérifie si la commande existe et si elle nécessite une authentification
+            const commandConfig = this.commandConfigs[command];
+            const requiresAuth = commandConfig?.requiresAuth ?? true; // Par défaut, on requiert l'auth si pas de config
+            const allowed = await this.accessControl.isAllowed(username, chatId);
 
+            if (requiresAuth && !allowed) {
+                if (!isGroup) {
+                    const spotsInfo = getAvailableSpots();
+                    await this.bot.sendMessage(chatId,
+                        `You don't have access to this bot. ${spotsInfo ? `There are currently ${spotsInfo.availableSpots}/${spotsInfo.maxUsers} spots available.` : ''} Please contact @Rengon0x for access.`
+                    );
+                }
+                return;
+            }
+        } else if (!this.accessControl.isAllowed(username, chatId)) {
+            // Pour les messages non-commandes, on vérifie toujours les permissions
+            if (!isGroup) {
+                const spotsInfo = getAvailableSpots();
+                await this.bot.sendMessage(chatId,
+                    `You don't have access to this bot. ${spotsInfo ? `There are currently ${spotsInfo.availableSpots}/${spotsInfo.maxUsers} spots available.` : ''} Please contact @Rengon0x for access.`
+                );
+            }
+            return;
+        }
+    
         if (isGroup && msg.text) {
             groupMessageLogger.logGroupMessage(msg);
         }
-
+    
         if (msg.text.startsWith('/')) {
             await this.handleCommand(msg, isGroup, messageThreadId);
         } else {
@@ -75,9 +125,11 @@ class MessageHandler {
             }
             
             // Validation avec les arguments
-            const validationErrors = validateArgs(command, args, true);  // true pour indiquer que c'est une commande admin
+            const validationErrors = validateArgs(command, args, true);
             if (validationErrors.length > 0) {
-                await this.bot.sendLongMessage(msg.chat.id, validationErrors.join('\n\n'), { message_thread_id: messageThreadId });
+                if (!isGroup) {
+                    await this.bot.sendLongMessage(msg.chat.id, validationErrors.join('\n\n'), { message_thread_id: messageThreadId });
+                }
                 return;
             }
             
@@ -85,171 +137,122 @@ class MessageHandler {
             return;
         }
 
-        // Gestion des commandes de base
-        if (this.basicCommands.includes(command)) {
-            await this.handleBasicCommand(command, msg, args, messageThreadId, userId, isGroup);
-            return;
-        }
+        // Ici on gère toutes les autres commandes (basic ou requiresAuth)
+        const username = msg.from.username;
+        const chatId = msg.chat.id;
 
-        // Gestion des commandes standard avec validation
-        const validationErrors = validateArgs(command, args, false);
-        if (validationErrors.length > 0) {
-            if (!isGroup) {
-                await this.bot.sendLongMessage(msg.chat.id, validationErrors.join('\n\n'), { message_thread_id: messageThreadId });
-            }
-            return;
-        }
-
-        await this.handleStandardCommand(command, msg, args, messageThreadId, userId, isGroup);
-    }
-
-    async handleAdminCommand(command, msg, args) {
         try {
-            switch (command) {
-                case 'adduser':
-                    await this.commandHandlers.adminHandler.handleAddUser(this.bot, msg, args);
-                    break;
-                case 'removeuser':
-                    await this.commandHandlers.adminHandler.handleRemoveUser(this.bot, msg, args);
-                    break;
-                case 'addgroup':
-                    await this.commandHandlers.adminHandler.handleAddGroup(this.bot, msg, args);
-                    break;
-                case 'removegroup':
-                    await this.commandHandlers.adminHandler.handleRemoveGroup(this.bot, msg, args);
-                    break;
-                case 'listgroups':
-                    await this.commandHandlers.adminHandler.handleListGroups(this.bot, msg);
-                    break;
-                case 'usagestats':
-                    await this.commandHandlers.adminHandler.handleUsageStats(this.bot, msg, this.usageTracker);
-                    break;
-                case 'broadcast':
-                    await this.commandHandlers.broadcastHandler.handleBroadcastCommand(this.bot, msg);
-                    break;
-            }
-        } catch (error) {
-            this.logger.error(`Error in admin command ${command}:`, error);
-            await this.bot.sendMessage(msg.chat.id, "An error occurred while processing the admin command.");
-        }
-    }
-
-    async handleBasicCommand(command, msg, args, messageThreadId, userId, isGroup) {
-        try {
-            if (command === 'help') {
-                await this.handleHelp(msg, args, messageThreadId);
-            } else if (typeof this.commandHandler[command] === 'function') {
-                this.logger.info(`Executing non-limited command: ${command} for user: ${msg.from.username} (ID: ${userId})`);
-                await this.commandHandler[command](this.bot, msg, args, messageThreadId);
-            } else {
-                this.logger.error(`Command handler not found for command: ${command}`);
+            // 1. Vérification des permissions de base
+            if (this.commandConfigs[command]?.requiresAuth && !await this.accessControl.isAllowed(username, chatId)) {
                 if (!isGroup) {
-                    await this.bot.sendLongMessage(msg.chat.id, "Command not found. Please use /help to see available commands.", { message_thread_id: messageThreadId });
+                    await this.bot.sendMessage(chatId,
+                        "You don't have access to this command.",
+                        { message_thread_id: messageThreadId }
+                    );
                 }
-            }
-        } catch (error) {
-            this.logger.error(`Error handling command ${command}:`, error);
-            if (!isGroup) {
-                await this.bot.sendLongMessage(msg.chat.id, "An unexpected error occurred. Please try again later.", { message_thread_id: messageThreadId });
-            }
-        }
-    }
+                return;
+            }            
 
-    async handleStandardCommand(command, msg, args, messageThreadId, userId, isGroup) {
-        const validationErrors = validateArgs(command, args);
-        if (validationErrors.length > 0) {
-            if (!isGroup) {
-                await this.bot.sendLongMessage(msg.chat.id, validationErrors.join('\n\n'), { message_thread_id: messageThreadId });
-            }
-            return;
-        }
-
-        if (this.config.requiresAuth && !(await this.authMiddleware(msg, command))) {
-            return;
-        }
-
-        if (this.limitedCommands.includes(command)) {
-            if (!await this.handleLimitedCommand(command, msg, args, messageThreadId, userId, isGroup)) {
+            // 2. Vérification VIP si nécessaire
+            if (this.commandConfigs[command]?.requiresVIP && !this.accessControl.isVIP(username, chatId)) {
+                if (!isGroup) {
+                    await this.bot.sendMessage(chatId,
+                        "This command requires VIP access. Please contact an administrator for upgrade.",
+                        { message_thread_id: messageThreadId }
+                    );
+                }
                 return;
             }
-        }
 
-        try {
-            const handlerName = command.toLowerCase();
-            if (this.commandHandlers[handlerName] && typeof this.commandHandlers[handlerName].handleCommand === 'function') {
-                this.logger.info(`Executing new command handler: ${command} for user: ${msg.from.username} (ID: ${userId}) with args: [${args}]`);
-                await this.commandHandlers[handlerName].handleCommand(this.bot, msg, args, messageThreadId);
-            } else if (typeof this.commandHandler[command] === 'function') {
-                this.logger.info(`Executing command: ${command} for user: ${msg.from.username} (ID: ${userId}) with args: [${args}]`);
-                await this.commandHandler[command](this.bot, msg, args, messageThreadId);
-            } else {
-                this.logger.error(`Command handler not found for command: ${command}`);
+            // 3. Vérification des limites d'utilisation quotidiennes
+            if (!this.accessControl.isVIP(username, chatId) && !this.rateLimiter.isAllowed(username, command)) {
                 if (!isGroup) {
-                    await this.bot.sendLongMessage(msg.chat.id, "Command not found. Please use /help to see available commands.", { message_thread_id: messageThreadId });
+                    await this.bot.sendMessage(chatId,
+                        "You've reached the usage limit for this command. Please try again later.",
+                        { message_thread_id: messageThreadId }
+                    );
                 }
+                return;
             }
-        } catch (error) {
-            this.logger.error(`Error in command handler for command ${command}:`, error);
-            if (!isGroup) {
-                await this.bot.sendLongMessage(msg.chat.id, "An unexpected error occurred while processing the command. Please try again later.", { message_thread_id: messageThreadId });
+
+            // 4. Validation des arguments
+            const validationErrors = validateArgs(command, args);
+            if (validationErrors.length > 0) {
+                if (!isGroup) {
+                    await this.bot.sendLongMessage(chatId, validationErrors.join('\n\n'), 
+                        { message_thread_id: messageThreadId }
+                    );
+                }
+                return;
             }
-        } finally {
-            if (this.limitedCommands.includes(command)) {
+
+            // 5. Gestion anti-spam pour toutes les commandes
+            if (!this.ActiveCommandsTracker.canAddCommand(userId, command)) {
+                if (!isGroup) {
+                    await this.bot.sendMessage(chatId,
+                        "You already have 3 active commands. Please wait for them to complete.",
+                        { message_thread_id: messageThreadId }
+                    );
+                }
+                return;
+            }
+
+            if (!this.ActiveCommandsTracker.addCommand(userId, command)) {
+                if (!isGroup) {
+                    await this.bot.sendMessage(chatId,
+                        "Unable to add a new command at this time.",
+                        { message_thread_id: messageThreadId }
+                    );
+                }
+                return;
+            }
+
+            // 6. Exécution de la commande
+            try {
+                const handlerName = command.toLowerCase();
+                if (typeof this.commandHandlers[handlerName] === 'function') {
+                    this.logger.info(`Executing command handler: ${command} for user: ${username} (ID: ${userId})`);
+                    await this.commandHandlers[handlerName](this.bot, msg, args, messageThreadId);
+                } else if (typeof this.commandHandler[command] === 'function') {
+                    this.logger.info(`Executing legacy command: ${command} for user: ${username} (ID: ${userId})`);
+                    await this.commandHandler[command](this.bot, msg, args, messageThreadId);
+                } else {
+                    throw new Error(`No handler found for command: ${command}`);
+                }                
+            } finally {
+                // 7. Nettoyage et tracking
                 this.ActiveCommandsTracker.removeCommand(userId, command);
-                this.logger.debug(`Removed command ${command} for user ${userId}. New active count: ${this.ActiveCommandsTracker.getActiveCommandCount(userId)}`);
+                this.usageTracker.trackUsage(username, command);
             }
-        }
-    }
 
-    async handleLimitedCommand(command, msg, args, messageThreadId, userId, isGroup) {
-        if (!this.ActiveCommandsTracker.canAddCommand(userId, command)) {
-            this.logger.warn(`User ${userId} attempted to start command ${command} but has reached the limit.`);
+        } catch (error) {
+            // 8. Gestion des erreurs
+            this.logger.error(`Error in command ${command}:`, error);
             if (!isGroup) {
-                await this.bot.sendLongMessage(msg.chat.id, "You have reached the maximum number of concurrent commands. Please wait for one of your commands to finish before starting a new one.", { message_thread_id: messageThreadId });
+                await this.bot.sendLongMessage(chatId,
+                    "An error occurred while processing your command. Please try again later.",
+                    { message_thread_id: messageThreadId }
+                );
             }
-            return false;
+            this.ActiveCommandsTracker.removeCommand(userId, command);
         }
-
-        if (!this.ActiveCommandsTracker.addCommand(userId, command)) {
-            this.logger.warn(`Failed to add command ${command} for user ${userId}. Maximum limit reached.`);
-            if (!isGroup) {
-                await this.bot.sendLongMessage(msg.chat.id, "You have reached the maximum number of instances for this command. Please wait for one to finish before starting a new one.", { message_thread_id: messageThreadId });
-            }
-            return false;
-        }
-
-        this.logger.debug(`Added command ${command} for user ${userId}. New active count: ${this.ActiveCommandsTracker.getActiveCommandCount(userId)}`);
-        return true;
     }
 
-    async authMiddleware(msg, command) {
-        const spotsInfo = getAvailableSpots();
-      
-        if (spotsInfo === null) {
-            await this.bot.sendLongMessage(msg.chat.id, "An error occurred while processing your request. Please try again later.");
-            return false;
+    async handleAdminCommand(command, msg, args, messageThreadId) {
+        const handler = this.commandHandlers[command];
+        if (typeof handler === 'function') {
+            try {
+                await handler(this.bot, msg, args, messageThreadId);
+            } catch (error) {
+                this.logger.error(`Error executing admin command ${command}:`, error);
+                await this.bot.sendMessage(msg.chat.id, "An error occurred while processing the admin command.", { message_thread_id: messageThreadId });
+            }
+        } else {
+            await this.bot.sendMessage(msg.chat.id, "No handler implemented for this admin command.", { message_thread_id: messageThreadId });
         }
-      
-        const { availableSpots, maxUsers } = spotsInfo;
-        const username = msg.from.username;
-        
-        // Check for group permissions if it's a group chat
-        const isGroup = msg.chat.type === 'group' || msg.chat.type === 'supergroup';
-        const chatId = isGroup ? msg.chat.id : null;
-        
-        if (!this.accessControl.isAllowed(username, chatId)) {
-            await this.bot.sendLongMessage(msg.chat.id, `Sorry, you do not have access to this command. Noesis is currently in beta; if you want to participate, please contact @Rengon0x via Telegram or Twitter. There are currently ${availableSpots}/${maxUsers} spots available for this beta version.`);
-            return false;
-        }
-        
-        if (!this.accessControl.isVIP(username, chatId) && !this.rateLimiter.isAllowed(username, command)) {
-            await this.bot.sendLongMessage(msg.chat.id, "Sorry, you've reached the usage limit for this command.");
-            return false;
-        }
-        
-        this.usageTracker.trackUsage(username, command);
-        return true;
     }
+    
+    
 
     async handleNonCommand(msg, messageThreadId) {
         try {
@@ -257,62 +260,6 @@ class MessageHandler {
         } catch (error) {
             this.logger.error(`Error handling non-command message:`, error);
         }
-    }
-
-    async handleHelp(msg, args, messageThreadId) {
-        if (args.length === 0) {
-            await this.sendGeneralHelp(msg, messageThreadId);
-        } else {
-            await this.sendSpecificHelp(msg, args[0], messageThreadId);
-        }
-    }
-
-    async sendGeneralHelp(msg, messageThreadId) {
-        const generalHelpMessage = `
-Available commands:
-
-If you are not whitelisted yet please use /access.
-
-If you are already whitelisted:
-You can use "/help [command]", "[command] help" or /[command] for a full detail on how the command work.
-For example "/help /eb", "/eb help" or "/eb" with no other arguments will give you a full explanation on how the early buyers command works.
-
-/start - Start the bot
-/help - Show help
-/access - Show beta access information
-/ping - Check if bot is online
-/scan (/s) - Scan a token for a top holders analysis
-/bundle (/bd) - Analyze bundle
-/freshratio (/fr) - Analyze the proportion of fresh wallets buying a token over a specific time frame. 
-/earlybuyers (/eb) - Analyze early buyers on a given timeframe
-/besttraders (/bt) - Analyze the 100 best traders
-/topholders (/th) - Analyze top holders
-/cross (/c) - Find common holders between multiple tokens
-/crossbt (/cbt) - Find common holders between the top traders of multiple tokens (realized and unrealized PnL)
-/team (/t) - Analyze team supply with an homemade algorithm (works for fresh launches and CTOs)
-/search (/sh) - Search for specific wallets with only a part of their address
-/dp - Show if dexscreener is paid for a token, also shows adds/boosts.
-/em - Show the entryMap for the top holders of a token.
-/tracker - Show tracked supplies
-/cancel - Cancel the current active command
-
-For more information on how to use each command and how they work, please consult our <a href="https://smp-team.gitbook.io/noesis-bot">documentation</a>.
-
-If you have any questions, want to report a bug, or have any suggestions on new features, feel free to DM @Rengon0x on Telegram or Twitter!
-
-⚠️This bot is still in development phase and will probably be subject to many bugs/issues⚠️
-`;
-        await this.bot.sendLongMessage(msg.chat.id, generalHelpMessage, {
-            parse_mode: 'HTML',
-            disable_web_page_preview: true,
-            message_thread_id: messageThreadId
-        });
-    }
-
-    async sendSpecificHelp(msg, command, messageThreadId) {
-        const { getCommandHelp } = require('./commandsManager/commandParser');
-        const specificHelpMessage = getCommandHelp(command);
-        await this.bot.sendLongMessage(msg.chat.id, specificHelpMessage, { message_thread_id: messageThreadId }, true);
     }
 }
 

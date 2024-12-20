@@ -1,42 +1,30 @@
 const UnifiedBundleAnalyzer = require('../../analysis/bundle');
 const { formatMainMessage, formatNonPumpfunBundleResponse } = require('../formatters/bundleFormatter');
 const logger = require('../../utils/logger');
-const { validateArgs } = require('../commandsManager/commandParser');
-const ActiveCommandsTracker = require('../commandsManager/activeCommandsTracker');
+const { validateSolanaAddress } = require('./helpers');
 
 class BundleHandler {
-    constructor(userManager, accessControl) {
-        this.userManager = userManager;
-        this.accessControl = accessControl;
+    constructor() {
         this.bundleAnalyzer = new UnifiedBundleAnalyzer();
         this.COMMAND_NAME = 'bundle';
     }
 
-    async handleCommand(bot, msg, args) {
-        const userId = msg.from.id;
-        logger.info(`Starting Bundle command for user ${msg.from.username}`);
+    async handleCommand(bot, msg, args, messageThreadId) {
+        const username = msg.from.username;
+        logger.info(`Starting Bundle command for user ${username}`);
 
         try {
-            // Vérifier si l'utilisateur peut exécuter une nouvelle commande
-            if (!ActiveCommandsTracker.canAddCommand(userId, this.COMMAND_NAME)) {
-                await bot.sendMessage(
-                    msg.chat.id,
-                    "You already have 3 active commands. Please wait for them to complete."
-                );
-                return;
-            }
-
-            // Ajouter la commande au tracker
-            if (!ActiveCommandsTracker.addCommand(userId, this.COMMAND_NAME)) {
-                await bot.sendMessage(
-                    msg.chat.id,
-                    "Unable to add a new command at this time."
-                );
-                return;
-            }
-
             const address = args[0];
             const isTeamAnalysis = args.length > 1 && args[1].toLowerCase() === 'team';
+
+            if (!validateSolanaAddress(address)) {
+                await bot.sendLongMessage(
+                    msg.chat.id,
+                    "Invalid Solana address. Please provide a valid Solana address.",
+                    { message_thread_id: messageThreadId }
+                );
+                return;
+            }
 
             logger.info(`Processing bundle analysis for address ${address}${isTeamAnalysis ? ' (team analysis)' : ''}`);
             
@@ -54,24 +42,15 @@ class BundleHandler {
                 formattedMessage,
                 {
                     parse_mode: 'HTML',
-                    disable_web_page_preview: true
+                    disable_web_page_preview: true,
+                    message_thread_id: messageThreadId
                 }
             );
 
         } catch (error) {
             logger.error('Error in bundle command:', error);
-            await bot.sendLongMessage(
-                msg.chat.id,
-                'An error occurred while analyzing the bundle. Please try again later.'
-            );
-        } finally {
-            this._finalizeCommand(userId);
+            throw error; // Laisser le MessageHandler gérer l'erreur
         }
-    }
-
-    _finalizeCommand(userId) {
-        logger.debug('Bundle command completed');
-        ActiveCommandsTracker.removeCommand(userId, this.COMMAND_NAME);
     }
 }
 

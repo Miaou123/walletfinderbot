@@ -2,12 +2,9 @@ const { validateSolanaAddress, recognizeArgType } = require('./helpers.js');
 const EntryPriceAnalyzer = require('../../analysis/entryPriceAnalyzer');
 const { formatEntryMapResponse } = require('../formatters/entryMapFormatter');
 const logger = require('../../utils/logger');
-const ActiveCommandsTracker = require('../commandsManager/activeCommandsTracker');
 
 class EntryMapHandler {
-    constructor(userManager, accessControl) {
-        this.userManager = userManager;
-        this.accessControl = accessControl;
+    constructor() {
         this.analyzer = new EntryPriceAnalyzer();
         this.COMMAND_NAME = 'entrymap';
     }
@@ -17,24 +14,6 @@ class EntryMapHandler {
         logger.info(`Starting EntryMap command for user ${msg.from.username}`);
 
         try {
-            // Vérifier si l'utilisateur peut exécuter une nouvelle commande
-            if (!ActiveCommandsTracker.canAddCommand(userId, this.COMMAND_NAME)) {
-                await bot.sendMessage(msg.chat.id,
-                    "You already have 3 active commands. Please wait for them to complete.",
-                    { message_thread_id: messageThreadId }
-                );
-                return;
-            }
-
-            // Ajouter la commande au tracker
-            if (!ActiveCommandsTracker.addCommand(userId, this.COMMAND_NAME)) {
-                await bot.sendMessage(msg.chat.id,
-                    "Unable to add a new command at this time.",
-                    { message_thread_id: messageThreadId }
-                );
-                return;
-            }
-
             if (!args || args.length < 1) {
                 await bot.sendMessage(msg.chat.id,
                     "Please provide a token address.",
@@ -82,15 +61,9 @@ class EntryMapHandler {
                 parse_mode: 'HTML',
                 disable_web_page_preview: true
             });
-
         } catch (error) {
-            logger.error('Error in entrymap command:', error);
-            await bot.sendMessage(msg.chat.id,
-                "An error occurred while analyzing entry prices.",
-                { message_thread_id: messageThreadId }
-            );
-        } finally {
-            this._finalizeCommand(userId);
+            logger.error('Error in Entry map command:', error);
+            throw error;
         }
     }
 

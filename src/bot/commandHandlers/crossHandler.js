@@ -3,12 +3,9 @@ const { validateAndFormatAddress, recognizeArgType } = require('./helpers');
 const { getSolanaApi } = require('../../integrations/solanaApi');
 const crossAnalyzer = require('../../analysis/crossAnalyzer');
 const { sendFormattedCrossAnalysisMessage } = require('../formatters/crossAnalysisFormatter');
-const ActiveCommandsTracker = require('../commandsManager/activeCommandsTracker');
 
 class CrossHandler {
-    constructor(userManager, accessControl) {
-        this.userManager = userManager;
-        this.accessControl = accessControl;
+    constructor() {
         this.DEFAULT_MIN_VALUE = 1000;
         this.analyzer = new crossAnalyzer();
         this.solanaApi = getSolanaApi();
@@ -20,22 +17,6 @@ class CrossHandler {
         logger.info(`Starting Cross command for user ${msg.from.username}`);
 
         try {
-            if (!ActiveCommandsTracker.canAddCommand(userId, this.COMMAND_NAME)) {
-                await bot.sendMessage(msg.chat.id, 
-                    "You already have 3 active commands. Please wait for them to complete.",
-                    { message_thread_id: messageThreadId }
-                );
-                return;
-            }
-
-            if (!ActiveCommandsTracker.addCommand(userId, this.COMMAND_NAME)) {
-                await bot.sendMessage(msg.chat.id,
-                    "Unable to add a new command at this time.",
-                    { message_thread_id: messageThreadId }
-                );
-                return;
-            }
-
             if (args.length < 2) {
                 await bot.sendMessage(msg.chat.id, 
                     "Please provide at least two valid addresses and optionally a minimum combined value.", 
@@ -83,21 +64,10 @@ class CrossHandler {
             }
 
             await sendFormattedCrossAnalysisMessage(bot, msg.chat.id, relevantHolders, contractAddresses, tokenDetails);
-
         } catch (error) {
             logger.error('Error in cross command:', error);
-            await bot.sendMessage(msg.chat.id, 
-                `An error occurred during analysis: ${error.message}`, 
-                { message_thread_id: messageThreadId }
-            );
-        } finally {
-            this._finalizeCommand(userId);
+            throw error;
         }
-    }
-
-    _finalizeCommand(userId) {
-        logger.debug('Cross command completed');
-        ActiveCommandsTracker.removeCommand(userId, this.COMMAND_NAME);
     }
 
     parseArgs(args) {

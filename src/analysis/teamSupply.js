@@ -44,20 +44,20 @@ async function analyzeTeamSupply(tokenAddress, mainContext = 'default') {
                 const percentage = rawBalance.dividedBy(totalSupply);
                 const percentageNumber = percentage.multipliedBy(100).toNumber();
             
-                logger.debug('Detailed holder analysis:', {
-                    address: holder.address,
-                    rawBalance: rawBalance.toString(),
-                    decimals: tokenInfo.decimals,
-                    totalSupply: totalSupply.toString(),
-                    percentage: percentageNumber,
-                    calculation: {
-                        step1_rawBalance: rawBalance.toString(),
-                        step2_powerOfDecimals: new BigNumber(10).pow(tokenInfo.decimals).toString(),
-                        step4_totalSupply: totalSupply.toString(),
-                    },
-                    threshold: SUPPLY_THRESHOLD.multipliedBy(100).toNumber(),
-                    isSignificant: percentage.isGreaterThanOrEqualTo(SUPPLY_THRESHOLD)
-                });
+                // logger.debug('Detailed holder analysis:', {
+                //     address: holder.address,
+                //     rawBalance: rawBalance.toString(),
+                //     decimals: tokenInfo.decimals,
+                //     totalSupply: totalSupply.toString(),
+                //     percentage: percentageNumber,
+                //     calculation: {
+                //         step1_rawBalance: rawBalance.toString(),
+                //         step2_powerOfDecimals: new BigNumber(10).pow(tokenInfo.decimals).toString(),
+                //         step4_totalSupply: totalSupply.toString(),
+                //     },
+                //     threshold: SUPPLY_THRESHOLD.multipliedBy(100).toNumber(),
+                //     isSignificant: percentage.isGreaterThanOrEqualTo(SUPPLY_THRESHOLD)
+                // });
             
                 return percentage.isGreaterThanOrEqualTo(SUPPLY_THRESHOLD);
             });

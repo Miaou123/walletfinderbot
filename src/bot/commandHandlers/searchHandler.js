@@ -1,11 +1,8 @@
 const logger = require('../../utils/logger');
 const { searchWallets } = require('../../analysis/walletSearcher');
-const ActiveCommandsTracker = require('../commandsManager/activeCommandsTracker');
 
 class SearchHandler {
-    constructor(userManager, accessControl) {
-        this.userManager = userManager;
-        this.accessControl = accessControl;
+    constructor() {
         this.COMMAND_NAME = 'search';
     }
 
@@ -14,23 +11,6 @@ class SearchHandler {
         logger.info(`Starting Search command for user ${msg.from.username}`);
 
         try {
-            // Vérifier si l'utilisateur peut exécuter une nouvelle commande
-            if (!ActiveCommandsTracker.canAddCommand(userId, this.COMMAND_NAME)) {
-                await bot.sendMessage(msg.chat.id,
-                    "You already have 3 active commands. Please wait for them to complete.",
-                    { message_thread_id: messageThreadId }
-                );
-                return;
-            }
-
-            // Ajouter la commande au tracker
-            if (!ActiveCommandsTracker.addCommand(userId, this.COMMAND_NAME)) {
-                await bot.sendMessage(msg.chat.id,
-                    "Unable to add a new command at this time.",
-                    { message_thread_id: messageThreadId }
-                );
-                return;
-            }
 
             const { tokenAddress, searchCriteria } = this._parseArgs(args);
 
@@ -57,14 +37,8 @@ class SearchHandler {
             await this._sendResults(bot, msg.chat.id, results, messageThreadId);
 
         } catch (error) {
-            logger.error('Error in handleSearchCommand:', error);
-            await bot.sendLongMessage(
-                msg.chat.id,
-                `An error occurred during the search: ${error.message}`,
-                { message_thread_id: messageThreadId }
-            );
-        } finally {
-            this._finalizeCommand(userId);
+            logger.error('Error in search command:', error);
+            throw error;
         }
     }
 
@@ -107,11 +81,6 @@ class SearchHandler {
                 message_thread_id: messageThreadId
             }
         );
-    }
-
-    _finalizeCommand(userId) {
-        logger.debug('Search command completed');
-        ActiveCommandsTracker.removeCommand(userId, this.COMMAND_NAME);
     }
 }
 
