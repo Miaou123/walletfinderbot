@@ -1,5 +1,6 @@
 const { formatDevAnalysis } = require('../formatters/devFormatter');
 const devAnalyzer = require('../../analysis/devAnalyzer');
+const { validateSolanaAddress } = require('./helpers');
 
 class DevCommandHandler {
     constructor(userManager, accessControl) {
@@ -13,19 +14,6 @@ class DevCommandHandler {
         logger.info(`Starting Dev command for user ${msg.from.username}`);
 
         try {
-            if (!ActiveCommandsTracker.canAddCommand(userId, this.COMMAND_NAME)) {
-                await bot.sendMessage(msg.chat.id,
-                    "You already have 3 active commands. Please wait for them to complete."
-                );
-                return;
-            }
-
-            if (!ActiveCommandsTracker.addCommand(userId, this.COMMAND_NAME)) {
-                await bot.sendMessage(msg.chat.id,
-                    "Unable to add a new command at this time."
-                );
-                return;
-            }
 
             if (!args || args.length === 0) {
                 await bot.sendMessage(msg.chat.id, 'Please provide a token address to analyze.');
@@ -33,6 +21,15 @@ class DevCommandHandler {
             }
 
             const address = args[0];
+
+            if (!validateSolanaAddress(address)) {
+                await bot.sendMessage(
+                    msg.chat.id,
+                    "Invalid Solana address. Please provide a valid Solana address."
+                );
+                return;
+            }
+
             const loadingMsg = await bot.sendMessage(msg.chat.id, '🔍 Analyzing developer profile...');
             const analysis = await devAnalyzer.analyzeDevProfile(address);
             
@@ -56,21 +53,10 @@ class DevCommandHandler {
                     disable_web_page_preview: true
                 });
             }
-
         } catch (error) {
             logger.error('Error in dev command:', error);
-            await bot.sendMessage(
-                msg.chat.id,
-                'An error occurred while analyzing the developer profile. Please try again later.'
-            );
-        } finally {
-            this._finalizeCommand(userId);
+            throw error;
         }
-    }
-
-    _finalizeCommand(userId) {
-        logger.debug('Dev command completed');
-        ActiveCommandsTracker.removeCommand(userId, this.COMMAND_NAME);
     }
 }
 

@@ -2,13 +2,10 @@ const logger = require('../../utils/logger');
 const { getSolanaApi } = require('../../integrations/solanaApi');
 const { recognizeArgType, validateAndParseTimeFrame, validateAndParseMinAmountOrPercentage } = require('./helpers.js');
 const { formatEarlyBuyersMessage } = require('../formatters/earlyBuyersFormatter');
-const ActiveCommandsTracker = require('../commandsManager/activeCommandsTracker');
 const EarlyBuyersAnalyzer = require('../../analysis/earlyBuyersAnalyzer');
 
 class EarlyBuyersHandler {
-    constructor(userManager, accessControl) {
-        this.userManager = userManager;
-        this.accessControl = accessControl;
+    constructor() {
         this.analyzer = new EarlyBuyersAnalyzer();
         this.solanaApi = getSolanaApi();
         this.COMMAND_NAME = 'earlybuyers';
@@ -19,23 +16,6 @@ class EarlyBuyersHandler {
         logger.info(`Starting EarlyBuyers command for user ${msg.from.username}`);
 
         try {
-            // Vérifier si l'utilisateur peut exécuter une nouvelle commande
-            if (!ActiveCommandsTracker.canAddCommand(userId, this.COMMAND_NAME)) {
-                await bot.sendMessage(msg.chat.id,
-                    "You already have 3 active commands. Please wait for them to complete.",
-                    { message_thread_id: messageThreadId }
-                );
-                return;
-            }
-
-            // Ajouter la commande au tracker
-            if (!ActiveCommandsTracker.addCommand(userId, this.COMMAND_NAME)) {
-                await bot.sendMessage(msg.chat.id,
-                    "Unable to add a new command at this time.",
-                    { message_thread_id: messageThreadId }
-                );
-                return;
-            }
 
             let coinAddress, timeFrame, percentage, pumpFlag;
 
@@ -108,15 +88,9 @@ class EarlyBuyersHandler {
             await bot.sendLongMessage(msg.chat.id, formattedMessage, 
                 { parse_mode: 'HTML', disable_web_page_preview: true, message_thread_id: messageThreadId }
             );
-
         } catch (error) {
-            logger.error('Error in EarlyBuyersHandler:', error);
-            await bot.sendLongMessage(msg.chat.id, 
-                `An error occurred: ${error.message}`,
-                { message_thread_id: messageThreadId }
-            );
-        } finally {
-            this._finalizeCommand(userId);
+            logger.error('Error in earlybuyers command:', error);
+            throw error;
         }
     }
 

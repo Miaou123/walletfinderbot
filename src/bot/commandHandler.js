@@ -121,10 +121,23 @@ const handleScanCommand = async (bot, msg, args, messageThreadId) => {
 
   try {
     const [tokenAddress, numberOfHoldersStr] = args;
+
+    // Vérification de l'adresse du token
+    if (!tokenAddress) {
+      await bot.sendMessage(chatId,
+        "Please provide a token address.",
+        { message_thread_id: messageThreadId }
+      );
+      return;
+    }
+
     const numberOfHolders = numberOfHoldersStr ? parseInt(numberOfHoldersStr) : 10;
 
     if (isNaN(numberOfHolders) || numberOfHolders < 1 || numberOfHolders > 100) {
-      await bot.sendLongMessage(chatId, "Invalid number of holders. Please provide a number between 1 and 100.", { message_thread_id: messageThreadId });
+      await bot.sendLongMessage(chatId, 
+        "Invalid number of holders. Please provide a number between 1 and 100.", 
+        { message_thread_id: messageThreadId }
+      );
       return;
     }
 
@@ -211,10 +224,10 @@ const handleScanCommand = async (bot, msg, args, messageThreadId) => {
     }
   } catch (error) {
     logger.error('Error in handleScanCommand:', error);
-    await bot.sendLongMessage(chatId, `An error occurred during the token scan: ${error.message}`, { message_thread_id: messageThreadId });
-  } finally {
-    ApiCallCounter.logApiCalls('scan');
-    ActiveCommandsTracker.removeCommand(userId, 'scan');
+    await bot.sendLongMessage(chatId, 
+      `An error occurred during the token scan: ${error.message}`, 
+      { message_thread_id: messageThreadId }
+    );
   }
 };
 
@@ -224,7 +237,16 @@ const handleTeamSupplyCommand = async (bot, msg, args, messageThreadId) => {
   const username = msg.from.username;
 
   try {
+
     const [tokenAddress] = args;
+
+    if (!tokenAddress) {
+      await bot.sendMessage(chatId,
+        "Please provide a token address.",
+        { message_thread_id: messageThreadId }
+      );
+      return;
+    }
 
     // Fonction de fetch si pas en cache
     const fetchTeamSupply = async () => {
@@ -233,12 +255,11 @@ const handleTeamSupplyCommand = async (bot, msg, args, messageThreadId) => {
 
     const { scanData, trackingInfo } = await cachedCommand(
       teamSupplyCache,
-      '/teamSupply', // nom de la commande
-      { tokenAddress }, // paramètres uniques
+      '/teamSupply',
+      { tokenAddress },
       fetchTeamSupply
     );
 
-    // Log les données reçues
     logger.debug('Team supply analysis data received:', {
       scanData: {
         hasTokenInfo: !!scanData.tokenInfo,
@@ -254,7 +275,6 @@ const handleTeamSupplyCommand = async (bot, msg, args, messageThreadId) => {
       }
     });
 
-    // Formater le résultat
     const formattedResult = formatTeamSupplyResult(
       scanData.analyzedWallets,
       scanData.tokenInfo,
@@ -262,7 +282,6 @@ const handleTeamSupplyCommand = async (bot, msg, args, messageThreadId) => {
       scanData.totalSupplyControlled
     );
 
-    // Préparer les données de tracking
     const trackingData = {
       tokenAddress: tokenAddress,
       tokenInfo: {
@@ -273,14 +292,13 @@ const handleTeamSupplyCommand = async (bot, msg, args, messageThreadId) => {
       totalSupplyControlled: scanData.totalSupplyControlled,
       initialSupplyPercentage: scanData.totalSupplyControlled,
       teamWallets: scanData.teamWallets,
-      topHoldersWallets: [], // Pour la cohérence avec scanCommand
+      topHoldersWallets: [],
       allWalletsDetails: scanData.analyzedWallets,
       analysisType: 'teamSupplyAnalyzer',
       trackType: 'team',
       username
     };
 
-    // Log les données de tracking
     logger.debug('Team supply tracking data prepared:', {
       tokenAddress,
       symbol: trackingData.tokenInfo.symbol,
@@ -289,10 +307,8 @@ const handleTeamSupplyCommand = async (bot, msg, args, messageThreadId) => {
       totalSupplyControlled: trackingData.totalSupplyControlled
     });
 
-    // Sauvegarder les données pour le tracking
     lastAnalysisResults[chatId] = trackingData;
 
-    // Log les données sauvegardées
     logger.debug('Team supply data saved in lastAnalysisResults:', {
       chatId,
       hasTrackingData: !!lastAnalysisResults[chatId],
@@ -325,8 +341,6 @@ const handleTeamSupplyCommand = async (bot, msg, args, messageThreadId) => {
     );
   } finally {
     logger.debug('handleTeamSupplyCommand completed');
-    ApiCallCounter.logApiCalls('teamSupply');
-    ActiveCommandsTracker.removeCommand(userId, 'team');
   }
 };
 

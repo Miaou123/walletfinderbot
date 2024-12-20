@@ -1,7 +1,5 @@
 const logger = require('../../utils/logger');
 const { validateAndParseTimeFrame, validateAndParseMinAmountOrPercentage, recognizeArgType } = require('./helpers.js');
-const ApiCallCounter = require('../../utils/ApiCallCounter');
-const ActiveCommandsTracker = require('../commandsManager/activeCommandsTracker');
 const { getSolanaApi } = require('../../integrations/solanaApi');
 const { analyzeFreshRatio } = require('../../analysis/freshRatio');
 const { formatFreshRatioMessage } = require('../formatters/freshRatioFormatter');
@@ -10,9 +8,7 @@ const DEFAULT_TIME_FRAME = '1h';
 const DEFAULT_SUPPLY_PERCENTAGE = '0.005%';
 
 class FreshRatioHandler {
-    constructor(userManager, accessControl) {
-        this.userManager = userManager;
-        this.accessControl = accessControl;
+    constructor() {
         this.solanaApi = getSolanaApi();
         this.COMMAND_NAME = 'freshratio'; 
     }
@@ -22,23 +18,6 @@ class FreshRatioHandler {
         logger.info(`Starting FreshRatio command for user ${msg.from.username}`);
 
         try {
-            // Vérifier si l'utilisateur peut exécuter une nouvelle commande
-            if (!ActiveCommandsTracker.canAddCommand(userId, this.COMMAND_NAME)) {
-                await bot.sendMessage(msg.chat.id,
-                    "You already have 3 active commands. Please wait for them to complete.",
-                    { message_thread_id: messageThreadId }
-                );
-                return;
-            }
-
-            // Ajouter la commande au tracker
-            if (!ActiveCommandsTracker.addCommand(userId, this.COMMAND_NAME)) {
-                await bot.sendMessage(msg.chat.id,
-                    "Unable to add a new command at this time.",
-                    { message_thread_id: messageThreadId }
-                );
-                return;
-            }
 
             let coinAddress, timeFrame, supplyPercentage;
 
@@ -100,20 +79,9 @@ class FreshRatioHandler {
             );
 
         } catch (error) {
-            logger.error('Error in FreshRatioHandler:', error);
-            await bot.sendLongMessage(msg.chat.id,
-                `An error occurred: ${error.message}`,
-                { message_thread_id: messageThreadId }
-            );
-        } finally {
-            ApiCallCounter.logApiCalls('freshRatio');
-            this._finalizeCommand(userId);
+            logger.error('Error in fresh ratio command:', error);
+            throw error;
         }
-    }
-
-    _finalizeCommand(userId) {
-        logger.debug('FreshRatio command completed');
-        ActiveCommandsTracker.removeCommand(userId, this.COMMAND_NAME);
     }
 }
 
