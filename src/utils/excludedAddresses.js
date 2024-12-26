@@ -1,4 +1,8 @@
 
+const fs = require('fs').promises;
+const path = require('path');
+const NodeCache = require('node-cache');
+
 const EXCLUDED_ADDRESSES = [
     '45ruCyfdRkWpRNGEqWzjCiXRHkZs8WXCLQ67Pnpye7Hp', // Jupiter Partner Referral Fee Vault
     'ZG98FUCjb8mJ824Gbs6RsgVmr1FhXb2oNiJHa2dwmPd', // bot / exchange
@@ -22,13 +26,38 @@ const EXCLUDED_ADDRESSES = [
     '5Q544fKrFoe6tsEbD7S8EmxGTJYAKtTVhAW5Q5pge4j1', //raydium
 ];
 
-function isExcludedAddress(address) {
-    return EXCLUDED_ADDRESSES.includes(address);
-}
+const JSON_PATH = path.join(__dirname, '../data/excludedAddresses.json');
+const addressCache = new NodeCache({ stdTTL: 3600 }); // 1h cache
 
-async function addExcludedAddress(address, reason = 'bot') {
-    // Implementation remains in memory and file
-}
+const loadExcludedAddresses = async () => {
+    let cached = addressCache.get('addresses');
+    if (cached) return cached;
+
+    try {
+        const data = await fs.readFile(JSON_PATH);
+        const addresses = JSON.parse(data);
+        addressCache.set('addresses', addresses);
+        return addresses;
+    } catch {
+        addressCache.set('addresses', []);
+        await fs.writeFile(JSON_PATH, '[]');
+        return [];
+    }
+};
+
+const isExcludedAddress = (address) => {
+    const cached = addressCache.get('addresses') || [];
+    return EXCLUDED_ADDRESSES.includes(address) || cached.includes(address);
+};
+
+const addExcludedAddress = async (address, reason = 'bot') => {
+    const addresses = await loadExcludedAddresses();
+    if (!addresses.includes(address)) {
+        addresses.push(address);
+        addressCache.set('addresses', addresses);
+        await fs.writeFile(JSON_PATH, JSON.stringify(addresses));
+    }
+};
 
 module.exports = {
     EXCLUDED_ADDRESSES,

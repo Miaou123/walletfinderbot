@@ -4,41 +4,50 @@ const logger = require('../utils/logger');
 const { validateWallet } = require('./models/wallet');
 const { validateSubscription } = require('./models/subscription.js');
 
-let uri = config.MONGODB_URI || process.env.MONGODB_URI;
+let mongoClient = null;
+let db = null;
+const uri = config.MONGODB_URI?.trim() || process.env.MONGODB_URI?.trim();
 
 if (!uri) {
-    logger.error('MONGODB_URI is not defined in environment variables or config file');
-    throw new Error('MONGODB_URI is not defined in environment variables or config file');
+   throw new Error('MONGODB_URI is not defined');
 }
-
-uri = uri.trim();
 
 if (!uri.startsWith('mongodb://') && !uri.startsWith('mongodb+srv://')) {
-    logger.error(`Invalid MongoDB URI: ${uri}. URI must start with mongodb:// or mongodb+srv://`);
-    throw new Error(`Invalid MongoDB URI: ${uri}. URI must start with mongodb:// or mongodb+srv://`);
+   throw new Error(`Invalid MongoDB URI: ${uri}`);
 }
 
-const client = new MongoClient(uri, {
-    connectTimeoutMS: 5000,
-    socketTimeoutMS: 30000,
-});
+// Création du client MongoDB avec gestion des listeners
+if (!mongoClient) {
+   mongoClient = new MongoClient(uri, {
+       connectTimeoutMS: 5000,
+       socketTimeoutMS: 30000,
+   });
+   mongoClient.setMaxListeners(20);
+   
+   mongoClient.on('close', async () => {
+       logger.warn("Connection to database lost. Attempting to reconnect...");
+       db = null;
+       // Tentative de reconnexion
+       try {
+           await connectToDatabase();
+       } catch (error) {
+           logger.error("Reconnection attempt failed:", error);
+       }
+   });
+}
 
-let db;
-
+/**
+ * Fonction pour connecter à la base de données
+ * @returns {Promise<void>}
+ */
 async function connectToDatabase() {
     if (!db) {
         try {
-            await client.connect();
+            await mongoClient.connect();
             // Utiliser une base de données dédiée pour le bot
-            db = client.db("telegram_bot");
+            db = mongoClient.db("telegram_bot"); // Assurez-vous que c'est le bon nom
             logger.info("Connected to the database");
             
-            client.on('close', async () => {
-                logger.warn("Connection to database lost. Attempting to reconnect...");
-                db = null;
-                await connectToDatabase();
-            });
-
             // Créer les index nécessaires
             const walletCollection = db.collection("wallets");
             const usersCollection = db.collection("users");
@@ -65,16 +74,25 @@ async function connectToDatabase() {
             throw error;
         }
     }
-    return db;
 }
 
+/**
+ * Obtient la base de données connectée
+ * @returns {Promise<Object>} La base de données MongoDB
+ */
 async function getDatabase() {
     if (!db) {
-        return await connectToDatabase();
+        await connectToDatabase();
     }
     return db;
 }
 
+/**
+ * Sauvegarde un portefeuille intéressant dans la base de données
+ * @param {string} address - L'adresse du portefeuille
+ * @param {Object} walletData - Les données du portefeuille
+ * @returns {Promise<Object|null>} Le résultat de l'opération ou null si ignoré
+ */
 async function saveInterestingWallet(address, walletData) {
     const database = await getDatabase();
     const collection = database.collection("wallets");
@@ -166,8 +184,6 @@ async function createSubscription(userId, username, type, duration) {
     }
 }
 
-
-// Fonction pour vérifier un abonnement
 // Fonction pour vérifier un abonnement
 async function checkSubscription(userId) {
     const database = await getDatabase();
@@ -230,7 +246,7 @@ async function updateSubscription(subscriptionId, updateData) {
     }
 }
 
-// Fonction pour mettre à jour un abonnement
+// Fonction pour obtenir les abonnements d'un utilisateur
 async function getUserSubscriptions(userId) {
     const database = await getDatabase();
     const collection = database.collection("subscriptions");
@@ -246,6 +262,7 @@ async function getUserSubscriptions(userId) {
     }
 }
 
+// Fonction pour compléter le paiement d'un abonnement
 async function completeSubscriptionPayment(subscriptionId) {
     const database = await getDatabase();
     const collection = database.collection("subscriptions");
@@ -268,6 +285,7 @@ async function completeSubscriptionPayment(subscriptionId) {
     }
 }
 
+// Fonction pour ajouter un administrateur
 async function addAdmin(username, addedBy = 'system') {
     const database = await getDatabase();
     const collection = database.collection("admins");
@@ -305,6 +323,13 @@ async function addAdmin(username, addedBy = 'system') {
         throw error;
     }
 }
+
+process.on('SIGINT', async () => {
+   if (mongoClient) {
+       await mongoClient.close();
+   }
+   process.exit(0);
+});
 
 module.exports = { 
     connectToDatabase, 

@@ -83,25 +83,21 @@ class DexScreenerApi {
 
     async getMultipleTokenPrices(tokenAddresses, mainContext = 'default', subContext = null) {
         ApiCallCounter.incrementCall('DexScreener', 'getMultipleTokenPrices', mainContext, subContext);
-
         this.validateTokenAddresses(tokenAddresses);
-
+     
         try {
-           // console.log(`Calling DexScreener API for addresses: ${tokenAddresses.join(',')}`);
             const response = await this.fetchDexScreenerData(`tokens/${tokenAddresses.join(',')}`);
-
-            if (!response.data || !response.data.pairs) {
-                console.error('Unexpected response structure:', response.data);
-                throw new Error('Unexpected response structure from DexScreener');
+            
+            if (!response.data) {
+                return {};
             }
-
-            const prices = this.extractTokenPrices(response.data.pairs);
-          //  console.log(`Processed prices:`, prices);
-            return prices;
+     
+            return this.extractTokenPrices(response.data.pairs || []);
         } catch (error) {
-            throw error;
+            console.error('Error fetching token prices:', error);
+            return {};
         }
-    }
+     }
 
     async fetchDexScreenerData(endpoint) {
         return dexscreenerRateLimiter.enqueue({
@@ -163,9 +159,13 @@ class DexScreenerApi {
     }
 
     extractTokenPrices(pairs) {
+        if (!pairs) {
+            return {};
+        }
+        
         const prices = {};
         pairs.forEach(pair => {
-            if (pair.chainId === 'solana') {
+            if (pair?.chainId === 'solana') {
                 prices[pair.baseToken.address] = {
                     priceUsd: parseFloat(pair.priceUsd),
                     symbol: pair.baseToken.symbol
