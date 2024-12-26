@@ -89,7 +89,13 @@ class GmgnApi {
 
                 const data = await page.evaluate(() => {
                     const text = document.body.innerText;
-                    return JSON.parse(text);
+                    console.log("Raw text:", text.substring(0, 100)); // Log les 100 premiers caractères
+                    try {
+                        return JSON.parse(text);
+                    } catch (e) {
+                        console.error("Parse error. Text starts with:", text.substring(0, 50));
+                        throw e;
+                    }
                 });
 
                 return data;

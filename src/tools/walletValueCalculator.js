@@ -7,7 +7,7 @@ const logger = require('../utils/logger');
 
 // Constants
 const TIMEOUT = 2 * 60 * 1000;
-const MAX_UNIQUE_TOKENS = 10000;
+const MAX_UNIQUE_TOKENS = 5000;
 const ITEMS_PER_PAGE = 1000;
 const BATCH_SIZE = 10;
 const SOL_ADDRESS = 'So11111111111111111111111111111111111111112';
@@ -78,62 +78,105 @@ async function isLiquidityPool(address, mainContext, subContext) {
 }
 
 /**
- * Fetches all items for a given wallet address.
+ * Fetches all items for a given wallet address along with native balance.
  * @param {string} address - The wallet address.
  * @param {string} mainContext - The main context for API calls.
  * @param {string} subContext - The sub-context for API calls.
- * @returns {Promise<Array>} All items fetched for the wallet.
+ * @returns {Promise<{ items: Array, nativeBalance: BigNumber }>} All items and native balance.
  */
 async function fetchAllItems(address, mainContext, subContext) {
   let allItems = [];
-  let page = 1;
-  let hasMore = true;
+  let after = null;
+  let nativeBalance = new BigNumber(0);
 
-  while (hasMore && allItems.length <= MAX_UNIQUE_TOKENS) {
+  while (allItems.length <= MAX_UNIQUE_TOKENS) {
     try {
-      const assetsResponse = await solanaApi.getAssetsByOwner(address, page, ITEMS_PER_PAGE, true, mainContext, subContext);
-      
-      if (assetsResponse && assetsResponse.items && Array.isArray(assetsResponse.items)) {
-        allItems = allItems.concat(assetsResponse.items);
-        hasMore = assetsResponse.items.length === ITEMS_PER_PAGE;
-        page++;
-      } else {
-        logger.error(`Invalid response for getAssetsByOwner: ${address}`);
-        hasMore = false;
+      const assetsResponse = await solanaApi.getAssetsByOwner(
+        address, 
+        ITEMS_PER_PAGE,
+        {
+          showFungible: true,
+          showNativeBalance: true,
+          showZeroBalance: false,
+          after
+        },
+        mainContext, 
+        subContext
+      );
+
+      if (!assetsResponse?.items?.length) break;
+
+      allItems = allItems.concat(assetsResponse.items);
+
+      // Récupérer nativeBalance depuis la première réponse
+      if (!after && assetsResponse.nativeBalance && assetsResponse.nativeBalance.lamports) {
+        nativeBalance = new BigNumber(assetsResponse.nativeBalance.lamports).dividedBy(1e9); // Convertir en SOL
       }
+
+      after = assetsResponse.cursor;
+      if (!after) break;
+
     } catch (error) {
-      logger.error(`Error fetching assets for ${address} on page ${page}:`, error);
-      hasMore = false;
+      logger.error(`Error fetching assets for ${address}:`, error);
+      break;
     }
   }
 
-  return allItems;
+  return { items: allItems, nativeBalance };
 }
 
 /**
- * Fetches SOL balance for a given wallet address.
- * @param {string} address - The wallet address.
+ * Processes a single wallet address.
+ * @param {string} address - The wallet address to process.
  * @param {BigNumber} solPrice - The current SOL price.
  * @param {string} mainContext - The main context for API calls.
  * @param {string} subContext - The sub-context for API calls.
- * @returns {Promise<{solBalance: BigNumber, solValue: BigNumber}>} SOL balance and value.
+ * @returns {Promise<Object>} The processed wallet data.
  */
-async function fetchSolBalance(address, solPrice, mainContext, subContext) {
+async function processWallet(address, solPrice, mainContext, subContext) {
   try {
-    const solBalanceResponse = await solanaApi.getBalance(address, mainContext, subContext);
+    logger.info(`Processing wallet: ${address}`);
     
-    if (solBalanceResponse && solBalanceResponse.value !== undefined) {
-      const solBalanceLamports = new BigNumber(solBalanceResponse.value);
-      const solBalance = solBalanceLamports.dividedBy(1e9);
-      const solValue = solBalance.multipliedBy(solPrice);
-      return { solBalance, solValue };
-    } else {
-      logger.error(`Invalid SOL balance response for ${address}:`, solBalanceResponse);
-      return { solBalance: new BigNumber(0), solValue: new BigNumber(0) };
+    const poolCheck = await isLiquidityPool(address, mainContext, subContext);
+    logger.debug(`Pool check result for ${address}:`, poolCheck);
+
+    if (poolCheck.isPool) {
+      await addExcludedAddress(address, 'liquidityPool');
+      return { isPool: true, poolName: poolCheck.poolName };
     }
+
+    const { items, nativeBalance } = await fetchAllItems(address, mainContext, subContext);
+    logger.debug(`Fetched items for ${address}:`, { itemCount: items.length });
+
+    if (items.length > MAX_UNIQUE_TOKENS) {
+      await addExcludedAddress(address, 'bot');
+      return { isBot: true };
+    }
+
+    const solValue = nativeBalance.multipliedBy(solPrice);
+    const tokenInfos = processItems(items, nativeBalance, solValue);
+    const totalValue = tokenInfos.reduce((sum, token) => sum.plus(new BigNumber(token.value)), new BigNumber(0));
+
+    const result = {
+      tokenInfos,
+      totalValue: totalValue.toString(),
+      solBalance: nativeBalance.toFixed(2),
+      solValue: solValue.toFixed(2),
+      totalAssets: tokenInfos.length
+    };
+
+    return result;
+
   } catch (error) {
-    logger.error(`Error fetching SOL balance for ${address}:`, error);
-    return { solBalance: new BigNumber(0), solValue: new BigNumber(0) };
+    logger.error(`Error processing wallet ${address}:`, error);
+    return {
+      tokenInfos: [],
+      totalValue: '0',
+      solBalance: '0.00',
+      solValue: '0.00',
+      totalAssets: 0,
+      error: error.message
+    };
   }
 }
 
@@ -180,56 +223,6 @@ function processItems(items, solBalance, solValue) {
   });
 
   return tokenInfos;
-}
-
-/**
- * Processes a single wallet address.
- * @param {string} address - The wallet address to process.
- * @param {BigNumber} solPrice - The current SOL price.
- * @param {string} mainContext - The main context for API calls.
- * @param {string} subContext - The sub-context for API calls.
- * @returns {Promise<Object>} The processed wallet data.
- */
-async function processWallet(address, solPrice, mainContext, subContext) {
-  try {
-    logger.info(`Processing wallet: ${address}`);
-    
-    const poolCheck = await isLiquidityPool(address, mainContext, subContext);
-    if (poolCheck.isPool) {
-      await addExcludedAddress(address, 'liquidityPool');
-      return { isPool: true, poolName: poolCheck.poolName };
-    }
-
-    const allItems = await fetchAllItems(address, mainContext, subContext);
-
-    if (allItems.length > MAX_UNIQUE_TOKENS) {
-      await addExcludedAddress(address, 'bot');
-      return { isBot: true };
-    }
-
-    const { solBalance, solValue } = await fetchSolBalance(address, solPrice, mainContext, subContext);
-    const tokenInfos = processItems(allItems, solBalance, solValue);
-
-    const totalValue = tokenInfos.reduce((sum, token) => sum.plus(new BigNumber(token.value)), new BigNumber(0));
-
-    return {
-      tokenInfos,
-      totalValue: totalValue.toString(),
-      solBalance: solBalance.toFixed(2),
-      solValue: solValue.toFixed(2),
-      totalAssets: tokenInfos.length
-    };
-  } catch (error) {
-    console.error(`Error processing wallet ${address}:`, error);
-    return {
-      tokenInfos: [],
-      totalValue: '0',
-      solBalance: '0.00',
-      solValue: '0.00',
-      totalAssets: 0,
-      error: error.message
-    };
-  }
 }
 
 /**

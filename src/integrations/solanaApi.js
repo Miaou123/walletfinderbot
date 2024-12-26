@@ -39,16 +39,20 @@ class SolanaApi {
     }
   }
 
-  async getAssetsByOwner(ownerAddress, page = 1, limit = 1000, showFungible = true, mainContext = 'default', subContext = null) {
+  async getAssetsByOwner(ownerAddress, limit = 1000, options = {}, mainContext = 'default', subContext = null) {
     const result = await this.callHelius('getAssetsByOwner', {
       ownerAddress,
-      page,
       limit,
-      displayOptions: { showFungible }
-    },'api', mainContext, subContext);
+      after: options.after || null,
+      displayOptions: {
+        showFungible: options.showFungible || false,
+        showNativeBalance: options.showNativeBalance || false,
+        showZeroBalance: options.showZeroBalance || false
+      }
+    }, 'api', mainContext, subContext);
+  
     if (!result || !Array.isArray(result.items)) {
-      console.error(`Unexpected result structure for getAssetsByOwner of address ${ownerAddress}:`, result);
-      return { items: [], total: 0 };
+      return { items: [], total: 0, nativeBalance: 0 };
     }
     return result;
   }
