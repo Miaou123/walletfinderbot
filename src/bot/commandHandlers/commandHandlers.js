@@ -1,4 +1,3 @@
-// src/bot/commandHandlers/commandHandlers.js
 
 const BroadcastHandler = require('./broadcastHandler');
 const BundleHandler = require('./bundleHandler');
@@ -13,14 +12,16 @@ const CrossHandler = require('./crossHandler');
 const BestTradersHandler = require('./bestTradersHandler');
 const SearchHandler = require('./searchHandler');
 const TopHoldersHandler = require('./topHoldersHandler');
-const UserSubscriptionHandler = require('./subHandler'); // Assurez-vous que le chemin est correct
+const UserSubscriptionHandler = require('./mySubHandler');
+const SubscriptionCommandHandler = require('./paymentHandler');
 const HelpHandler = require('./helpHandler');
 
 class CommandHandlers {
     constructor(userManager, accessControl, bot) {
         this.adminHandler = new AdminCommandHandler(userManager, accessControl, bot);
         this.broadcastHandler = new BroadcastHandler(userManager, accessControl, bot);
-        this.userSubscriptionHandler = new UserSubscriptionHandler(accessControl, bot); // Correction ici
+        this.userSubscriptionHandler = new UserSubscriptionHandler(bot);
+        this.subscriptionHandler = new SubscriptionCommandHandler(accessControl);
         this.bundleHandler = new BundleHandler();
         this.crossBtHandler = new CrossBtHandler();
         this.freshRatioHandler = new FreshRatioHandler();
@@ -39,6 +40,8 @@ class CommandHandlers {
 
         // Définir toutes les commandes avec leurs handlers et contextes
         const commands = {
+            'subscribe': { handler: this.subscriptionHandler.handleCommand, context: this.subscriptionHandler },
+            'confirm': { handler: this.subscriptionHandler.handleConfirm, context: this.subscriptionHandler },
             'mysubscription': { handler: this.userSubscriptionHandler.handleMySubscription, context: this.userSubscriptionHandler },
             'adduser': { handler: this.adminHandler.handleAddUser, context: this.adminHandler },
             'removeuser': { handler: this.adminHandler.handleRemoveUser, context: this.adminHandler },
@@ -74,6 +77,13 @@ class CommandHandlers {
                 console.error(`Failed to map command "${command}": handler is undefined.`);
             }
         }
+
+        // Configurer le gestionnaire de callback pour les boutons de souscription
+        bot.on('callback_query', async (query) => {
+            if (query.data.startsWith('sub_')) {
+                await this.subscriptionHandler.handleCallback(bot, query);
+            }
+        });
 
         console.log('Command Handlers Mapping:', Object.keys(this.handlers));
     }
