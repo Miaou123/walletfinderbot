@@ -3,8 +3,7 @@
 const logger = require('../../utils/logger');
 
 class UserSubscriptionHandler {
-    constructor(accessControl, bot) {
-        this.accessControl = accessControl;
+    constructor(bot) {
         this.bot = bot;
     }
 

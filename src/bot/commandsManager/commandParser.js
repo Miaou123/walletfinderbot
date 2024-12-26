@@ -191,6 +191,36 @@ const commandConfigs = {
     usage: '/cancel',
     helpMessage: 'Cancel the currently running command.\n\nUse this to stop a long-running analysis or if you made a mistake in your command input.'
   },
+  'subscribe': {
+    aliases: ['sub'],
+    minArgs: 0,
+    maxArgs: 0,
+    requiresAuth: false,
+    description: 'Start a new subscription for bot access',
+    dailyLimit: Infinity,
+    usage: '/subscribe',
+    helpMessage: 'Start the subscription process to access premium features.\n\n' +
+                 'Available options:\n' +
+                 '• 1 Month (0.5 SOL)\n' +
+                 '• 3 Months (1.2 SOL)\n' +
+                 '• 6 Months (2.0 SOL)\n\n' +
+                 'After selecting your plan, follow the payment instructions to complete your subscription.'
+  },
+  'confirm': {
+    aliases: [],
+    minArgs: 2,
+    maxArgs: 2,
+    requiresAuth: false,
+    description: 'Confirm your subscription payment',
+    dailyLimit: Infinity,
+    usage: '/confirm <SESSION_ID> <TRANSACTION_SIGNATURE>',
+    helpMessage: 'Confirm your subscription payment by providing the session ID and transaction signature.\n\n' +
+                 'Example:\n' +
+                 '/confirm abc123 5xR8sY9...\n\n' +
+                 'Make sure to:\n' +
+                 '• Use the exact session ID provided during subscription\n' +
+                 '• Copy the complete transaction signature from Solana'
+  },
   'mysubscription': { 
     aliases: ['mysub'], 
     minArgs: 0, 
