@@ -188,24 +188,35 @@ async function processWallet(address, solPrice, mainContext, subContext) {
  * @returns {Array} Processed token information.
  */
 function processItems(items, solBalance, solValue) {
-  let tokenInfos = [{
+  // Map pour suivre les tokens uniques
+  const tokenMap = new Map();
+  
+  // Ajouter SOL
+  tokenMap.set('SOL', {
     symbol: 'SOL',
     name: 'Solana',
     balance: solBalance.toFixed(2),
     value: solValue.toFixed(2),
     valueNumber: solValue.toNumber(),
     mint: 'SOL'
-  }];
+  });
 
   items.forEach(asset => {
     if (asset.interface === 'FungibleToken' && asset.token_info) {
+      const mintAddress = asset.id || 'N/A';
+      
+      // Si le token existe déjà, on skip
+      if (tokenMap.has(mintAddress)) {
+        return;
+      }
+
       let tokenInfo = {
         symbol: asset.content?.metadata?.symbol || 'Unknown',
         name: asset.content?.metadata?.name || 'Unknown',
         balance: 'N/A',
         value: 'N/A',
         valueNumber: 0,
-        mint: asset.id || 'N/A'
+        mint: mintAddress
       };
 
       const balance = new BigNumber(asset.token_info.balance || 0);
@@ -218,11 +229,11 @@ function processItems(items, solBalance, solValue) {
       tokenInfo.valueNumber = value.toNumber();
       tokenInfo.decimals = decimals;
 
-      tokenInfos.push(tokenInfo);
+      tokenMap.set(mintAddress, tokenInfo);
     }
   });
 
-  return tokenInfos;
+  return Array.from(tokenMap.values());
 }
 
 /**
