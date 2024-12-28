@@ -14,7 +14,17 @@ const SearchHandler = require('./searchHandler');
 const TopHoldersHandler = require('./topHoldersHandler');
 const UserSubscriptionHandler = require('./mySubHandler');
 const SubscriptionCommandHandler = require('./paymentHandler');
+const TrackingActionHandler = require('./trackingActionHandler');
+const { SupplyTracker } = require('../../tools/SupplyTracker');
+const TrackerHandler = require('./trackerHandler');
 const HelpHandler = require('./helpHandler');
+const StartHandler = require('./startHandler');
+const ScanHandler = require('./scanHandler');
+const TeamHandler = require('./teamHandler');
+const stateManager = require('../../utils/stateManager');
+
+const logger = require('../../utils/logger');
+
 
 class CommandHandlers {
     constructor(userManager, accessControl, bot) {
@@ -22,6 +32,8 @@ class CommandHandlers {
         this.broadcastHandler = new BroadcastHandler(userManager, accessControl, bot);
         this.userSubscriptionHandler = new UserSubscriptionHandler(bot);
         this.subscriptionHandler = new SubscriptionCommandHandler(accessControl);
+        this.startHandler = new StartHandler(userManager);
+        this.scanHandler = new ScanHandler(stateManager);
         this.bundleHandler = new BundleHandler();
         this.crossBtHandler = new CrossBtHandler();
         this.freshRatioHandler = new FreshRatioHandler();
@@ -34,12 +46,25 @@ class CommandHandlers {
         this.searchHandler = new SearchHandler();
         this.topHoldersHandler = new TopHoldersHandler();
         this.helpHandler = new HelpHandler(bot);
+        this.teamHandler = new TeamHandler(stateManager);
+    
+        this.supplyTracker = new SupplyTracker(bot, accessControl);
+        this.trackerHandler = new TrackerHandler(this.supplyTracker);
 
+        this.initializeSupplyTracker().catch(err => {
+            logger.error('Failed to initialize SupplyTracker:', err);
+        });
+
+        // Créer TrackingActionHandler avec l'instance de SupplyTracker
+        this.trackingActionHandler = new TrackingActionHandler(this.supplyTracker);
+        
         // Mapping des commandes aux handlers
         this.handlers = {};
 
         // Définir toutes les commandes avec leurs handlers et contextes
         const commands = {
+            'start': { handler: this.startHandler.handleCommand, context: this.startHandler },
+            'scan': { handler: this.scanHandler.handleCommand, context: this.scanHandler },
             'subscribe': { handler: this.subscriptionHandler.handleCommand, context: this.subscriptionHandler },
             'confirm': { handler: this.subscriptionHandler.handleConfirm, context: this.subscriptionHandler },
             'mysubscription': { handler: this.userSubscriptionHandler.handleMySubscription, context: this.userSubscriptionHandler },
@@ -66,6 +91,8 @@ class CommandHandlers {
             'search': { handler: this.searchHandler.handleCommand, context: this.searchHandler },
             'topholders': { handler: this.topHoldersHandler.handleCommand, context: this.topHoldersHandler },
             'help': { handler: this.helpHandler.handleCommand, context: this.helpHandler },
+            'team': { handler: this.teamHandler.handleCommand, context: this.teamHandler },
+            'tracker': { handler: this.trackerHandler.handleCommand, context: this.trackerHandler },
         };
 
         // Itérer sur chaque commande et lier le handler si défini
@@ -78,14 +105,41 @@ class CommandHandlers {
             }
         }
 
-        // Configurer le gestionnaire de callback pour les boutons de souscription
         bot.on('callback_query', async (query) => {
-            if (query.data.startsWith('sub_')) {
-                await this.subscriptionHandler.handleCallback(bot, query);
+            try {
+              const [actionType] = query.data.split('_');
+      
+              // Map des handlers de callback
+              const callbackHandlers = {
+                'sub': this.subscriptionHandler,
+                'track': this.trackingActionHandler,
+                'details': this.teamHandler,
+                'sd': this.trackingActionHandler,
+                'sc': this.trackingActionHandler,
+                'st': this.trackingActionHandler,
+                'stop': this.trackingActionHandler
+              };
+      
+              const handler = callbackHandlers[actionType];
+              if (handler) {
+                await handler.handleCallback(bot, query);
+              } else {
+                throw new Error(`Unknown action type: ${actionType}`);
+              }
+            } catch (error) {
+              logger.error('Error in callback query handler:', error);
+              await bot.answerCallbackQuery(query.id, {
+                text: "An error occurred",
+                show_alert: true
+              });
             }
         });
 
         console.log('Command Handlers Mapping:', Object.keys(this.handlers));
+    }
+
+    async initializeSupplyTracker() {
+        await this.supplyTracker.init();
     }
 
     getHandlers() {

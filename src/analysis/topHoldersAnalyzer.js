@@ -21,7 +21,7 @@ class TokenAnalyzer {
                 throw new Error("No token metadata found");
             }
 
-            logger.debug('Token metadata received:', tokenMetadata);
+            logger.debug('Token metadata received:', { tokenMetadata });
 
             const formattedTokenInfo = this.formatTokenInfo(tokenMetadata, coinAddress);
             const topHolders = await getTopHolders(coinAddress, count, mainContext, 'getTopHolders');

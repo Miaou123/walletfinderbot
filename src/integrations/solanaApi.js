@@ -3,6 +3,7 @@ const config = require('../utils/config');
 const HeliusRateLimiter = require('../utils/rateLimiters/heliusRateLimiter');
 const ApiCallCounter = require('../utils/ApiCallCounter');
 const BigNumber = require('bignumber.js');
+const logger = require('../utils/logger');
 
 class SolanaApi {
   constructor() {
@@ -73,38 +74,55 @@ class SolanaApi {
 
   async getAsset(tokenAddress, mainContext = 'default', subContext = null) {
     try {
-      const result = await this.callHelius('getAsset', {
-        id: tokenAddress,
-        displayOptions: {
-          showFungible: true
+        const result = await this.callHelius('getAsset', {
+            id: tokenAddress,
+            displayOptions: {
+                showFungible: true
+            }
+        }, 'api', mainContext, subContext);
+
+        if (!result?.token_info) {
+            logger.error(`Invalid result for token ${tokenAddress}`);
+            return null;
         }
-      }, 'api', mainContext, subContext);
-  
-      if (!result || !result.token_info) {
-        console.error(`No asset info found for token ${tokenAddress}`);
-        return null;
-      }
-  
-      // Ajuster la supply en tenant compte des décimales
-      const rawSupply = new BigNumber(result.token_info.supply || 0);
-      const decimals = result.token_info.decimals || 0;
-      const adjustedSupply = rawSupply.dividedBy(new BigNumber(10).pow(decimals));
-  
-      return {
-        address: tokenAddress,
-        decimals: result.token_info.decimals || 0,
-        symbol: result.token_info.symbol || result.content?.metadata?.symbol || 'Unknown',
-        name: result.content?.metadata?.name || 'Unknown Token',
-        supply: {
-          total: adjustedSupply
-        },
-        price: result.token_info.price_info?.price_per_token || 0
-      };
-    } catch (error) {
-      console.error(`Error fetching asset info for ${tokenAddress}:`, error);
-      return null;
+
+        let adjustedSupply;
+        try {
+            const rawSupply = new BigNumber(result.token_info.supply || 0);
+            const decimals = parseInt(result.token_info.decimals) || 0;
+            
+            if (isNaN(decimals) || decimals < 0) {
+                throw new Error(`Invalid decimals value: ${decimals}`);
+            }
+            
+            adjustedSupply = rawSupply.dividedBy(new BigNumber(10).pow(decimals));
+            
+            if (!adjustedSupply.isFinite()) {
+                throw new Error('Supply calculation resulted in non-finite value');
+            }
+        } catch (error) {
+            logger.error(`Error calculating supply for ${tokenAddress}:`, error);
+            adjustedSupply = new BigNumber(0);
+        }
+
+        const tokenData = {
+            address: tokenAddress,
+            decimals: parseInt(result.token_info.decimals) || 0,
+            symbol: result.token_info.symbol || result.content?.metadata?.symbol || 'Unknown',
+            name: result.content?.metadata?.name || 'Unknown Token',
+            supply: {
+                total: adjustedSupply.toString()
+            },
+            price: parseFloat(result.token_info.price_info?.price_per_token) || 0
+        };
+
+        return tokenData;
+
+        } catch (error) {
+            logger.error(`Error fetching asset info for ${tokenAddress}:`, error);
+            return null;
+        }
     }
-  }
 
   async getTokenAccounts(mint, limit = 1000, cursor, mainContext = 'default', subContext = null) {
     let params = { limit, mint };

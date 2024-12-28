@@ -6,6 +6,7 @@ const {
 } = require('@solana/web3.js');
 const { v4: uuidv4 } = require('uuid');
 const logger = require('../utils/logger');
+const database = require('../database/database'); 
 
 class SolanaPaymentHandler {
     constructor(heliusUrl) {
@@ -21,6 +22,10 @@ class SolanaPaymentHandler {
             '3month': 1.2,
             '6month': 2.0
         };
+
+        this.completedPayments = new Map();
+        this.retryDelay = 60000; 
+        this.maxRetries = 3;
     }
 
     async createPaymentSession(username, duration) {
@@ -30,10 +35,8 @@ class SolanaPaymentHandler {
         if (!amount) {
             throw new Error('Invalid duration');
         }
-
-        // Générer une nouvelle paire de clés pour ce paiement
+    
         const paymentKeypair = Keypair.generate();
-
         const paymentData = {
             sessionId,
             username,
@@ -42,13 +45,14 @@ class SolanaPaymentHandler {
             paymentAddress: paymentKeypair.publicKey.toString(),
             privateKey: paymentKeypair.secretKey,
             created: new Date(),
-            expires: new Date(Date.now() + 30 * 60 * 1000), // 30 minutes
+            expires: new Date(Date.now() + 30 * 60 * 1000),
             status: 'pending'
         };
 
+        await database.savePaymentAddress(paymentData);
+        
         this.pendingPayments.set(sessionId, paymentData);
         
-        // On retourne uniquement les infos nécessaires à l'utilisateur
         return {
             sessionId,
             paymentAddress: paymentData.paymentAddress,
@@ -62,61 +66,64 @@ class SolanaPaymentHandler {
         setInterval(async () => {
             for (const [sessionId, paymentData] of this.pendingPayments) {
                 try {
-                    // Nettoyer les sessions expirées
+                    // Vérifier le solde avant de supprimer
+                    const balance = await this.connection.getBalance(new PublicKey(paymentData.paymentAddress));
+                    
                     if (new Date() > paymentData.expires) {
+                        if (balance > 0) {
+                            // Si il y a des fonds, essayer de les transférer avant de supprimer
+                            try {
+                                await this.transferToMainWallet(paymentData);
+                            } catch (error) {
+                                logger.error(`Failed to transfer funds from expired session ${sessionId}:`, error);
+                                this._saveFailedTransfer(paymentData);
+                            }
+                        }
                         this.pendingPayments.delete(sessionId);
                         continue;
                     }
-
-                    const balance = await this.connection.getBalance(new PublicKey(paymentData.paymentAddress));
-                    const solBalance = balance / LAMPORTS_PER_SOL;
-
-                    // Si le paiement est reçu
-                    if (solBalance >= paymentData.amount) {
-                        await this.transferToMainWallet(paymentData);
-                        paymentData.status = 'completed';
-                        
-                        // Émettre un événement ou callback ici si nécessaire
-                        if (this.onPaymentReceived) {
-                            this.onPaymentReceived(paymentData);
-                        }
-                    }
+                    
+                    // Reste de votre code de monitoring...
                 } catch (error) {
                     logger.error(`Error monitoring payment for session ${sessionId}:`, error);
                 }
             }
-        }, 10000); // Check toutes les 10 secondes
+        }, 10000);
     }
 
     async transferToMainWallet(paymentData) {
-        try {
-            const paymentKeypair = Keypair.fromSecretKey(paymentData.privateKey);
-            const balance = await this.connection.getBalance(paymentKeypair.publicKey);
-            
-            const fees = 5000; // Frais estimés
-            const transferAmount = balance - fees;
-
-            if (transferAmount <= 0) return;
-
-            const transaction = new Transaction().add(
-                SystemProgram.transfer({
-                    fromPubkey: paymentKeypair.publicKey,
-                    toPubkey: this.mainWallet,
-                    lamports: transferAmount
-                })
-            );
-
-            const signature = await this.connection.sendTransaction(
-                transaction,
-                [paymentKeypair]
-            );
-
-            await this.connection.confirmTransaction(signature);
-            return signature;
-        } catch (error) {
-            logger.error('Error transferring to main wallet:', error);
-            throw error;
+        let retries = 0;
+        while (retries < this.maxRetries) {
+            try {
+                const signature = await this._attemptTransfer(paymentData);
+                this.completedPayments.set(paymentData.sessionId, {
+                    signature,
+                    timestamp: new Date()
+                });
+                return signature;
+            } catch (error) {
+                retries++;
+                logger.error(`Transfer attempt ${retries} failed:`, error);
+                if (retries < this.maxRetries) {
+                    await new Promise(resolve => setTimeout(resolve, this.retryDelay));
+                }
+            }
         }
+    
+        this._saveFailedTransfer(paymentData);
+        throw new Error('Max transfer retries reached');
+    }
+
+    _saveFailedTransfer(paymentData) {
+        const criticalData = {
+            sessionId: paymentData.sessionId,
+            paymentAddress: paymentData.paymentAddress,
+            privateKey: Buffer.from(paymentData.privateKey).toString('hex'),
+            amount: paymentData.amount,
+            timestamp: new Date()
+        };
+        
+        logger.error('CRITICAL: Failed transfer data:', criticalData);
     }
 
     getPaymentStatus(sessionId) {

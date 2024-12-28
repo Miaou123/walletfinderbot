@@ -41,28 +41,30 @@ const formatTeamSupplyResult = (analyzedWallets, tokenInfo, teamWallets, totalSu
     }
 };
 
-const formatWalletDetails = (wallets, tokenInfo) => {
-    try {
-        let message = `<b><a href="https://dexscreener.com/solana/${tokenInfo.address}">${tokenInfo.symbol}</a></b>\n\n`;
-        message += `<strong>${wallets.length} team addresses:</strong>\n\n`;
+function formatWalletDetails(analyzedWallets, tokenInfo) {
+    const teamWallets = analyzedWallets.filter(wallet => wallet.category !== 'Unknown');
 
-        const sortedWallets = [...wallets].sort((a, b) => 
-            new BigNumber(b.balance).minus(new BigNumber(a.balance)).toNumber()
-        );
+    let message = `<b>${tokenInfo.symbol}</b> (<a href="https://dexscreener.com/solana/${tokenInfo.address}">📈</a>)\n`;
+    message += `<b>${teamWallets.length} team addresses:</b>\n\n`;
 
-        sortedWallets.forEach((wallet, index) => {
-            const supplyPercentage = new BigNumber(wallet.balance)
+    teamWallets
+        .sort((a, b) => {
+            const balanceA = new BigNumber(a.balance).dividedBy(tokenInfo.totalSupply).multipliedBy(100);
+            const balanceB = new BigNumber(b.balance).dividedBy(tokenInfo.totalSupply).multipliedBy(100);
+            return balanceB.minus(balanceA).toNumber();
+        })
+        .forEach((wallet, index) => {
+            const shortAddr = `${wallet.address.slice(0, 6)}...${wallet.address.slice(-4)}`;
+            const percentage = new BigNumber(wallet.balance)
                 .dividedBy(tokenInfo.totalSupply)
-                .multipliedBy(100);
-            message += `${index + 1}. ${formatAddress(wallet.address)} (${formatNumber(supplyPercentage, 2, true)}) - ${wallet.category}\n`;
+                .multipliedBy(100)
+                .toFixed(2);
+
+            message += `${index + 1}. <a href="https://solscan.io/account/${wallet.address}">${shortAddr}</a> (${percentage}%) - ${wallet.category}\n`;
         });
 
-        return message;
-    } catch (error) {
-        logger.error('Error in formatWalletDetails:', error);
-        return 'Error formatting wallet details.';
+    return message;
 }
-};
 
 module.exports = {
     formatTeamSupplyResult,
