@@ -1,6 +1,11 @@
+const path = require('path');
 const fs = require('fs').promises;
 const logger = require('../../utils/logger');
 
+/**
+ * @class UserManager
+ * @description Gère la persistance des utilisateurs (lecture, écriture, mise à jour).
+ */
 class UserManager {
     constructor(filePath) {
         this.filePath = filePath;
@@ -11,11 +16,12 @@ class UserManager {
         try {
             const data = await fs.readFile(this.filePath, 'utf8');
             const parsedData = JSON.parse(data);
+            // On stocke les utilisateurs en tant que Map
             this.users = new Map(parsedData);
-            logger.info(`Loaded ${this.users.size} users`);
+            logger.info(`Loaded ${this.users.size} users from ${this.filePath}`);
         } catch (error) {
             if (error.code === 'ENOENT') {
-                logger.error('File not found:', this.filePath);
+                logger.error(`File not found: ${this.filePath}`);
             } else {
                 logger.error('Error loading users:', error);
             }
@@ -24,8 +30,9 @@ class UserManager {
 
     async saveUsers() {
         try {
+            // Convertir la Map en tableau avant de JSON-stringify
             await fs.writeFile(this.filePath, JSON.stringify(Array.from(this.users.entries())));
-            logger.info(`Saved ${this.users.size} users`);
+            logger.info(`Saved ${this.users.size} users to ${this.filePath}`);
         } catch (error) {
             logger.error('Error saving users:', error);
         }
@@ -38,9 +45,14 @@ class UserManager {
             logger.info(`Added new user: ${userId} (${username})`);
         } else {
             // Mettre à jour les informations si l'utilisateur existe déjà
-            const user = this.users.get(userId);
-            if (user.chatId !== chatId || user.username !== username) {
-                this.users.set(userId, { ...user, chatId, username, lastUpdated: new Date().toISOString() });
+            const existingUser = this.users.get(userId);
+            if (existingUser.chatId !== chatId || existingUser.username !== username) {
+                this.users.set(userId, {
+                    ...existingUser,
+                    chatId,
+                    username,
+                    lastUpdated: new Date().toISOString()
+                });
                 this.saveUsers();
                 logger.info(`Updated user info: ${userId} (${username})`);
             }
@@ -48,7 +60,7 @@ class UserManager {
     }
 
     getUsers() {
-        logger.debug(`Getting users. Current user count: ${this.users.size}`);
+        logger.debug(`Getting all users. Current user count: ${this.users.size}`);
         return Array.from(this.users.entries());
     }
 
@@ -61,14 +73,30 @@ class UserManager {
     }
 
     getUserByUsername(username) {
-        return Array.from(this.users.entries()).find(([, user]) => user.username === username);
+        // Renvoie un tableau [userId, userObject] ou undefined
+        return Array.from(this.users.entries())
+            .find(([, user]) => user.username === username);
     }
 
     debugUsers() {
-        logger.debug('Current users in UserManager:');
-        logger.debug(Array.from(this.users.entries()));
+        logger.debug('Current users in UserManager:', Array.from(this.users.entries()));
         return Array.from(this.users.entries());
     }
 }
 
-module.exports = UserManager;
+/**
+ * @function initializeUserManager
+ * @description Crée et initialise l’instance de UserManager avec le chemin vers `all_users.json`.
+ * @returns {Promise<UserManager>}
+ */
+async function initializeUserManager() {
+    const userFilePath = path.join(__dirname, '../data/all_users.json');
+    const userManager = new UserManager(userFilePath);
+    await userManager.loadUsers();
+    return userManager;
+}
+
+module.exports = {
+    UserManager,
+    initializeUserManager
+};

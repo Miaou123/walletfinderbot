@@ -1,18 +1,19 @@
 const { parseCommand, validateArgs, isAdminCommand } = require('./commandsManager/commandParser');
 const { getAvailableSpots } = require('../utils/accessSpots');
 const groupMessageLogger = require('./messageDataManager/groupMessageLogger');
+const stateManager = require('../utils/stateManager');
 
 class MessageHandler {
     constructor(dependencies) {
         this.bot = dependencies.bot;
         this.commandHandlers = dependencies.commandHandlers.getHandlers();
-        this.commandHandler = dependencies.commandHandler;
         this.accessControl = dependencies.accessControl;
         this.rateLimiter = dependencies.rateLimiter;
         this.usageTracker = dependencies.usageTracker;
         this.config = dependencies.config;
         this.logger = dependencies.logger;
         this.ActiveCommandsTracker = dependencies.ActiveCommandsTracker;
+        this.trackingActionHandler = dependencies.commandHandlers.trackingActionHandler;
         this.MAX_MESSAGE_AGE = 600;
         this.commandConfigs = dependencies.commandConfigs;
         console.log('MessageHandler: commandHandlers:', this.commandHandlers);
@@ -211,16 +212,11 @@ class MessageHandler {
             try {
                 const handlerName = command.toLowerCase();
                 if (typeof this.commandHandlers[handlerName] === 'function') {
-                    this.logger.info(`Executing command handler: ${command} for user: ${username} (ID: ${userId})`);
                     await this.commandHandlers[handlerName](this.bot, msg, args, messageThreadId);
-                } else if (typeof this.commandHandler[command] === 'function') {
-                    this.logger.info(`Executing legacy command: ${command} for user: ${username} (ID: ${userId})`);
-                    await this.commandHandler[command](this.bot, msg, args, messageThreadId);
                 } else {
                     throw new Error(`No handler found for command: ${command}`);
-                }                
+                }
             } finally {
-                // 7. Nettoyage et tracking
                 this.ActiveCommandsTracker.removeCommand(userId, command);
                 this.usageTracker.trackUsage(username, command);
             }
@@ -256,11 +252,61 @@ class MessageHandler {
 
     async handleNonCommand(msg, messageThreadId) {
         try {
-            await this.commandHandler.handleMessage(this.bot, msg, messageThreadId);
+            const chatId = msg.chat.id;
+            const text = msg.text.trim();
+            const userState = stateManager.getUserState(chatId);
+    
+            if (userState?.action === 'awaiting_custom_threshold') {
+                const trackingId = userState.trackingId;
+                let trackingInfo = stateManager.getTrackingInfo(chatId, trackingId.split('_')[1]);
+    
+                if (!trackingInfo) {
+                    await this.bot.sendMessage(chatId, 
+                        "Tracking info not found. Please start over.", 
+                        { message_thread_id: messageThreadId }
+                    );
+                    stateManager.deleteUserState(chatId);
+                    return;
+                }
+    
+                const thresholdInput = text.replace('%', '').trim();
+                const threshold = parseFloat(thresholdInput);
+    
+                if (isNaN(threshold) || threshold < 0.1 || threshold > 100) {
+                    await this.bot.sendMessage(chatId, 
+                        "Invalid input. Please enter a number between 0.1 and 100 for the threshold.", 
+                        { message_thread_id: messageThreadId }
+                    );
+                    return;
+                }
+    
+                trackingInfo.threshold = threshold;
+                trackingInfo.awaitingCustomThreshold = false;
+                stateManager.setTrackingInfo(chatId, trackingInfo.tokenAddress, trackingInfo);
+    
+                // Accès au TrackingActionHandler via les dependencies
+                await this.trackingActionHandler.updateTrackingMessage(
+                    this.bot, 
+                    chatId, 
+                    trackingInfo
+                );
+                
+                stateManager.deleteUserState(chatId);
+            } else {
+                await this.bot.sendMessage(chatId, 
+                    "I don't understand your message. Please use a command or follow the instructions.", 
+                    { message_thread_id: messageThreadId }
+                );
+            }
         } catch (error) {
             this.logger.error(`Error handling non-command message:`, error);
+            await this.bot.sendMessage(msg.chat.id, 
+                "An error occurred while processing your message. Please try again.", 
+                { message_thread_id: messageThreadId }
+            );
         }
     }
+
 }
 
 module.exports = MessageHandler;

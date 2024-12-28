@@ -1,11 +1,12 @@
+// bot/telegramBot.js
+
 const path = require('path');
 const TelegramBot = require('node-telegram-bot-api');
 const winston = require('winston');
 const fs = require('fs').promises;
 const config = require('../utils/config');
-const commandHandler = require('./commandHandler');
 const CommandHandlers = require('./commandHandlers/commandHandlers');
-const UserManager = require('./accessManager/userManager');
+const { UserManager } = require('./accessManager/userManager');
 const ActiveCommandsTracker = require('./commandsManager/activeCommandsTracker');
 const { parseCommand, validateArgs, commandConfigs } = require('./commandsManager/commandParser');
 const AccessControlDB = require('./accessManager/accessControlDB');
@@ -15,12 +16,16 @@ const groupMessageLogger = require('./messageDataManager/groupMessageLogger');
 const MessageHandler = require('./messageHandler');
 const { getDatabase } = require('../database/database');
 
+// ====================
+// TelegramBotService
+// ====================
 class TelegramBotService {
     constructor() {
         this.initializeConstants();
         this.setupPaths();
         this.setupLogger();
-        
+
+        // Lance la procédure de démarrage
         this.start().catch(error => {
             this.logger.error('Failed to start bot:', error);
             process.exit(1);
@@ -36,6 +41,7 @@ class TelegramBotService {
         this.basePath = path.resolve(__dirname, '..');
         this.configPath = path.join(this.basePath, 'config');
         this.dataPath = path.join(this.basePath, 'data');
+        // Chemin du fichier users
         this.userFilePath = path.join(this.dataPath, 'all_users.json');
     }
 
@@ -55,9 +61,10 @@ class TelegramBotService {
             await this.initializeDatabase();
             await this.ensureFilesExist();
             await this.initializeBot();
-            await this.initializeManagers();
+            await this.initializeManagers();    // <— on initialise nos managers et handlers
             this.setupMessageHandler();
             this.setupEventListeners();
+
             this.logger.info('Bot successfully started and ready to handle messages!');
         } catch (error) {
             this.logger.error('Error during startup:', error);
@@ -116,8 +123,9 @@ class TelegramBotService {
         try {
             this.logger.info('Initializing bot...');
             this.bot = new TelegramBot(config.TELEGRAM_TOKEN, { polling: true });
+            // Fonction utilitaire pour gérer les longs messages
             this.bot.sendLongMessage = this.sendLongMessage.bind(this);
-            
+
             const me = await this.bot.getMe();
             this.bot.options.username = me.username;
             this.logger.info(`Bot initialized as @${me.username}`);
@@ -129,55 +137,61 @@ class TelegramBotService {
         }
     }
 
-    async initializeManagers() {
+    async setupBotCommands() {
         try {
-            if (!this.db) {
-                throw new Error('Database not initialized');
-            }
-
-            // Initialiser le système de contrôle d'accès avec MongoDB
-            this.accessControl = new AccessControlDB(this.db);
-            await this.accessControl.initialize();
-            this.logger.info('Access control system initialized');
-
-            // Initialiser le gestionnaire d'utilisateurs
-            this.userManager = new UserManager(this.userFilePath);
-            await this.userManager.loadUsers();
-            this.logger.info('User manager initialized');
-
-            // Initialiser les systèmes de limitation et de suivi
-            this.rateLimiter = new RateLimiter(path.join(this.configPath, 'rate_limits.json'));
-            this.usageTracker = new CommandUsageTracker(path.join(this.configPath, 'command_usage.json'));
-            this.logger.info('Rate limiter and usage tracker initialized');
-
-            // Initialiser les gestionnaires de commandes
-            this.commandHandlers = new CommandHandlers(
-                this.userManager,
-                this.accessControl,
-                this.bot
-            );
-
-            // Initialiser les composants supplémentaires
-            await commandHandler.initializeUserManager();
-            await commandHandler.initializeSupplyTracker(
-                this.bot,
-                this.accessControl,
-                this.userManager
-            );
-            groupMessageLogger.initialize();
-
-            this.logger.info('All managers initialized successfully');
+            const botCommands = Object.entries(commandConfigs)
+                .filter(([_, cfg]) => !cfg.hidden)
+                .map(([command, cfg]) => ({
+                    command: command,
+                    description: cfg.description
+                }));
+            await this.bot.setMyCommands(botCommands);
+            this.logger.info('Bot commands menu updated successfully');
         } catch (error) {
-            this.logger.error('Error initializing managers:', error);
+            this.logger.error('Error setting up bot commands:', error);
             throw error;
         }
     }
 
+    async initializeManagers() {
+        if (!this.db) {
+            throw new Error('Database not initialized');
+        }
+
+        // 1. Access Control
+        this.accessControl = new AccessControlDB(this.db);
+        await this.accessControl.initialize();
+        this.logger.info('Access control system initialized');
+
+        // 2. UserManager
+        this.userManager = new UserManager(this.userFilePath);
+        await this.userManager.loadUsers();
+        this.logger.info('User manager initialized');
+
+        // 3. Taux/limites + Usage tracking
+        this.rateLimiter = new RateLimiter(path.join(this.configPath, 'rate_limits.json'));
+        this.usageTracker = new CommandUsageTracker(path.join(this.configPath, 'command_usage.json'));
+        this.logger.info('Rate limiter and usage tracker initialized');
+
+        // 4. Instancier les handlers
+        //    -> On y passe le userManager, l'accessControl, et le bot 
+        this.commandHandlers = new CommandHandlers(
+            this.userManager,
+            this.accessControl,
+            this.bot
+        );
+
+        // 5. Initialiser le groupMessageLogger si nécessaire
+        groupMessageLogger.initialize();
+        this.logger.info('All managers initialized successfully');
+    }
+
     setupMessageHandler() {
+        // On crée le MessageHandler en lui passant nos dépendances 
         this.messageHandler = new MessageHandler({
             bot: this.bot,
             commandHandlers: this.commandHandlers,
-            commandHandler,
+            // Plus besoin de `commandHandler`, c'est `commandHandlers` qui gère tout
             accessControl: this.accessControl,
             rateLimiter: this.rateLimiter,
             usageTracker: this.usageTracker,
@@ -188,31 +202,15 @@ class TelegramBotService {
         });
     }
 
-    async setupBotCommands() {
-        try {
-            const botCommands = Object.entries(commandConfigs)
-                .filter(([_, config]) => !config.hidden)
-                .map(([command, config]) => ({
-                    command: command,
-                    description: config.description
-                }));
-            await this.bot.setMyCommands(botCommands);
-            this.logger.info('Bot commands menu updated successfully');
-        } catch (error) {
-            this.logger.error('Error setting up bot commands:', error);
-            throw error;
-        }
-    }
-
     setupEventListeners() {
-        // Message handler
+        // 1) Messages normaux => on dévie vers le messageHandler
         this.bot.on('message', async (msg) => {
             try {
                 await this.messageHandler.handleMessage(msg);
             } catch (error) {
                 this.logger.error('Error in message handler:', error);
                 try {
-                    await this.bot.sendMessage(msg.chat.id, 
+                    await this.bot.sendMessage(msg.chat.id,
                         'An error occurred while processing your message. Please try again later.'
                     );
                 } catch (sendError) {
@@ -221,22 +219,15 @@ class TelegramBotService {
             }
         });
 
-        // Callback query handler
-        this.bot.on('callback_query', async (callbackQuery) => {
-            try {
-                const messageThreadId = callbackQuery.message.message_thread_id;
-                await commandHandler.handleCallbackQuery(this.bot, callbackQuery, messageThreadId);
-            } catch (error) {
-                this.logger.error('Error in callback query handler:', error);
-            }
-        });
+        // 2) Plus besoin de this.bot.on('callback_query', ...) ici,
+        //    car c'est fait dans le constructor de CommandHandlers
 
-        // Error handler
+        // 3) Polling error
         this.bot.on('polling_error', (error) => {
             this.logger.error('Polling error:', error);
         });
 
-        // Daily limit reset
+        // 4) Reset des limites quotidiennes
         setInterval(() => this.resetDailyLimits(), this.ONE_DAY_IN_MS);
 
         this.logger.info('Event listeners setup completed');
@@ -251,6 +242,9 @@ class TelegramBotService {
         }
     }
 
+    /**
+     * Méthode utilitaire pour scinder un message trop long en plusieurs.
+     */
     async sendLongMessage(chatId, message, options = {}) {
         if (!message) {
             this.logger.error('Attempted to send undefined or null message');
@@ -258,7 +252,6 @@ class TelegramBotService {
         }
 
         const messages = this.splitMessage(String(message));
-        
         for (const msg of messages) {
             if (msg.trim().length > 0) {
                 try {
@@ -269,8 +262,10 @@ class TelegramBotService {
                         message_thread_id: options.message_thread_id
                     });
                 } catch (error) {
-                    if (error.response?.statusCode === 400 && 
-                        error.response?.body.description.includes('message is too long')) {
+                    if (
+                        error.response?.statusCode === 400 &&
+                        error.response?.body.description.includes('message is too long')
+                    ) {
                         const subMessages = this.splitMessage(msg);
                         for (const subMsg of subMessages) {
                             await this.bot.sendMessage(chatId, subMsg, {
@@ -289,6 +284,9 @@ class TelegramBotService {
         }
     }
 
+    /**
+     * Scinde un message en morceaux de taille < MAX_MESSAGE_LENGTH
+     */
     splitMessage(message) {
         if (typeof message !== 'string') {
             message = String(message);
@@ -299,6 +297,7 @@ class TelegramBotService {
         const lines = message.split('\n');
 
         for (const line of lines) {
+            // Si on peut ajouter la ligne sans dépasser la longueur max
             if (currentMessage.length + line.length + 1 <= this.MAX_MESSAGE_LENGTH) {
                 currentMessage += line + '\n';
             } else {
@@ -312,6 +311,6 @@ class TelegramBotService {
     }
 }
 
-// Create and export bot instance
+// Exportation de l'instance
 const botService = new TelegramBotService();
 module.exports = { bot: botService.bot };

@@ -45,13 +45,14 @@ async function connectToDatabase() {
         try {
             await mongoClient.connect();
             // Utiliser une base de données dédiée pour le bot
-            db = mongoClient.db("telegram_bot"); // Assurez-vous que c'est le bon nom
+            db = mongoClient.db("telegram_bot");
             logger.info("Connected to the database");
             
             // Créer les index nécessaires
             const walletCollection = db.collection("wallets");
             const usersCollection = db.collection("users");
             const subscriptionsCollection = db.collection("subscriptions");
+            const paymentAddressesCollection = db.collection("payment_addresses");
 
             await Promise.all([
                 // Index pour les wallets
@@ -65,7 +66,14 @@ async function connectToDatabase() {
                 // Index pour les abonnements
                 subscriptionsCollection.createIndex({ userId: 1 }),
                 subscriptionsCollection.createIndex({ expiresAt: 1 }),
-                subscriptionsCollection.createIndex({ type: 1 })
+                subscriptionsCollection.createIndex({ type: 1 }),
+
+                // Index pour les adresses de paiement
+                paymentAddressesCollection.createIndex({ sessionId: 1 }, { unique: true }),
+                paymentAddressesCollection.createIndex({ username: 1 }),
+                paymentAddressesCollection.createIndex({ expires: 1 }),
+                paymentAddressesCollection.createIndex({ status: 1 }),
+                paymentAddressesCollection.createIndex({ publicKey: 1 }, { unique: true })
             ]);
 
             logger.info("Database indexes created successfully");
@@ -324,6 +332,100 @@ async function addAdmin(username, addedBy = 'system') {
     }
 }
 
+// Fonctions de payment et de sauvegarde des données temporaires
+
+async function savePaymentAddress(paymentData) {
+    const database = await getDatabase();
+    const collection = database.collection("payment_addresses");
+    
+    const paymentAddressData = {
+        sessionId: paymentData.sessionId,
+        username: paymentData.username,
+        publicKey: paymentData.paymentAddress,
+        privateKey: Buffer.from(paymentData.privateKey).toString('base64'), // Encodage en base64 pour stockage sécurisé
+        amount: paymentData.amount,
+        duration: paymentData.duration,
+        created: paymentData.created,
+        expires: paymentData.expires,
+        status: paymentData.status,
+        lastUpdated: new Date()
+    };
+
+    try {
+        const result = await collection.insertOne(paymentAddressData);
+        logger.info(`Payment address saved for session ${paymentData.sessionId}`);
+        return result;
+    } catch (error) {
+        logger.error(`Error saving payment address for session ${paymentData.sessionId}:`, error);
+        throw error;
+    }
+}
+
+async function getPaymentAddress(sessionId) {
+    const database = await getDatabase();
+    const collection = database.collection("payment_addresses");
+    
+    try {
+        return await collection.findOne({ sessionId });
+    } catch (error) {
+        logger.error(`Error retrieving payment address for session ${sessionId}:`, error);
+        return null;
+    }
+}
+
+async function updatePaymentAddressStatus(sessionId, status) {
+    const database = await getDatabase();
+    const collection = database.collection("payment_addresses");
+    
+    try {
+        const result = await collection.updateOne(
+            { sessionId },
+            { 
+                $set: {
+                    status,
+                    lastUpdated: new Date()
+                }
+            }
+        );
+        
+        if (result.modifiedCount > 0) {
+            logger.info(`Payment address status updated for session ${sessionId}: ${status}`);
+        }
+        return result.modifiedCount > 0;
+    } catch (error) {
+        logger.error(`Error updating payment address status for session ${sessionId}:`, error);
+        return false;
+    }
+}
+
+async function cleanupExpiredPaymentAddresses() {
+    const database = await getDatabase();
+    const collection = database.collection("payment_addresses");
+    
+    try {
+        const result = await collection.updateMany(
+            {
+                expires: { $lt: new Date() },
+                status: 'pending'
+            },
+            {
+                $set: {
+                    status: 'expired',
+                    lastUpdated: new Date()
+                }
+            }
+        );
+        
+        if (result.modifiedCount > 0) {
+            logger.info(`Marked ${result.modifiedCount} expired payment addresses`);
+        }
+        return result.modifiedCount;
+    } catch (error) {
+        logger.error('Error cleaning up expired payment addresses:', error);
+        return 0;
+    }
+}
+
 process.on('SIGINT', async () => {
    if (mongoClient) {
        await mongoClient.close();
@@ -341,4 +443,8 @@ module.exports = {
     getUserSubscriptions,
     completeSubscriptionPayment,
     addAdmin,
+    savePaymentAddress,
+    getPaymentAddress,
+    updatePaymentAddressStatus,
+    cleanupExpiredPaymentAddresses
 };
