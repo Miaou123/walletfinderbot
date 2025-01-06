@@ -57,6 +57,11 @@ class MessageHandler {
             return;
         }
     
+        // Si ce n'est pas une commande et que le message est dans un groupe, on l'ignore
+        if (isGroup && !msg.text.startsWith('/')) {
+            return;
+        }
+    
         // Vérification initiale des permissions
         if (msg.text.startsWith('/')) {
             const { command } = parseCommand(msg.text);
@@ -65,7 +70,7 @@ class MessageHandler {
             const commandConfig = this.commandConfigs[command];
             const requiresAuth = commandConfig?.requiresAuth ?? true; // Par défaut, on requiert l'auth si pas de config
             const allowed = await this.accessControl.isAllowed(username, chatId);
-
+    
             if (requiresAuth && !allowed) {
                 if (!isGroup) {
                     const spotsInfo = getAvailableSpots();
@@ -75,15 +80,6 @@ class MessageHandler {
                 }
                 return;
             }
-        } else if (!this.accessControl.isAllowed(username, chatId)) {
-            // Pour les messages non-commandes, on vérifie toujours les permissions
-            if (!isGroup) {
-                const spotsInfo = getAvailableSpots();
-                await this.bot.sendMessage(chatId,
-                    `You don't have access to this bot. ${spotsInfo ? `There are currently ${spotsInfo.availableSpots}/${spotsInfo.maxUsers} spots available.` : ''} Please contact @Rengon0x for access.`
-                );
-            }
-            return;
         }
     
         if (isGroup && msg.text) {
@@ -92,10 +88,11 @@ class MessageHandler {
     
         if (msg.text.startsWith('/')) {
             await this.handleCommand(msg, isGroup, messageThreadId);
-        } else {
+        } else if (!isGroup) {
             await this.handleNonCommand(msg, messageThreadId);
         }
     }
+    
 
     async handleCommand(msg, isGroup, messageThreadId) {
         const { command, args, isAdmin } = parseCommand(msg.text);
