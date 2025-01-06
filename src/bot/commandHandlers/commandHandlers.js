@@ -13,7 +13,7 @@ const BestTradersHandler = require('./bestTradersHandler');
 const SearchHandler = require('./searchHandler');
 const TopHoldersHandler = require('./topHoldersHandler');
 const UserSubscriptionHandler = require('./mySubHandler');
-const SubscriptionCommandHandler = require('./paymentHandler');
+const SubscriptionCommandHandler  = require('./subscriptionCommandHandler');
 const TrackingActionHandler = require('./trackingActionHandler');
 const { SupplyTracker } = require('../../tools/SupplyTracker');
 const TrackerHandler = require('./trackerHandler');
@@ -23,6 +23,7 @@ const ScanHandler = require('./scanHandler');
 const TeamHandler = require('./teamHandler');
 const stateManager = require('../../utils/stateManager');
 
+const config = require('../../utils/config');
 const logger = require('../../utils/logger');
 
 
@@ -30,8 +31,8 @@ class CommandHandlers {
     constructor(userManager, accessControl, bot) {
         this.adminHandler = new AdminCommandHandler(userManager, accessControl, bot);
         this.broadcastHandler = new BroadcastHandler(userManager, accessControl, bot);
-        this.userSubscriptionHandler = new UserSubscriptionHandler(bot);
-        this.subscriptionHandler = new SubscriptionCommandHandler(accessControl);
+        this.userSubscriptionHandler = new UserSubscriptionHandler(accessControl);
+        this.subscriptionHandler = new SubscriptionCommandHandler (accessControl, config.HELIUS_RPC_URL);
         this.startHandler = new StartHandler(userManager);
         this.scanHandler = new ScanHandler(stateManager);
         this.bundleHandler = new BundleHandler();
@@ -66,7 +67,6 @@ class CommandHandlers {
             'start': { handler: this.startHandler.handleCommand, context: this.startHandler },
             'scan': { handler: this.scanHandler.handleCommand, context: this.scanHandler },
             'subscribe': { handler: this.subscriptionHandler.handleCommand, context: this.subscriptionHandler },
-            'confirm': { handler: this.subscriptionHandler.handleConfirm, context: this.subscriptionHandler },
             'mysubscription': { handler: this.userSubscriptionHandler.handleMySubscription, context: this.userSubscriptionHandler },
             'adduser': { handler: this.adminHandler.handleAddUser, context: this.adminHandler },
             'removeuser': { handler: this.adminHandler.handleRemoveUser, context: this.adminHandler },
@@ -112,6 +112,7 @@ class CommandHandlers {
               // Map des handlers de callback
               const callbackHandlers = {
                 'sub': this.subscriptionHandler,
+                'check': this.subscriptionHandler,
                 'track': this.trackingActionHandler,
                 'details': this.teamHandler,
                 'sd': this.trackingActionHandler,

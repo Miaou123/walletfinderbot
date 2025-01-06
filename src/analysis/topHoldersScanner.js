@@ -1,6 +1,4 @@
 const { getSolanaApi } = require('../integrations/solanaApi');
-const gmgnApi = require('../integrations/gmgnApi');
-const dexscreenerApi = require('../integrations/dexScreenerApi');
 const { getAssetsForMultipleWallets } = require('../tools/walletValueCalculator');
 const { checkInactivityPeriod } = require('../tools/inactivityPeriod');
 const { getTopHolders } = require('../tools/getHolders');
@@ -75,7 +73,7 @@ async function scanToken(tokenAddress, requestedHolders = 10, trackSupply = fals
           category = 'High Value';
         } else {
           const solanaApi = getSolanaApi();
-          const transactions = await solanaApi.getSignaturesForAddress(holder.address, { limit: config.LOW_TRANSACTION_THRESHOLD + 1 }, mainContext);
+          const transactions = await solanaApi.getSignaturesForAddress(holder.address, { limit: config.LOW_TRANSACTION_THRESHOLD }, mainContext);
           const transactionCount = transactions.length;
 
           if (transactionCount < config.LOW_TRANSACTION_THRESHOLD) {

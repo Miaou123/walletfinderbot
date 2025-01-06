@@ -160,7 +160,7 @@ class TelegramBotService {
 
         // 1. Access Control
         this.accessControl = new AccessControlDB(this.db);
-        await this.accessControl.initialize();
+        await this.accessControl.ensureIndexes();
         this.logger.info('Access control system initialized');
 
         // 2. UserManager
@@ -250,10 +250,16 @@ class TelegramBotService {
             this.logger.error('Attempted to send undefined or null message');
             return;
         }
-
+    
+        // Log du message complet avant de le découper
+        this.logger.info(`sendLongMessage -> full original message:\n${JSON.stringify(message)}`);
+    
         const messages = this.splitMessage(String(message));
         for (const msg of messages) {
             if (msg.trim().length > 0) {
+                // Log du chunk juste avant de l'envoyer
+                this.logger.info(`sendLongMessage -> sending chunk:\n${JSON.stringify(msg)}`);
+    
                 try {
                     await this.bot.sendMessage(chatId, msg, {
                         parse_mode: 'HTML',
@@ -262,12 +268,15 @@ class TelegramBotService {
                         message_thread_id: options.message_thread_id
                     });
                 } catch (error) {
+                    // Log l'erreur si c'est une question de message trop long
                     if (
                         error.response?.statusCode === 400 &&
                         error.response?.body.description.includes('message is too long')
                     ) {
+                        // Découpe encore en sous-chunks et log à nouveau
                         const subMessages = this.splitMessage(msg);
                         for (const subMsg of subMessages) {
+                            this.logger.info(`sendLongMessage -> sending sub-chunk:\n${JSON.stringify(subMsg)}`);
                             await this.bot.sendMessage(chatId, subMsg, {
                                 parse_mode: 'HTML',
                                 disable_web_page_preview: true,
@@ -283,6 +292,7 @@ class TelegramBotService {
             }
         }
     }
+    
 
     /**
      * Scinde un message en morceaux de taille < MAX_MESSAGE_LENGTH

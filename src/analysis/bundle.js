@@ -437,7 +437,7 @@ class UnifiedBundleAnalyzer {
     async isFreshWallet(address, mainContext, subContext) {
         try {
             const solanaApi = getSolanaApi();
-            const signatures = await solanaApi.getSignaturesForAddress(address, { limit: this.FRESH_WALLET_THRESHOLD + 1 }, mainContext, subContext);
+            const signatures = await solanaApi.getSignaturesForAddress(address, { limit: this.FRESH_WALLET_THRESHOLD }, mainContext, subContext);
             return signatures.length <= this.FRESH_WALLET_THRESHOLD;
         } catch (error) {
             logger.error(`Error checking if ${address} is a fresh wallet:`, error);

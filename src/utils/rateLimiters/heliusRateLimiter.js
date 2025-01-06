@@ -1,71 +1,174 @@
+// heliusRateLimiter.js
 const Bottleneck = require('bottleneck');
 const axios = require('axios');
+const logger = require('../../utils/logger');
 
 class HeliusRateLimiter {
   constructor() {
-    // Limiteur pour les appels RPC
     this.rpcLimiter = new Bottleneck({
-      reservoir: 50, // Nombre de requêtes par seconde pour RPC
-      reservoirRefreshAmount: 50,
-      reservoirRefreshInterval: 1000, // Rafraîchit chaque seconde
-      maxConcurrent: 5, // Nombre maximum de requêtes simultanées
-      minTime: 0, // Temps minimum entre les requêtes
-    });
-
-    // Limiteur pour les appels API
-    this.apiLimiter = new Bottleneck({
-      reservoir: 10, // Nombre de requêtes par seconde pour API
-      reservoirRefreshAmount: 10,
+      reservoir: 500,
+      reservoirRefreshAmount: 500,
       reservoirRefreshInterval: 1000,
-      maxConcurrent: 5,
-      minTime: 0,
+      maxConcurrent: 200,
+      minTime: 2,
     });
 
-    this.retryOptions = {
-      retries: 3, // Nombre de retries
-      initialDelay: 1000, // Délai initial en ms
-      backoffFactor: 2, // Facteur de backoff exponentiel
+    this.apiLimiter = new Bottleneck({
+      reservoir: 100,
+      reservoirRefreshAmount: 100,
+      reservoirRefreshInterval: 1000,
+      maxConcurrent: 50,
+      minTime: 10,
+    });
+
+    this.requestQueue = {
+      rpc: new Map(),
+      api: new Map()
     };
+
+    this.stats = {
+      totalRequests: 0,
+      failedRequests: 0,
+      timeoutRequests: 0,
+      nullResponseErrors: 0,
+      longTermStorageErrors: 0,
+    };
+
+    this.defaultTimeout = 15000;
+
+    // Démarrer le traitement automatique des batchs
+    setInterval(() => this.processBatches(), 50);
   }
 
-  async rateLimitedAxios(requestConfig, apiType) {
-    const limiter = apiType === 'api' ? this.apiLimiter : this.rpcLimiter;
+  getRequestKey(config) {
+    const method = config.data?.method || '';
+    const baseParams = config.data?.params?.[0] || '';
+    return `${method}_${typeof baseParams === 'string' ? baseParams : JSON.stringify(baseParams)}`;
+  }
 
-    const task = async () => {
-      let retries = this.retryOptions.retries;
-      let delay = this.retryOptions.initialDelay;
+  async rateLimitedAxios(requestConfig, apiType, context = {}) {
+    const requestId = Math.random().toString(36).substring(7);
+    const requestKey = this.getRequestKey(requestConfig);
+    
+    logger.debug(`[${requestId}] Queueing request: ${requestKey}`);
 
-      while (true) {
-        try {
-          const response = await axios(requestConfig);
-          return response;
-        } catch (error) {
-          retries -= 1;
-          if (retries <= 0) {
-            throw error;
-          }
-          if (this.isRetryableError(error)) {
-            console.warn(`Request failed: ${error.message}. Retrying in ${delay}ms...`);
-            await new Promise((resolve) => setTimeout(resolve, delay));
-            delay *= this.retryOptions.backoffFactor;
-          } else {
-            throw error; // Ne pas retry pour les erreurs non récupérables
-          }
-        }
+    return new Promise((resolve, reject) => {
+      if (!this.requestQueue[apiType].has(requestKey)) {
+        this.requestQueue[apiType].set(requestKey, []);
       }
-    };
-
-    return limiter.schedule(() => task());
+      
+      this.requestQueue[apiType].get(requestKey).push({
+        config: requestConfig,
+        context,
+        requestId,
+        resolve,
+        reject,
+        timestamp: Date.now()
+      });
+    });
   }
 
-  isRetryableError(error) {
-    if (error.isAxiosError) {
-      // Pour les erreurs Axios
-      return !error.response || error.response.status >= 500 || error.code === 'ECONNABORTED';
-    } else {
-      // Pour d'autres types d'erreurs
-      return true; // Vous pouvez affiner cette logique selon vos besoins
+  async processBatches() {
+    for (const apiType of ['rpc', 'api']) {
+      for (const [key, requests] of this.requestQueue[apiType].entries()) {
+        if (requests.length === 0) {
+          this.requestQueue[apiType].delete(key);
+          continue;
+        }
+
+        const batch = requests.splice(0, 50);
+        this.processBatch(batch, apiType);
+      }
     }
+  }
+
+  async processBatch(batch, apiType) {
+    const limiter = apiType === 'api' ? this.apiLimiter : this.rpcLimiter;
+    
+    try {
+      const promises = batch.map(request => 
+        limiter.schedule(() => this.executeRequest(request))
+      );
+
+      const results = await Promise.all(promises);
+      
+      batch.forEach((request, index) => {
+        request.resolve(results[index]);
+      });
+    } catch (error) {
+      logger.error('Batch processing error:', error);
+      batch.forEach(request => request.reject(error));
+    }
+  }
+
+  async executeRequest(request) {
+    const { config, requestId, context } = request;
+    const startTime = Date.now();
+    this.stats.totalRequests++;
+
+    try {
+      logger.debug(`[${requestId}] Executing request...`);
+      
+      const response = await axios({
+        ...config,
+        timeout: config.timeout || this.defaultTimeout
+      });
+
+      if (!response || !response.data) {
+        this.stats.nullResponseErrors++;
+        return null;
+      }
+
+      if (this.isHeliusError(response.data)) {
+        if (this.isLongTermStorageError(response.data.error)) {
+          this.stats.longTermStorageErrors++;
+          return null;
+        }
+        this.stats.failedRequests++;
+        return null;
+      }
+
+      logger.debug(`[${requestId}] Success in ${Date.now() - startTime}ms`);
+      return response;
+
+    } catch (error) {
+      if (error.code === 'ECONNABORTED') {
+        this.stats.timeoutRequests++;
+      }
+      this.stats.failedRequests++;
+      logger.error(`[${requestId}] Request failed:`, error);
+      return null;
+    }
+  }
+
+  isHeliusError(response) {
+    return response && response.jsonrpc === '2.0' && response.error;
+  }
+
+  isLongTermStorageError(error) {
+    return error?.code === -32019 || 
+           error?.message?.includes('Failed to query long-term storage');
+  }
+
+  getStats() {
+    const total = this.stats.totalRequests || 1;
+    return {
+      ...this.stats,
+      failureRate: `${((this.stats.failedRequests / total) * 100).toFixed(2)}%`,
+      timeoutRate: `${((this.stats.timeoutRequests / total) * 100).toFixed(2)}%`,
+      nullResponseRate: `${((this.stats.nullResponseErrors / total) * 100).toFixed(2)}%`,
+      longTermStorageRate: `${((this.stats.longTermStorageErrors / total) * 100).toFixed(2)}%`,
+    };
+  }
+
+  resetStats() {
+    this.stats = {
+      totalRequests: 0,
+      failedRequests: 0,
+      timeoutRequests: 0,
+      nullResponseErrors: 0,
+      longTermStorageErrors: 0,
+    };
   }
 }
 

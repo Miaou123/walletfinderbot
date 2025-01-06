@@ -12,18 +12,21 @@ class AdminCommandHandler {
      * Handle the adduser command
      */
     async handleAddUser(bot, msg, args) {
-        // La structure est bonne mais il faut ajouter le chatId
         const chatId = msg.chat.id;
         const adminUsername = msg.from.username;
     
         try {
-            if (!await this.accessControl.isAdmin(adminUsername)) { // Ajout du await
-                await bot.sendLongMessage(chatId, "You are not authorized to use this command.");
+            if (!await this.accessControl.isAdmin(adminUsername)) {
+                await bot.sendMessage(chatId, "You are not authorized to use this command.");
                 return;
             }
     
             if (args.length < 2) {
-                await bot.sendLongMessage(chatId, "Usage: /adduser <username> <type>\nTypes: normal, vip, admin");
+                // Échapper les chevrons
+                await bot.sendMessage(
+                    chatId,
+                    "Usage: /adduser &lt;username&gt; &lt;type&gt;\nTypes: normal, vip, admin"
+                );
                 return;
             }
     
@@ -33,7 +36,7 @@ class AdminCommandHandler {
     
             // Ajout du chatId (null car on ne le connait pas encore)
             await this.accessControl.addUser(newUser, role, null);
-            await bot.sendLongMessage(chatId, `User ${newUser} has been added as ${role}.`);
+            await bot.sendMessage(chatId, `User ${newUser} has been added as ${role}.`);
         } catch (error) {
             logger.error('Error in adduser command:', error);
             await bot.sendMessage(chatId, "An error occurred while adding the user.");
@@ -54,7 +57,8 @@ class AdminCommandHandler {
             }
 
             if (args.length < 1) {
-                await bot.sendLongMessage(chatId, "Usage: /removeuser <username>");
+                // Échapper les chevrons
+                await bot.sendLongMessage(chatId, "Usage: /removeuser &lt;username&gt;");
                 return;
             }
 
@@ -101,12 +105,14 @@ class AdminCommandHandler {
             } else {
                 // En privé, on a besoin de l'ID du groupe et du type
                 if (args.length < 2) {
-                    const helpMessage = "Usage in private chat:\n" +
-                                    "<code>/addgroup &lt;group_id&gt; &lt;type&gt;</code>\n\n" +
-                                    "Types: normal, vip\n\n" +
-                                    "Example:\n" +
-                                    "<code>/addgroup -1001234567890 normal</code>\n\n" +
-                                    "Note: To add a group directly, execute the command in the target group.";
+                    const helpMessage = 
+                        "Usage in private chat:\n" +
+                        "<code>/addgroup &lt;group_id&gt; &lt;type&gt;</code>\n\n" +
+                        "Types: normal, vip\n\n" +
+                        "Example:\n" +
+                        "<code>/addgroup -1001234567890 normal</code>\n\n" +
+                        "Note: To add a group directly, execute the command in the target group.";
+                    
                     await bot.sendLongMessage(chatId, helpMessage, { parse_mode: 'HTML' });
                     return;
                 }
@@ -122,14 +128,12 @@ class AdminCommandHandler {
 
             // Vérifier l'accès au groupe
             try {
-                // D'abord, vérifier si on peut accéder aux informations du groupe
                 const chat = await bot.getChat(targetGroupId);
-                
-                // Ensuite, vérifier si le bot est membre du groupe en utilisant son ID
                 const chatMember = await bot.getChatMember(targetGroupId, botId.toString());
                 
                 if (!['administrator', 'member'].includes(chatMember.status)) {
-                    await bot.sendLongMessage(chatId, 
+                    await bot.sendLongMessage(
+                        chatId, 
                         "The bot is not a member of this group. " +
                         "Please add the bot to the group first."
                     );
@@ -146,13 +150,15 @@ class AdminCommandHandler {
                 // Si on n'est pas dans le groupe cible, envoyer une confirmation là-bas aussi
                 if (chatId !== targetGroupId) {
                     try {
-                        await bot.sendMessage(targetGroupId, 
+                        await bot.sendMessage(
+                            targetGroupId,
                             "This group has been whitelisted. " +
                             "All members can now use the bot's commands in this group chat."
                         );
                     } catch (error) {
                         logger.error('Error sending group confirmation:', error);
-                        await bot.sendLongMessage(chatId, 
+                        await bot.sendLongMessage(
+                            chatId, 
                             "Group was whitelisted but I couldn't send a confirmation message. " +
                             "Make sure the bot has permission to send messages in the group."
                         );
@@ -167,7 +173,8 @@ class AdminCommandHandler {
                         description: error.response?.body?.description
                     });
                 }
-                await bot.sendLongMessage(chatId, 
+                await bot.sendLongMessage(
+                    chatId, 
                     "Could not access the group. Please make sure:\n" +
                     "1. The bot is added to the group\n" +
                     "2. The bot has necessary permissions (can read messages and send messages)\n" +
@@ -194,7 +201,8 @@ class AdminCommandHandler {
             }
 
             if (args.length < 1) {
-                await bot.sendLongMessage(chatId, "Usage: /removegroup <group_id>");
+                // Échapper
+                await bot.sendLongMessage(chatId, "Usage: /removegroup &lt;group_id&gt;");
                 return;
             }
 
@@ -209,7 +217,10 @@ class AdminCommandHandler {
             await bot.sendLongMessage(chatId, `Group ${groupId} has been removed from whitelist.`);
             
             try {
-                await bot.sendMessage(groupId, "This group has been removed from the whitelist. Commands will no longer be available in this group chat.");
+                await bot.sendMessage(
+                    groupId, 
+                    "This group has been removed from the whitelist. Commands will no longer be available in this group chat."
+                );
             } catch (error) {
                 await bot.sendLongMessage(chatId, "Group was removed but I couldn't send a notification message.");
             }
@@ -219,6 +230,9 @@ class AdminCommandHandler {
         }
     }
 
+    /**
+     * Handle the addsub command (Add Subscription)
+     */
     async handleAddSubscription(bot, msg, args) {
         const chatId = msg.chat.id;
         const adminUsername = msg.from.username;
@@ -231,142 +245,109 @@ class AdminCommandHandler {
                 await bot.sendMessage(chatId, "You are not authorized to use this command.");
                 return;
             }
-            logger.info('Admin check passed');
     
-            // Les arguments sont séparés par des virgules
-            let processedArgs = args.length === 1 ? args[0].split(',').map(arg => arg.trim()) : args;
+            // Simplification du traitement des arguments
+            const processedArgs = Array.isArray(args) ? args : args.split(',').map(arg => arg.trim());
             logger.info(`Processed args: ${JSON.stringify(processedArgs)}`);
     
-            if (processedArgs.length < 3) {
-                logger.info('Invalid number of arguments');
-                await bot.sendMessage(chatId, 
-                    "Usage: /addsub <username> <type> <duration>\n" +
-                    "Types: basic, vip\n" +
-                    "Durations: 1month, 3month, 6month"
+            if (processedArgs.length < 2) {
+                // Échapper
+                await bot.sendMessage(
+                    chatId, 
+                    "Usage: /addsub &lt;username&gt; &lt;duration&gt;\n" +
+                    "Example: /addsub username 3month\n" +
+                    "Available durations: 1month, 3month, 6month"
                 );
                 return;
             }
     
-            const [username, type, duration] = processedArgs;
+            // Extraire et valider les arguments
+            const [username, duration] = processedArgs;
             const normalizedUsername = username.replace(/^@/, '').toLowerCase();
-            logger.info(`Processing subscription for user: ${normalizedUsername}, type: ${type}, duration: ${duration}`);
-    
-            // Vérifier les valeurs valides
-            if (!['basic', 'vip'].includes(type.toLowerCase())) {
-                logger.info(`Invalid type: ${type}`);
-                await bot.sendMessage(chatId, "Invalid type. Use 'basic' or 'vip'.");
+            const normalizedDuration = duration.toLowerCase();
+            
+            if (!['1month', '3month', '6month'].includes(normalizedDuration)) {
+                await bot.sendMessage(
+                    chatId,
+                    "Invalid duration. Available options:\n" +
+                    "• 1month\n" +
+                    "• 3month\n" +
+                    "• 6month"
+                );
                 return;
-            }
-    
-            if (!['1month', '3month', '6month'].includes(duration.toLowerCase())) {
-                logger.info(`Invalid duration: ${duration}`);
-                await bot.sendMessage(chatId, "Invalid duration. Use '1month', '3month' or '6month'.");
-                return;
-            }
-    
-            logger.info('Validation passed, checking if user exists in database');
-            let user = await this.accessControl.usersCollection.findOne({ username: normalizedUsername });
-            logger.info(`User found in database: ${!!user}`);
-    
-            if (!user) {
-                logger.info('Creating new user in database');
-                user = {
-                    username: normalizedUsername,
-                    role: 'user',
-                    firstSeen: new Date(),
-                    lastUpdated: new Date()
-                };
-                try {
-                    const result = await this.accessControl.usersCollection.insertOne(user);
-                    user._id = result.insertedId;
-                    logger.info(`New user created with ID: ${user._id}`);
-                } catch (error) {
-                    logger.error('Error creating user:', error);
-                    throw error;
-                }
             }
     
             // Créer l'abonnement
-            const now = new Date();
-            const subscriptionData = {
-                userId: user._id.toString(),
-                username: normalizedUsername,
-                type: type.toLowerCase(),
-                duration: duration.toLowerCase(),
-                startDate: now,
-                expiresAt: new Date(now.getTime() + subscriptionDurations[duration.toLowerCase()]),
-                active: true,
-                lastUpdated: now,
-                paymentId: `test_payment_${Date.now()}`,
-                paymentStatus: 'completed',
-                metadata: {
-                    addedBy: adminUsername,
-                    addedFrom: chatId,
-                    testSubscription: true
-                }
-            };
+            const paymentId = `test_payment_${Date.now()}`;
+            await this.accessControl.createSubscription(normalizedUsername, normalizedDuration);
+            await this.accessControl.updateSubscriptionPayment(normalizedUsername, paymentId, 'completed');
     
-            logger.info('Attempting to insert subscription into database');
-            logger.debug('Subscription data:', subscriptionData);
-    
-            try {
-                const result = await this.accessControl.subscriptionsCollection.insertOne(subscriptionData);
-                logger.info(`Subscription insert result: ${JSON.stringify(result)}`);
-    
-                if (result.acknowledged) {
-                    const message = `Subscription created for ${normalizedUsername}:\n` +
-                                  `Type: ${type.toLowerCase()}\n` +
-                                  `Duration: ${duration.toLowerCase()}\n` +
-                                  `Expires: ${subscriptionData.expiresAt.toLocaleDateString()}`;
-                    
-                    logger.info('Sending success message to user');
-                    await bot.sendMessage(chatId, message);
-                    logger.info('Command completed successfully');
-                } else {
-                    throw new Error('Failed to insert subscription');
-                }
-            } catch (error) {
-                logger.error('Error inserting subscription:', error);
-                throw error;
-            }
-    
+            const subscription = await this.accessControl.getSubscription(normalizedUsername);
+            
+            await bot.sendMessage(
+                chatId, 
+                `✅ Subscription created\n\n` +
+                `User: ${normalizedUsername}\n` +
+                `Duration: ${normalizedDuration}\n` +
+                `Expires: ${subscription.expiresAt.toLocaleDateString()}\n` +
+                `Payment ID: ${paymentId}`
+            );
+                
         } catch (error) {
             logger.error('Error in addsub command:', error);
-            await bot.sendMessage(chatId, "An error occurred while creating the subscription.");
+            await bot.sendMessage(
+                chatId, 
+                "❌ An error occurred while creating the subscription.\n" +
+                "Please try again or contact support."
+            );
         }
     }
-    
+
+    /**
+     * Handle the checksub command
+     */
     async handleCheckSubscription(bot, msg, args) {
         const chatId = msg.chat.id;
         const adminUsername = msg.from.username;
     
         try {
             if (!await this.accessControl.isAdmin(adminUsername)) {
-                await bot.sendLongMessage(chatId, "You are not authorized to use this command.");
+                await bot.sendMessage(chatId, "You are not authorized to use this command.");
                 return;
             }
     
             if (args.length < 1) {
-                await bot.sendLongMessage(chatId, "Usage: /checksub <username>");
+                // Échapper
+                await bot.sendMessage(chatId, "Usage: /checksub &lt;username&gt;");
                 return;
             }
     
             const username = args[0];
-            const subscription = await this.accessControl.getActiveSubscription(username);
+            const subscription = await this.accessControl.getSubscription(username);
             
             if (!subscription) {
-                await bot.sendLongMessage(chatId, `No active subscription found for ${username}`);
+                await bot.sendMessage(chatId, `No subscription found for @${username}`);
                 return;
             }
     
-            await bot.sendLongMessage(chatId, 
-                `Subscription info for ${username}:\n` +
-                `Type: ${subscription.type}\n` +
-                `Duration: ${subscription.duration}\n` +
-                `Status: ${subscription.active ? 'Active' : 'Inactive'}\n` +
-                `Payment: ${subscription.paymentStatus}\n` +
-                `Expires: ${subscription.expiresAt.toLocaleDateString()}`
-            );
+            let message = `📊 Subscription info for @${username}:\n\n`;
+            message += `Status: ${subscription.active ? '✅ Active' : '❌ Inactive'}\n`;
+            message += `Valid until: ${subscription.expiresAt.toLocaleString()}\n\n`;
+            message += `💳 Payment History:\n`;
+
+            // Show last 3 payments
+            const recentPayments = subscription.paymentHistory
+                .slice(-3)
+                .reverse()
+                .map(payment =>
+                    `• ${new Date(payment.paymentDate).toLocaleDateString()}: ` +
+                    `${payment.duration} (${payment.paymentStatus})`
+                )
+                .join('\n');
+
+            message += recentPayments;
+            
+            await bot.sendMessage(chatId, message);
         } catch (error) {
             logger.error('Error in checksub command:', error);
             await bot.sendMessage(chatId, "An error occurred while checking the subscription.");
@@ -405,103 +386,79 @@ class AdminCommandHandler {
         }
     }
 
-    async handleListSubscriptions(bot, msg, args) {
+    /**
+     * Handle the listsubs command (List Subscriptions)
+     */
+    async handleListSubscriptions(bot, msg) {
         const chatId = msg.chat.id;
         const adminUsername = msg.from.username;
     
         try {
             if (!await this.accessControl.isAdmin(adminUsername)) {
-                await bot.sendLongMessage(chatId, "You are not authorized to use this command.");
+                await bot.sendMessage(chatId, "You are not authorized to use this command.");
                 return;
             }
     
-            // Option pour filtrer par type
-            let type = args[0]?.toLowerCase();
-            if (type && !['basic', 'vip'].includes(type)) {
-                type = null;
-            }
-    
-            const filter = {
-                active: true,
-                expiresAt: { $gt: new Date() }
-            };
-            
-            if (type) {
-                filter.type = type;
-            }
-    
             const subscriptions = await this.accessControl.subscriptionsCollection
-                .find(filter)
-                .sort({ username: 1 }) // Tri par nom d'utilisateur
+                .find({ active: true })
+                .sort({ username: 1 })
                 .toArray();
     
             if (subscriptions.length === 0) {
-                await bot.sendLongMessage(chatId, 
-                    type 
-                        ? `No active ${type} subscriptions found.`
-                        : "No active subscriptions found."
-                );
+                await bot.sendMessage(chatId, "No active subscriptions found.");
                 return;
             }
     
             let message = "🔄 Active Subscriptions List\n\n";
             
             for (const sub of subscriptions) {
+                const daysLeft = Math.ceil((new Date(sub.expiresAt) - new Date()) / (1000 * 60 * 60 * 24));
+                
                 message += `👤 User: @${sub.username}\n`;
-                message += `📋 Type: ${sub.type.toUpperCase()}\n`;
-                message += `⏱️ Duration: ${sub.duration}\n`;
-                message += `📅 Start Date: ${sub.startDate.toLocaleString()}\n`;
-                message += `⚠️ Expires: ${sub.expiresAt.toLocaleString()}\n`;
-                message += `💳 Payment ID: ${sub.paymentId || 'N/A'}\n`;
-                message += `💰 Payment Status: ${sub.paymentStatus}\n`;
-                message += `\n${'─'.repeat(30)}\n\n`;
+                message += `📅 Valid until: ${sub.expiresAt.toLocaleString()}\n`;
+                message += `⚡ Days remaining: ${daysLeft}\n`;
+                message += `💳 Last payment: ${sub.paymentHistory[sub.paymentHistory.length - 1].paymentId}\n`;
+                message += `${'─'.repeat(30)}\n\n`;
             }
     
-            // Ajouter un résumé à la fin
-            const summary = {
-                total: subscriptions.length,
-                basic: subscriptions.filter(s => s.type === 'basic').length,
-                vip: subscriptions.filter(s => s.type === 'vip').length
-            };
+            message += `📊 Total Active Subscriptions: ${subscriptions.length}\n`;
     
-            message += `📊 Summary:\n`;
-            message += `Total Active Subscriptions: ${summary.total}\n`;
-            message += `Basic Subscriptions: ${summary.basic}\n`;
-            message += `VIP Subscriptions: ${summary.vip}\n`;
-    
-            await bot.sendLongMessage(chatId, message);
+            await bot.sendMessage(chatId, message);
         } catch (error) {
             logger.error('Error in listsubs command:', error);
             await bot.sendMessage(chatId, "An error occurred while listing subscriptions.");
         }
     }
 
+    /**
+     * Handle the removesub command
+     */
     async handleRemoveSubscription(bot, msg, args) {
         const chatId = msg.chat.id;
         const adminUsername = msg.from.username;
     
         try {
             if (!await this.accessControl.isAdmin(adminUsername)) {
-                await bot.sendLongMessage(chatId, "You are not authorized to use this command.");
+                await bot.sendMessage(chatId, "You are not authorized to use this command.");
                 return;
             }
     
             if (args.length < 1) {
-                await bot.sendLongMessage(chatId, "Usage: /removesub <username>");
+                // Échapper
+                await bot.sendMessage(chatId, "Usage: /removesub &lt;username&gt;");
                 return;
             }
     
             const username = args[0];
-            const subscription = await this.accessControl.getActiveSubscription(username);
+            const subscription = await this.accessControl.getSubscription(username);
     
             if (!subscription) {
-                await bot.sendLongMessage(chatId, `No active subscription found for ${username}`);
+                await bot.sendMessage(chatId, `No subscription found for @${username}`);
                 return;
             }
     
-            // Désactiver l'abonnement plutôt que de le supprimer
             const result = await this.accessControl.subscriptionsCollection.updateOne(
-                { _id: subscription._id },
+                { username: this.accessControl.normalizeUsername(username) },
                 { 
                     $set: { 
                         active: false,
@@ -511,13 +468,13 @@ class AdminCommandHandler {
             );
     
             if (result.modifiedCount > 0) {
-                await bot.sendLongMessage(chatId, 
-                    `Subscription removed for ${username}\n` +
-                    `Type: ${subscription.type}\n` +
-                    `Duration: ${subscription.duration}`
+                await bot.sendMessage(
+                    chatId, 
+                    `Subscription deactivated for @${username}\n` +
+                    `Last valid until: ${subscription.expiresAt.toLocaleString()}`
                 );
             } else {
-                await bot.sendLongMessage(chatId, `Failed to remove subscription for ${username}`);
+                await bot.sendMessage(chatId, `Failed to deactivate subscription for @${username}`);
             }
         } catch (error) {
             logger.error('Error in removesub command:', error);
