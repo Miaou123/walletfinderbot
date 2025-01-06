@@ -91,7 +91,7 @@ class MessageHandler {
         } else if (!isGroup) {
             await this.handleNonCommand(msg, messageThreadId);
         }
-    }
+    }    
     
 
     async handleCommand(msg, isGroup, messageThreadId) {
