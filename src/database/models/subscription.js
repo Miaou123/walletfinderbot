@@ -1,18 +1,22 @@
 const Joi = require('joi');
 
-const subscriptionTypes = ['basic', 'vip'];
+// Schema for individual payment records
+const paymentRecordSchema = Joi.object({
+    paymentId: Joi.string().required(),
+    duration: Joi.string().valid('1month', '3month', '6month').required(),
+    paymentDate: Joi.date().default(Date.now),
+    paymentStatus: Joi.string().valid('pending', 'completed', 'failed').default('completed'),
+    amount: Joi.number().optional()
+});
 
+// Main subscription schema
 const subscriptionSchema = Joi.object({
-    userId: Joi.string().required(),
     username: Joi.string().required(),
-    type: Joi.string().valid(...subscriptionTypes).required(),
     startDate: Joi.date().default(Date.now),
     expiresAt: Joi.date().greater('now').required(),
     active: Joi.boolean().default(true),
     lastUpdated: Joi.date().default(Date.now),
-    paymentId: Joi.string().optional(),
-    paymentStatus: Joi.string().valid('pending', 'completed', 'failed').default('pending'),
-    duration: Joi.string().valid('1month', '3month', '6month').required(),
+    paymentHistory: Joi.array().items(paymentRecordSchema).default([])
 });
 
 function validateSubscription(subscription) {
@@ -42,38 +46,22 @@ const subscriptionDurations = {
     '6month': 180 * 24 * 60 * 60 * 1000   // 180 jours
 };
 
-// Configuration des plans d'abonnement
-const subscriptionPlans = {
-    basic: {
-        name: 'Basic',
-        features: [
-            'Accès aux commandes de base',
-            'Support standard'
-        ],
-        prices: {
-            '1month': 10,
-            '3month': 25,
-            '6month': 45
-        }
-    },
-    vip: {
-        name: 'VIP',
-        features: [
-            'Accès à toutes les commandes',
-            'Support prioritaire',
-            'Fonctionnalités exclusives'
-        ],
-        prices: {
-            '1month': 20,
-            '3month': 50,
-            '6month': 90
-        }
+// Configuration du plan d'abonnement
+const subscriptionPlan = {
+    name: 'Standard',
+    features: [
+        'Access to all commands',
+        'Priority support'
+    ],
+    prices: {
+        '1month': 10,
+        '3month': 25,
+        '6month': 45
     }
 };
 
 module.exports = {
     validateSubscription,
-    subscriptionTypes,
     subscriptionDurations,
-    subscriptionPlans
+    subscriptionPlan
 };

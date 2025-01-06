@@ -36,6 +36,96 @@ if (!mongoClient) {
    });
 }
 
+async function updateIndexes(db) {
+    try {
+        logger.info('Starting index verification...');
+        
+        // Définir les index requis pour chaque collection
+        const collections = {
+            wallets: {
+                collection: db.collection("wallets"),
+                indexes: [
+                    { key: { address: 1 }, options: { unique: true } }
+                ]
+            },
+            users: {
+                collection: db.collection("users"),
+                indexes: [
+                    { key: { username: 1 }, options: { unique: true } },
+                    { key: { chatId: 1 }, options: {} },
+                    { key: { role: 1 }, options: {} }
+                ]
+            },
+            subscriptions: {
+                collection: db.collection("subscriptions"),
+                indexes: [
+                    { key: { username: 1 }, options: { unique: true } },
+                    { key: { expiresAt: 1 }, options: {} },
+                    { key: { active: 1 }, options: {} }
+                ]
+            },
+            payment_addresses: {
+                collection: db.collection("payment_addresses"),
+                indexes: [
+                    { key: { sessionId: 1 }, options: { unique: true } },
+                    { key: { username: 1 }, options: {} },
+                    { key: { expires: 1 }, options: {} },
+                    { key: { publicKey: 1 }, options: { unique: true } }
+                ]
+            }
+        };
+
+        // Traiter chaque collection
+        for (const [collectionName, config] of Object.entries(collections)) {
+            logger.info(`Processing indexes for ${collectionName}...`);
+            
+            try {
+                // Obtenir les index existants
+                const existingIndexes = await config.collection.listIndexes().toArray();
+                
+                // Pour chaque index requis
+                for (const indexDef of config.indexes) {
+                    const keyString = Object.entries(indexDef.key)
+                        .map(([k, v]) => `${k}_${v}`)
+                        .join('_');
+                    
+                    // Vérifier si un index similaire existe
+                    const existingIndex = existingIndexes.find(idx => 
+                        JSON.stringify(idx.key) === JSON.stringify(indexDef.key)
+                    );
+
+                    if (!existingIndex) {
+                        logger.info(`Creating index ${keyString} for ${collectionName}`);
+                        await config.collection.createIndex(
+                            indexDef.key,
+                            indexDef.options
+                        );
+                    } else if (
+                        existingIndex.unique !== indexDef.options.unique && 
+                        indexDef.options.unique !== undefined
+                    ) {
+                        // S'il existe mais avec des options différentes
+                        logger.info(`Recreating index ${keyString} for ${collectionName}`);
+                        await config.collection.dropIndex(existingIndex.name);
+                        await config.collection.createIndex(
+                            indexDef.key,
+                            indexDef.options
+                        );
+                    }
+                }
+            } catch (error) {
+                logger.error(`Error processing indexes for ${collectionName}:`, error);
+                // Continue with next collection
+            }
+        }
+
+        logger.info('Index verification completed successfully');
+    } catch (error) {
+        logger.error('Error during index verification:', error);
+        // Ne pas faire remonter l'erreur pour ne pas bloquer le démarrage
+    }
+}
+
 /**
  * Fonction pour connecter à la base de données
  * @returns {Promise<void>}
@@ -44,45 +134,20 @@ async function connectToDatabase() {
     if (!db) {
         try {
             await mongoClient.connect();
-            // Utiliser une base de données dédiée pour le bot
             db = mongoClient.db("telegram_bot");
             logger.info("Connected to the database");
             
-            // Créer les index nécessaires
-            const walletCollection = db.collection("wallets");
-            const usersCollection = db.collection("users");
-            const subscriptionsCollection = db.collection("subscriptions");
-            const paymentAddressesCollection = db.collection("payment_addresses");
-
-            await Promise.all([
-                // Index pour les wallets
-                walletCollection.createIndex({ address: 1 }, { unique: true }),
-                
-                // Index pour les utilisateurs
-                usersCollection.createIndex({ username: 1 }, { unique: true }),
-                usersCollection.createIndex({ chatId: 1 }),
-                usersCollection.createIndex({ role: 1 }),
-                
-                // Index pour les abonnements
-                subscriptionsCollection.createIndex({ userId: 1 }),
-                subscriptionsCollection.createIndex({ expiresAt: 1 }),
-                subscriptionsCollection.createIndex({ type: 1 }),
-
-                // Index pour les adresses de paiement
-                paymentAddressesCollection.createIndex({ sessionId: 1 }, { unique: true }),
-                paymentAddressesCollection.createIndex({ username: 1 }),
-                paymentAddressesCollection.createIndex({ expires: 1 }),
-                paymentAddressesCollection.createIndex({ status: 1 }),
-                paymentAddressesCollection.createIndex({ publicKey: 1 }, { unique: true })
-            ]);
-
-            logger.info("Database indexes created successfully");
+            // Vérifier et mettre à jour les index si nécessaire
+            await updateIndexes(db);
+            
         } catch (error) {
             logger.error("Error connecting to the database:", error);
             throw error;
         }
     }
+    return db;
 }
+
 
 /**
  * Obtient la base de données connectée
@@ -154,40 +219,76 @@ async function saveInterestingWallet(address, walletData) {
 }
 
 // Fonction pour créer un abonnement
-async function createSubscription(userId, username, type, duration) {
+async function createOrUpdateSubscription(username, duration, paymentId, amount) {
     const database = await getDatabase();
     const collection = database.collection("subscriptions");
     
-    // Création de l'objet subscription
-    const subscriptionData = {
-        userId,
-        username,
-        type,
-        duration,
-        startDate: new Date(),
-        expiresAt: new Date(Date.now() + subscriptionDurations[duration]),
-        active: true,
-        paymentStatus: 'pending',
-        lastUpdated: new Date()
-    };
-
-    // Validation des données
-    const { error, value: validatedSubscription } = validateSubscription(subscriptionData);
-    
-    if (error) {
-        logger.error(`Validation error for subscription: ${error.details[0].message}`, {
-            userId,
-            error: error.details
-        });
-        throw error;
-    }
-
     try {
-        const result = await collection.insertOne(validatedSubscription);
-        logger.info(`New subscription created for user ${userId} of type ${type}`);
-        return { ...validatedSubscription, _id: result.insertedId };
+        const now = new Date();
+        const durationMs = subscriptionDurations[duration];
+        
+        // Rechercher un abonnement existant
+        const existingSubscription = await collection.findOne({ username });
+        
+        if (existingSubscription) {
+            // Calculer la nouvelle date d'expiration
+            const currentExpiryDate = new Date(existingSubscription.expiresAt);
+            const newExpiryDate = new Date(
+                Math.max(now.getTime(), currentExpiryDate.getTime()) + durationMs
+            );
+
+            // Nouveau paiement à ajouter à l'historique
+            const paymentRecord = {
+                paymentId,
+                duration,
+                amount,
+                paymentDate: now,
+                paymentStatus: 'completed'
+            };
+
+            // Mettre à jour l'abonnement existant
+            const result = await collection.updateOne(
+                { username },
+                {
+                    $set: {
+                        active: true,
+                        expiresAt: newExpiryDate,
+                        lastUpdated: now
+                    },
+                    $push: {
+                        paymentHistory: paymentRecord
+                    }
+                }
+            );
+
+            logger.info(`Subscription updated for user ${username}`);
+            return result;
+        } else {
+            // Créer un nouvel abonnement
+            const newSubscription = {
+                username,
+                active: true,
+                startDate: now,
+                expiresAt: new Date(now.getTime() + durationMs),
+                lastUpdated: now,
+                paymentHistory: [{
+                    paymentId,
+                    duration,
+                    amount,
+                    paymentDate: now,
+                    paymentStatus: 'completed'
+                }]
+            };
+
+            const { error, value } = validateSubscription(newSubscription);
+            if (error) throw error;
+
+            const result = await collection.insertOne(value);
+            logger.info(`New subscription created for user ${username}`);
+            return result;
+        }
     } catch (error) {
-        logger.error(`Error creating subscription for user ${userId}:`, error);
+        logger.error(`Error creating/updating subscription for user ${username}:`, error);
         throw error;
     }
 }
@@ -212,61 +313,20 @@ async function checkSubscription(userId) {
     }
 }
 
-// Fonction pour mettre à jour un abonnement
-async function updateSubscription(subscriptionId, updateData) {
-    const database = await getDatabase();
-    const collection = database.collection("subscriptions");
-    
-    // Ajouter lastUpdated au données de mise à jour
-    const dataToUpdate = {
-        ...updateData,
-        lastUpdated: new Date()
-    };
-
-    // Validation des données de mise à jour
-    const currentSubscription = await collection.findOne({ _id: subscriptionId });
-    if (!currentSubscription) {
-        throw new Error('Subscription not found');
-    }
-
-    const updatedSubscription = {
-        ...currentSubscription,
-        ...dataToUpdate
-    };
-
-    const { error, value: validatedUpdate } = validateSubscription(updatedSubscription);
-    
-    if (error) {
-        logger.error(`Validation error for subscription update: ${error.details[0].message}`);
-        throw error;
-    }
-
-    try {
-        const result = await collection.updateOne(
-            { _id: subscriptionId },
-            { $set: dataToUpdate }
-        );
-        
-        return result.modifiedCount > 0;
-    } catch (error) {
-        logger.error(`Error updating subscription ${subscriptionId}:`, error);
-        return false;
-    }
-}
-
 // Fonction pour obtenir les abonnements d'un utilisateur
-async function getUserSubscriptions(userId) {
+async function getSubscription(username) {
     const database = await getDatabase();
     const collection = database.collection("subscriptions");
     
     try {
-        return await collection.find({ 
-            userId,
-            active: true
-        }).toArray();
+        const subscription = await collection.findOne({ username });
+        if (!subscription) return null;
+
+        subscription.active = subscription.expiresAt > new Date();
+        return subscription;
     } catch (error) {
-        logger.error(`Error getting subscriptions for user ${userId}:`, error);
-        return [];
+        logger.error(`Error getting subscription for user ${username}:`, error);
+        return null;
     }
 }
 
@@ -437,10 +497,9 @@ module.exports = {
     connectToDatabase, 
     getDatabase, 
     saveInterestingWallet,
-    createSubscription,
+    createOrUpdateSubscription,
     checkSubscription,
-    updateSubscription,
-    getUserSubscriptions,
+    getSubscription,
     completeSubscriptionPayment,
     addAdmin,
     savePaymentAddress,

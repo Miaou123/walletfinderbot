@@ -1,50 +1,78 @@
-// src/bot/commandHandlers/subHandler.js
-
 const logger = require('../../utils/logger');
 
 class UserSubscriptionHandler {
-    constructor(bot) {
-        this.bot = bot;
+    constructor(accessControl) {
+        this.accessControl = accessControl;
     }
 
-    /**
-     * Handle the mysubscription command
-     */
     async handleMySubscription(bot, msg, args, messageThreadId) {
         const chatId = msg.chat.id;
         const username = msg.from.username;
 
         try {
-            // Récupérer l'abonnement actif de l'utilisateur
-            const subscription = await this.accessControl.getActiveSubscription(username);
+            const profile = await this.accessControl.getSubscription(username);
 
-            if (!subscription) {
-                await bot.sendMessage(chatId, 
-                    "You don't have an active subscription.",
-                    { message_thread_id: messageThreadId }
-                );
+            if (!profile || !profile.active) {
+                const message = "You don't have an active subscription. Would you like to subscribe?";
+                const opts = {
+                    reply_markup: JSON.stringify({
+                        inline_keyboard: [
+                            [{ text: "🌟 Subscribe Now", callback_data: 'subscribe_new' }]
+                        ]
+                    }),
+                    message_thread_id: messageThreadId
+                };
+
+                await bot.sendMessage(chatId, message, opts);
                 return;
             }
 
-            // Formater le message de l'abonnement
-            const message = 
-                `👤 User: @${subscription.username}\n` +
-                `📋 Type: ${subscription.type.toUpperCase()}\n` +
-                `⏱️ Duration: ${subscription.duration}\n` +
-                `📅 Start Date: ${new Date(subscription.startDate).toLocaleString()}\n` +
-                `⚠️ Expires: ${new Date(subscription.expiresAt).toLocaleString()}\n` +
-                `💳 Payment ID: ${subscription.paymentId || 'N/A'}\n` +
-                `💰 Payment Status: ${subscription.paymentStatus}\n\n` +
-                `${'─'.repeat(30)}\n\n` +
-                `📊 Summary:\n` +
-                `Total Active Subscriptions: 1\n` +
-                `Basic Subscriptions: ${subscription.type === 'basic' ? 1 : 0}\n` +
-                `VIP Subscriptions: ${subscription.type === 'vip' ? 1 : 0}\n`;
+            // Calculer les jours restants
+            const daysLeft = Math.ceil((new Date(profile.expiresAt) - new Date()) / (1000 * 60 * 60 * 24));
 
-            await bot.sendMessage(chatId, message, { parse_mode: 'HTML', message_thread_id: messageThreadId });
+            // Formatage du message principal
+            let message = 
+                `📊 Subscription Status\n\n` +
+                `👤 Username: @${profile.username}\n` +
+                `📅 Valid until: ${new Date(profile.expiresAt).toLocaleString()}\n` +
+                `⚡ Days remaining: ${daysLeft}\n` +
+                `🕒 Member since: ${new Date(profile.startDate).toLocaleString()}\n\n` +
+                `💳 Payment History:\n`;
+
+            // Ajouter l'historique des paiements (3 derniers)
+            const recentPayments = profile.paymentHistory
+                .slice(-3)
+                .reverse()
+                .map(payment => 
+                    `• ${new Date(payment.paymentDate).toLocaleDateString()}: ` +
+                    `${payment.duration} (ID: ${payment.paymentId})`
+                )
+                .join('\n');
+
+            message += recentPayments + '\n';
+            message += `\n${'─'.repeat(30)}\n`;
+
+            const opts = {
+                parse_mode: 'HTML',
+                message_thread_id: messageThreadId
+            };
+
+            // Ajouter le bouton de renouvellement si proche de l'expiration
+            if (daysLeft <= 7) {
+                opts.reply_markup = JSON.stringify({
+                    inline_keyboard: [
+                        [{ text: "🔄 Extend Subscription", callback_data: 'subscribe_extend' }]
+                    ]
+                });
+            }
+
+            await bot.sendMessage(chatId, message, opts);
         } catch (error) {
             logger.error('Error in mysubscription command:', error);
-            await bot.sendMessage(chatId, "An error occurred while fetching your subscription.", { message_thread_id: messageThreadId });
+            await bot.sendMessage(chatId, 
+                "An error occurred while retrieving your subscription information.", 
+                { message_thread_id: messageThreadId }
+            );
         }
     }
 }

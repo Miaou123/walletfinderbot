@@ -64,7 +64,7 @@ async function getLastSwapBeforeATA(ownerAddress, ataSignature, mainContext, sub
     let paginationToken = null;
 
     while (!lastSwapTransaction) {
-      const signatures = await solanaApi.getSignaturesForAddress(ownerAddress, { limit: 100, before, paginationToken }, mainContext, subContext);
+      const signatures = await solanaApi.getSignaturesForAddress(ownerAddress, { limit: 1000, before, paginationToken }, mainContext, subContext);
 
       if (!signatures || signatures.length === 0) break;
 

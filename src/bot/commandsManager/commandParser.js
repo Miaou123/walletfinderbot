@@ -56,7 +56,7 @@ const commandConfigs = {
     aliases: ['em'],
     minArgs: 1,
     maxArgs: 2,
-    requiresAuth: true,
+    requiresAuth: false,
     description: 'Analyze entry prices of top holders',
     usage: '/entrymap [contract_address] [number_of_holders=20]',
     helpMessage: 'Analyzes the entry prices of top holders for a given token.\n\n' +
@@ -79,7 +79,7 @@ const commandConfigs = {
     aliases: ['bt'], 
     minArgs: 1, 
     maxArgs: 4, 
-    requiresAuth: true, 
+    requiresAuth: false, 
     description: 'Analyze best traders', 
     dailyLimit: 5,
     usage: '/bt [contract_address] [winrate_threshold](50%)* [portfolio_threshold]($10000)* [sort_option](port)*',
@@ -89,7 +89,7 @@ const commandConfigs = {
     aliases: ['th'], 
     minArgs: 1, 
     maxArgs: 2, 
-    requiresAuth: true, 
+    requiresAuth: false, 
     description: 'Analyze top holders', 
     dailyLimit: 5,
     usage: '/th [contract_address] [number_of_holders](20)*',
@@ -99,7 +99,7 @@ const commandConfigs = {
     aliases: ['c'], 
     minArgs: 2, 
     maxArgs: 6, 
-    requiresAuth: true, 
+    requiresAuth: false, 
     description: 'Cross-analyze multiple tokens', 
     dailyLimit: 20,
     usage: '/cross [contract_address1] [contract_address2] ... [Combined_value_min]($10000)*',
@@ -109,7 +109,7 @@ const commandConfigs = {
     aliases: ['cbt'], 
     minArgs: 2, 
     maxArgs: 3, 
-    requiresAuth: true, 
+    requiresAuth: false, 
     description: 'Cross-analyze top traders of multiple tokens', 
     dailyLimit: 20,
     usage: '/crossbt [contract_address1] [contract_address2] [contract_address3]*',
@@ -119,7 +119,7 @@ const commandConfigs = {
     aliases: ['t'], 
     minArgs: 1, 
     maxArgs: 1, 
-    requiresAuth: true, 
+    requiresAuth: false, 
     description: 'Analyze team supply', 
     dailyLimit: 5,
     usage: '/team [contract_address]',
@@ -129,7 +129,7 @@ const commandConfigs = {
     aliases: ['sh'], 
     minArgs: 2, 
     maxArgs: Infinity, 
-    requiresAuth: true, 
+    requiresAuth: false, 
     description: 'Search for specific wallets', 
     dailyLimit: 5,
     usage: '/search [contract_address] [partial_address1] [partial_address2]*',
@@ -139,7 +139,7 @@ const commandConfigs = {
     aliases: ['eb'], 
     minArgs: 1, 
     maxArgs: 4, 
-    requiresAuth: true, 
+    requiresAuth: false, 
     description: 'Analyze early buyers', 
     dailyLimit: 5,
     usage: '/eb [coin_address] [time_frame](1h)* [min buy amount](1%)* [pump or nopump]*',
@@ -149,7 +149,7 @@ const commandConfigs = {
     aliases: ['d'], 
     minArgs: 1,
     maxArgs: 1,
-    requiresAuth: true,
+    requiresAuth: false,
     description: 'Analyze pumpfun developer profile and previous coins',
     dailyLimit: 10,
     usage: '/dev [contract_address]',
@@ -159,7 +159,7 @@ const commandConfigs = {
     aliases: ['fr'],
     minArgs: 1,
     maxArgs: 3,
-    requiresAuth: true,
+    requiresAuth: false,
     description: 'Analyze fresh wallet ratio',
     dailyLimit: 10,
     usage: '/freshratio [contract_address] [time_frame](1h)* [min buy amount](0.005%)*',
@@ -175,7 +175,7 @@ const commandConfigs = {
     aliases: ['tr'], 
     minArgs: 0, 
     maxArgs: 0, 
-    requiresAuth: true, 
+    requiresAuth: false, 
     description: 'Show tracked supplies', 
     dailyLimit: Infinity,
     usage: '/tracker',
@@ -185,7 +185,7 @@ const commandConfigs = {
     aliases: [], 
     minArgs: 0, 
     maxArgs: 0, 
-    requiresAuth: true, 
+    requiresAuth: false, 
     description: 'Cancel the current active command', 
     dailyLimit: Infinity,
     usage: '/cancel',
@@ -213,7 +213,7 @@ const commandConfigs = {
     requiresAuth: false,
     description: 'Confirm your subscription payment',
     dailyLimit: Infinity,
-    usage: '/confirm <SESSION_ID> <TRANSACTION_SIGNATURE>',
+    usage: '/confirm [SESSION_ID] [TRANSACTION_SIGNATURE]',
     helpMessage: 'Confirm your subscription payment by providing the session ID and transaction signature.\n\n' +
                  'Example:\n' +
                  '/confirm abc123 5xR8sY9...\n\n' +
@@ -225,12 +225,12 @@ const commandConfigs = {
     aliases: ['mysub'], 
     minArgs: 0, 
     maxArgs: 0, 
-    requiresAuth: true, 
+    requiresAuth: false, 
     description: 'View your active subscription', 
     dailyLimit: Infinity,
     usage: '/mysubscription',
     helpMessage: 'View your current active subscription details.'
-},
+  },
   'access': { 
     aliases: ['join'], 
     minArgs: 0, 
@@ -246,257 +246,255 @@ const commandConfigs = {
 const helpNote = "\n\nFor a better understanding of the bot and its commands, please consult our <a href='https://smp-team.gitbook.io/noesis-bot'>documentation</a>.";
 
 Object.values(commandConfigs).forEach(config => {
-if (config.helpMessage) {
-  config.helpMessage += helpNote;
-}
+  if (config.helpMessage) {
+    config.helpMessage += helpNote;
+  }
 });
 
 // Configuration des commandes admin
 const adminCommandConfigs = {
-'adduser': {
-  aliases: [],
-  minArgs: 2,
-  maxArgs: 2,
-  requiresAuth: true,
-  description: 'Add a user to whitelist',
-  dailyLimit: Infinity,
-  usage: '/adduser <username> <type>',
-  helpMessage: 'Add a user to the whitelist.\nTypes: normal, vip, admin\n\nExample:\n/adduser username normal'
-},
-'removeuser': {
-  aliases: [],
-  minArgs: 1,
-  maxArgs: 1,
-  requiresAuth: true,
-  description: 'Remove a user from whitelist',
-  dailyLimit: Infinity,
-  usage: '/removeuser <username>',
-  helpMessage: 'Remove a user from the whitelist.\n\nExample:\n/removeuser username'
-},
-'addgroup': {
-  aliases: [],
-  minArgs: 0,
-  maxArgs: 2,
-  requiresAuth: true,
-  description: 'Add a group to whitelist',
-  dailyLimit: Infinity,
-  usage: '/addgroup [type]',
-  helpMessage: 'Add the current group to whitelist or specify group ID and type.\nTypes: normal, vip\n\nExamples:\n/addgroup\n/addgroup vip\n/addgroup -1001234567890 normal'
-},
-'removegroup': {
-  aliases: [],
-  minArgs: 1,
-  maxArgs: 1,
-  requiresAuth: true,
-  description: 'Remove a group from whitelist',
-  dailyLimit: Infinity,
-  usage: '/removegroup <group_id>',
-  helpMessage: 'Remove a group from the whitelist.\n\nExample:\n/removegroup -1001234567890'
-},
-'addsub': {
-  aliases: [],
-  minArgs: 3,
-  maxArgs: 3,
-  requiresAuth: true,
-  description: 'Add a subscription for a user (Admin only)',
-  dailyLimit: Infinity,
-  usage: '/addsub <username/userID> <type> <time>',
-  helpMessage: 'Add a subscription for a user (Admin only)'
-},
-'removesub': {
-  aliases: [],
-  minArgs: 1,
-  maxArgs: 1,
-  requiresAuth: true,
-  description: 'Remove a user from the subscription list',
-  dailyLimit: Infinity,
-  usage: '/removesub <username/userID>',
-  helpMessage: 'Remove a user from the subscription list'
-},
-'checksub': {
-  aliases: [],
-  minArgs: 1,
-  maxArgs: 1,
-  requiresAuth: true,
-  description: 'Check if a user is subscribed',
-  dailyLimit: Infinity,
-  usage: '/checksub <username/userID>',
-  helpMessage: 'Check the subscription for a user'
-},
-'listsubs': {
-  aliases: [],
-  minArgs: 0,
-  maxArgs: 0,
-  requiresAuth: true,
-  description: 'list of all the currently subscribed users',
-  dailyLimit: Infinity,
-  usage: '/listsubs',
-  helpMessage: 'list of all the users currently subscribed and their subscription time'
-},
-'listgroups': {
-  aliases: [],
-  minArgs: 0,
-  maxArgs: 0,
-  requiresAuth: true,
-  description: 'List all whitelisted groups',
-  dailyLimit: Infinity,
-  usage: '/listgroups',
-  helpMessage: 'Display a list of all whitelisted groups and their types.'
-},
-'usagestats': {
-  aliases: [],
-  minArgs: 0,
-  maxArgs: 0,
-  requiresAuth: true,
-  description: 'Show command usage statistics',
-  dailyLimit: Infinity,
-  usage: '/usagestats',
-  helpMessage: 'Display statistics about command usage across all users.'
-},
-'broadcast': {
-  aliases: [],
-  minArgs: 1,
-  maxArgs: Infinity,
-  requiresAuth: true,
-  description: 'Send message to all users',
-  dailyLimit: Infinity,
-  usage: '/broadcast <message>',
-  helpMessage: 'Send a message to all whitelisted users.\n\nExample:\n/broadcast Hello everyone!'
-}
+  'adduser': {
+    aliases: [],
+    minArgs: 2,
+    maxArgs: 2,
+    requiresAuth: true,
+    description: 'Add a user to whitelist',
+    dailyLimit: Infinity,
+    usage: '/adduser [username] [type]',
+    helpMessage: 'Add a user to the whitelist.\nTypes: normal, vip, admin\n\nExample:\n/adduser username normal'
+  },
+  'removeuser': {
+    aliases: [],
+    minArgs: 1,
+    maxArgs: 1,
+    requiresAuth: true,
+    description: 'Remove a user from whitelist',
+    dailyLimit: Infinity,
+    usage: '/removeuser [username]',
+    helpMessage: 'Remove a user from the whitelist.\n\nExample:\n/removeuser username'
+  },
+  'addgroup': {
+    aliases: [],
+    minArgs: 0,
+    maxArgs: 2,
+    requiresAuth: true,
+    description: 'Add a group to whitelist',
+    dailyLimit: Infinity,
+    usage: '/addgroup [type]',
+    helpMessage: 'Add the current group to whitelist or specify group ID and type.\nTypes: normal, vip\n\nExamples:\n/addgroup\n/addgroup vip\n/addgroup -1001234567890 normal'
+  },
+  'removegroup': {
+    aliases: [],
+    minArgs: 1,
+    maxArgs: 1,
+    requiresAuth: true,
+    description: 'Remove a group from whitelist',
+    dailyLimit: Infinity,
+    usage: '/removegroup [group_id]',
+    helpMessage: 'Remove a group from the whitelist.\n\nExample:\n/removegroup -1001234567890'
+  },
+  'addsub': {
+    aliases: [],
+    minArgs: 2,
+    maxArgs: 2,
+    requiresAuth: true,
+    description: 'Add a subscription for a user (Admin only)',
+    dailyLimit: Infinity,
+    usage: '/addsub [username/userID] [time]',
+    helpMessage: 'Add a subscription for a user (Admin only)'
+  },
+  'removesub': {
+    aliases: [],
+    minArgs: 1,
+    maxArgs: 1,
+    requiresAuth: true,
+    description: 'Remove a user from the subscription list',
+    dailyLimit: Infinity,
+    usage: '/removesub [username/userID]',
+    helpMessage: 'Remove a user from the subscription list'
+  },
+  'checksub': {
+    aliases: [],
+    minArgs: 1,
+    maxArgs: 1,
+    requiresAuth: true,
+    description: 'Check if a user is subscribed',
+    dailyLimit: Infinity,
+    usage: '/checksub [username/userID]',
+    helpMessage: 'Check the subscription for a user'
+  },
+  'listsubs': {
+    aliases: [],
+    minArgs: 0,
+    maxArgs: 0,
+    requiresAuth: true,
+    description: 'list of all the currently subscribed users',
+    dailyLimit: Infinity,
+    usage: '/listsubs',
+    helpMessage: 'list of all the users currently subscribed and their subscription time'
+  },
+  'listgroups': {
+    aliases: [],
+    minArgs: 0,
+    maxArgs: 0,
+    requiresAuth: true,
+    description: 'List all whitelisted groups',
+    dailyLimit: Infinity,
+    usage: '/listgroups',
+    helpMessage: 'Display a list of all whitelisted groups and their types.'
+  },
+  'usagestats': {
+    aliases: [],
+    minArgs: 0,
+    maxArgs: 0,
+    requiresAuth: true,
+    description: 'Show command usage statistics',
+    dailyLimit: Infinity,
+    usage: '/usagestats',
+    helpMessage: 'Display statistics about command usage across all users.'
+  },
+  'broadcast': {
+    aliases: [],
+    minArgs: 1,
+    maxArgs: Infinity,
+    requiresAuth: true,
+    description: 'Send message to all users',
+    dailyLimit: Infinity,
+    usage: '/broadcast [message]',
+    helpMessage: 'Send a message to all whitelisted users.\n\nExample:\n/broadcast Hello everyone!'
+  }
 };
 
-
 const getMainCommandName = (inputCommand) => {
-// Vérifie d'abord dans les commandes admin
-for (const [cmd, config] of Object.entries(adminCommandConfigs)) {
-  if (cmd === inputCommand || config.aliases.includes(inputCommand)) {
-    return { command: cmd, isAdmin: true };
+  // Vérifie d'abord dans les commandes admin
+  for (const [cmd, config] of Object.entries(adminCommandConfigs)) {
+    if (cmd === inputCommand || config.aliases.includes(inputCommand)) {
+      return { command: cmd, isAdmin: true };
+    }
   }
-}
 
-// Vérifie dans les commandes normales
-for (const [cmd, config] of Object.entries(commandConfigs)) {
-  if (cmd === inputCommand || config.aliases.includes(inputCommand)) {
-    return { command: cmd, isAdmin: false };
+  // Vérifie dans les commandes normales
+  for (const [cmd, config] of Object.entries(commandConfigs)) {
+    if (cmd === inputCommand || config.aliases.includes(inputCommand)) {
+      return { command: cmd, isAdmin: false };
+    }
   }
-}
 
-return null;
+  return null;
 };
 
 const parseCommand = (text) => {
-const parts = text.trim().split(/\s+/);
-let commandWithSlash = parts[0].toLowerCase();
+  const parts = text.trim().split(/\s+/);
+  let commandWithSlash = parts[0].toLowerCase();
 
-// Vérifie si la commande inclut une mention de bot et l'extrait
-const botMentionRegex = /^\/([a-z]+)@([a-z0-9_]+)bot$/i;
-const match = commandWithSlash.match(botMentionRegex);
-if (match) {
-  commandWithSlash = `/${match[1]}`;
-}
-
-let args = parts.slice(1);
-
-// Récupère la commande sans le '/'
-const rawCommand = commandWithSlash.startsWith('/') ? commandWithSlash.slice(1) : commandWithSlash;
-
-// Cas /help <command> ou /help /command
-if (rawCommand === 'help' && args.length > 0) {
-  const potentialCommand = args[0].startsWith('/') ? args[0].slice(1) : args[0];
-  const resolved = getMainCommandName(potentialCommand);
-  if (resolved) {
-    return { command: 'help', args: [resolved.command], isAdmin: false };
-  } else {
-    // Si la commande n'existe pas, on renvoie quand même help avec un argument inconnu
-    return { command: null, args: [], isAdmin: false };
+  // Vérifie si la commande inclut une mention de bot et l'extrait
+  const botMentionRegex = /^\/([a-z]+)@([a-z0-9_]+)bot$/i;
+  const match = commandWithSlash.match(botMentionRegex);
+  if (match) {
+    commandWithSlash = `/${match[1]}`;
   }
-}
 
-// Cas suffixe 'help' ou '/help'
-if (args.length > 0) {
-  const lastArg = args[args.length - 1].toLowerCase();
-  if (lastArg === 'help' || lastArg === '/help') {
-    // On retire le 'help' des arguments
-    args = args.slice(0, -1);
-    const resolved = getMainCommandName(rawCommand);
+  let args = parts.slice(1);
+
+  // Récupère la commande sans le '/'
+  const rawCommand = commandWithSlash.startsWith('/') ? commandWithSlash.slice(1) : commandWithSlash;
+
+  // Cas /help <command> ou /help /command
+  if (rawCommand === 'help' && args.length > 0) {
+    const potentialCommand = args[0].startsWith('/') ? args[0].slice(1) : args[0];
+    const resolved = getMainCommandName(potentialCommand);
     if (resolved) {
       return { command: 'help', args: [resolved.command], isAdmin: false };
     } else {
+      // Si la commande n'existe pas, on renvoie quand même help avec un argument inconnu
       return { command: null, args: [], isAdmin: false };
     }
   }
-}
 
-// Commande classique
-const resolved = getMainCommandName(rawCommand);
-if (resolved) {
-  return { command: resolved.command, args, isAdmin: resolved.isAdmin };
-}
+  // Cas suffixe 'help' ou '/help'
+  if (args.length > 0) {
+    const lastArg = args[args.length - 1].toLowerCase();
+    if (lastArg === 'help' || lastArg === '/help') {
+      // On retire le 'help' des arguments
+      args = args.slice(0, -1);
+      const resolved = getMainCommandName(rawCommand);
+      if (resolved) {
+        return { command: 'help', args: [resolved.command], isAdmin: false };
+      } else {
+        return { command: null, args: [], isAdmin: false };
+      }
+    }
+  }
 
-return { command: null, args: [], isAdmin: false };
+  // Commande classique
+  const resolved = getMainCommandName(rawCommand);
+  if (resolved) {
+    return { command: resolved.command, args, isAdmin: resolved.isAdmin };
+  }
+
+  return { command: null, args: [], isAdmin: false };
 };
 
-
 function validateArgs(command, args, isAdmin = false) {
-// Sélectionner la configuration appropriée
-const config = isAdmin ? adminCommandConfigs[command] : commandConfigs[command];
-if (!config) return ['Unknown command. Please use /help for a full list of commands.'];
+  // Sélectionner la configuration appropriée
+  const config = isAdmin ? adminCommandConfigs[command] : commandConfigs[command];
+  if (!config) return ['Unknown command. Please use /help for a full list of commands.'];
 
-const errors = [];
+  const errors = [];
 
-if (args.length < config.minArgs) {
+  if (args.length < config.minArgs) {
     errors.push(`Too few arguments. ${getCommandHelp(command, isAdmin)}`);
-}
+  }
 
-if (args.length > config.maxArgs && config.maxArgs !== Infinity) {
+  if (args.length > config.maxArgs && config.maxArgs !== Infinity) {
     errors.push(`Too many arguments. ${getCommandHelp(command, isAdmin)}`);
-}
+  }
 
-// Validations spécifiques pour les commandes admin
-if (isAdmin) {
+  // Validations spécifiques pour les commandes admin
+  if (isAdmin) {
     switch (command) {
-        case 'adduser':
-            if (args.length < 2) {
-                errors.push("Usage: /adduser <username> <type>\nTypes: normal, vip, admin");
-            } else if (!['normal', 'vip', 'admin'].includes(args[1].toLowerCase())) {
-                errors.push("Invalid user type. Use 'normal', 'vip', or 'admin'");
-            }
-            break;
-        case 'addgroup':
-            if (args.length > 0 && !['normal', 'vip'].includes(args[0].toLowerCase())) {
-                errors.push("Invalid group type. Use 'normal' or 'vip'");
-            }
-            break;
-    }
-}
-// Validations pour les commandes standards
-else {
-    if (['scan', 'bundle', 'bt', 'th', 'team', 'search', 'eb'].includes(command)) {
-        if (args.length > 0 && !validateSolanaAddress(args[0])) {
-            errors.push(`Invalid contract address format. Please provide a valid Solana address.\n\n${getCommandHelp(command)}`);
+      case 'adduser':
+        if (args.length < 2) {
+          errors.push("Usage: /adduser [username] [type]\nTypes: normal, vip, admin");
+        } else if (!['normal', 'vip', 'admin'].includes(args[1].toLowerCase())) {
+          errors.push("Invalid user type. Use 'normal', 'vip', or 'admin'");
         }
+        break;
+      case 'addgroup':
+        if (args.length > 0 && !['normal', 'vip'].includes(args[0].toLowerCase())) {
+          errors.push("Invalid group type. Use 'normal' or 'vip'");
+        }
+        break;
     }
-}
+  }
+  // Validations pour les commandes standards
+  else {
+    if (['scan', 'bundle', 'bt', 'th', 'team', 'search', 'eb'].includes(command)) {
+      if (args.length > 0 && !validateSolanaAddress(args[0])) {
+        errors.push(`Invalid contract address format. Please provide a valid Solana address.\n\n${getCommandHelp(command)}`);
+      }
+    }
+  }
 
-return errors;
+  return errors;
 }
 
 const getCommandHelp = (command, isAdmin = false) => {
-const config = isAdmin ? adminCommandConfigs[command] : commandConfigs[command];
-if (!config) return `Unknown command. Please use /help for a full list of commands.`;
+  const config = isAdmin ? adminCommandConfigs[command] : commandConfigs[command];
+  if (!config) return `Unknown command. Please use /help for a full list of commands.`;
 
-return `${config.description}\n\nUsage: ${config.usage}\n${config.helpMessage || ''}`;
+  return `${config.description}\n\nUsage: ${config.usage}\n${config.helpMessage || ''}`;
 };
 
 const isAdminCommand = (command) => {
-return !!adminCommandConfigs[command];
+  return !!adminCommandConfigs[command];
 };
 
 module.exports = {
-commandConfigs,
-adminCommandConfigs,
-parseCommand,
-validateArgs,
-getCommandHelp,
-isAdminCommand
+  commandConfigs,
+  adminCommandConfigs,
+  parseCommand,
+  validateArgs,
+  getCommandHelp,
+  isAdminCommand
 };

@@ -215,7 +215,7 @@ async function isFreshWallet(address, mainContext, subContext) {
         const solanaApi = getSolanaApi();
         const signatures = await solanaApi.getSignaturesForAddress(
             address, 
-            { limit: FRESH_WALLET_THRESHOLD + 1 },
+            { limit: FRESH_WALLET_THRESHOLD },
             mainContext,
             subContext
         );

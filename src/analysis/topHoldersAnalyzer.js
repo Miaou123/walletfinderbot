@@ -160,7 +160,7 @@ class TokenAnalyzer {
     async getTransactionCountIfNeeded(address, stats, mainContext) {
         const transactions = await this.solanaApi.getSignaturesForAddress(
             address, 
-            { limit: config.LOW_TRANSACTION_THRESHOLD + 1 }, 
+            { limit: config.LOW_TRANSACTION_THRESHOLD }, 
             mainContext, 
             'getSignatures'
         );

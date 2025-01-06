@@ -8,56 +8,34 @@ async function isFreshWallet(address, targetTxHash, mainContext, subContext) {
 
     try {
         const solanaApi = getSolanaApi();
-        let txCount = 0;
-        let foundTargetTx = false;
-        let beforeCursor = null;
+        
+        // Récupérer toutes les signatures jusqu'au targetTxHash
+        const signatures = await solanaApi.getSignaturesForAddress(
+            address,
+            { 
+                limit: FRESH_WALLET_THRESHOLD + 1, // +1 pour inclure la transaction cible
+                until: targetTxHash
+            },
+            mainContext,
+            subContext
+        );
 
-        while (!foundTargetTx) {
-            logger.debug(`Getting signatures batch for ${address}, cursor: ${beforeCursor}`);
-            
-            const signatures = await solanaApi.getSignaturesForAddress(
-                address,
-                { 
-                    before: beforeCursor,
-                    limit: 1000 // Maximum batch size
-                },
-                mainContext,
-                subContext
-            );
-
-            if (!signatures || signatures.length === 0) {
-                logger.debug(`No more signatures found for ${address}`);
-                break;
-            }
-
-            for (const sig of signatures) {
-                if (sig.signature === targetTxHash) {
-                    foundTargetTx = true;
-                    logger.debug(`Found target transaction. Total transactions before: ${txCount}`);
-                    break;
-                }
-                txCount++;
-            }
-
-            if (!foundTargetTx && signatures.length > 0) {
-                beforeCursor = signatures[signatures.length - 1].signature;
-            }
-
-            // Optimisation : arrêter si on dépasse déjà le seuil
-            if (txCount > FRESH_WALLET_THRESHOLD && !foundTargetTx) {
-                logger.debug(`Transaction count exceeded threshold (${FRESH_WALLET_THRESHOLD}) before finding target tx`);
-                return false;
-            }
+        if (!signatures) {
+            logger.warn(`No signatures found for wallet ${address}`);
+            return false;
         }
 
-        if (!foundTargetTx) {
+        // Si on n'a pas trouvé la transaction cible
+        if (!signatures.find(sig => sig.signature === targetTxHash)) {
             logger.warn(`Target transaction ${targetTxHash} not found for wallet ${address}`);
             return false;
         }
 
+        // Le nombre de transactions avant la transaction cible
+        const txCount = signatures.length - 1; // -1 car on ne compte pas la transaction cible
         const isFresh = txCount <= FRESH_WALLET_THRESHOLD;
+        
         logger.debug(`Wallet ${address} had ${txCount} transactions before target tx, isFresh: ${isFresh}`);
-
         return isFresh;
 
     } catch (error) {

@@ -17,6 +17,14 @@ class SolanaApi {
   async callHelius(method, params, apiType = 'rpc', mainContext = 'default', subContext = null) {
     try {
       ApiCallCounter.incrementCall('Helius', method, mainContext, subContext);
+      
+      // Log la requête envoyée
+      console.log(`[Helius Request] ${method}:`, {
+        params,
+        mainContext,
+        subContext
+      });
+  
       const response = await HeliusRateLimiter.rateLimitedAxios({
         method: 'post',
         url: this.heliusUrl,
@@ -28,15 +36,78 @@ class SolanaApi {
         },
         timeout: 30000
       }, apiType);
-
-      if (!response.data || !response.data.result) {
-        console.error(`Unexpected response structure from Helius for method ${method}:`, response.data);
+  
+      // Si le rate limiter renvoie null, loguer plus de détails
+      if (!response) {
+        console.error(`[Helius Debug] Null response from rate limiter for ${method}:`, {
+          method,
+          params,
+          mainContext,
+          subContext
+        });
         return null;
       }
+  
+      // Log la réponse complète
+      console.log(`[Helius Response] ${method}:`, {
+        status: response.status,
+        statusText: response.statusText,
+        headers: response.headers,
+        data: response.data
+      });
+  
+      if (!response.data) {
+        console.error(`[Helius Debug] Empty response data for ${method}:`, {
+          method,
+          params,
+          response: response
+        });
+        return null;
+      }
+  
+      // Log les erreurs RPC spécifiques
+      if (response.data.error) {
+        console.error(`[Helius RPC Error] ${method}:`, {
+          error: response.data.error,
+          request: {
+            method,
+            params,
+            mainContext,
+            subContext
+          }
+        });
+        return null;
+      }
+  
+      if (response.data.result === undefined) {
+        console.error(`[Helius Debug] Missing result in response for ${method}:`, {
+          method,
+          params,
+          responseData: response.data
+        });
+        return null;
+      }
+  
       return response.data.result;
     } catch (error) {
-      console.error(`Error calling Helius method ${method}:`, error);
-      throw error;
+      // Log détaillé de l'erreur
+      console.error(`[Helius Error] ${method}:`, {
+        error: {
+          name: error.name,
+          message: error.message,
+          code: error.code,
+          response: error.response?.data,
+          status: error.response?.status,
+          headers: error.response?.headers
+        },
+        request: {
+          method,
+          params,
+          mainContext,
+          subContext
+        }
+      });
+      return null;
     }
   }
 
@@ -225,13 +296,107 @@ class SolanaApi {
     return response;
   }
 
-  async getSignaturesForAddress(address, options = { limit: 1000 }, mainContext = 'default', subContext = null) {
-    const result = await this.callHelius('getSignaturesForAddress', [address, options], 'rpc', mainContext, subContext);
-    if (!Array.isArray(result)) {
-      console.error(`Unexpected result for getSignaturesForAddress of address ${address}:`, result);
-      return [];
-    }
-    return result;
+  async getSignaturesForAddress(address, options = {}, mainContext = 'default', subContext = null) {
+    const DEFAULT_CHUNK_SIZE = 1000;
+    const maxLimit = options.limit || 1000;
+    const timeout = options.timeout || 15000; // 1 minute par défaut
+    const startTime = Date.now();
+    let signatures = [];
+    let lastSignature = undefined;
+
+    try {
+        if (maxLimit <= DEFAULT_CHUNK_SIZE) {
+            const requestParams = {
+                limit: maxLimit,
+                ...options.commitment && { commitment: options.commitment },
+                ...options.until && { until: options.until }
+            };
+
+            const result = await this.callHelius(
+                'getSignaturesForAddress',
+                [address, requestParams],
+                'rpc',
+                mainContext,
+                subContext,
+                15000
+            );
+
+            // Gestion des erreurs Helius
+            if (result && result.error) {
+                if (result.error.code === -32019) {
+                    logger.warn(`Long-term storage error for ${address}, continuing with collected signatures`);
+                    return [];
+                }
+                throw new Error(`Helius error: ${result.error.message}`);
+            }
+
+            return Array.isArray(result) ? result : [];
+          }
+
+          // Pour les plus grandes limites, utiliser la pagination
+          while (signatures.length < maxLimit) {
+              // Vérifier le timeout global
+              if (Date.now() - startTime > timeout) {
+                  logger.warn(`Timeout reached for ${address}, returning partial results (${signatures.length} signatures)`);
+                  break;
+              }
+
+              const remainingCount = maxLimit - signatures.length;
+              const chunkSize = Math.min(DEFAULT_CHUNK_SIZE, remainingCount);
+
+              // Construire les paramètres de requête
+              const requestParams = {
+                  limit: chunkSize,
+                  ...options.commitment && { commitment: options.commitment },
+                  ...options.until && { until: options.until },
+                  ...lastSignature && { before: lastSignature }
+              };
+
+              const chunk = await this.callHelius(
+                  'getSignaturesForAddress',
+                  [address, requestParams],
+                  'rpc',
+                  mainContext,
+                  subContext
+              );
+
+              // Gestion des erreurs Helius
+              if (chunk && chunk.error) {
+                  if (chunk.error.code === -32019) {
+                      logger.warn(`Long-term storage error for ${address}, continuing with collected signatures (${signatures.length} signatures)`);
+                      break;
+                  }
+                  throw new Error(`Helius error: ${chunk.error.message}`);
+              }
+
+              if (!Array.isArray(chunk) || chunk.length === 0) {
+                  break;
+              }
+
+              signatures = [...signatures, ...chunk];
+              
+              if (chunk.length < chunkSize) {
+                  break;
+              }
+
+              lastSignature = chunk[chunk.length - 1].signature;
+
+              // Petit délai seulement pour les grandes requêtes
+              if (maxLimit > DEFAULT_CHUNK_SIZE) {
+                  await new Promise(resolve => setTimeout(resolve, 50));
+              }
+          }
+
+          return signatures;
+
+      } catch (error) {
+          logger.error(`Error getting signatures for ${address}:`, {
+              error: error.message,
+              collectedSignatures: signatures.length,
+              elapsedTime: Date.now() - startTime
+          });
+          return signatures; // Retourner ce qu'on a déjà récupéré
+      }
   }
 
   async getTransaction(signature, options = { encoding: 'jsonParsed', maxSupportedTransactionVersion: 0 }, mainContext = 'default', subContext = null) {
