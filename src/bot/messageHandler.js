@@ -212,9 +212,6 @@ class MessageHandler {
                 if (typeof this.commandHandlers[handlerName] === 'function') {
                     this.logger.info(`Executing command handler: ${command} for user: ${username} (ID: ${userId})`);
                     await this.commandHandlers[handlerName](this.bot, msg, args, messageThreadId);
-                } else if (typeof this.commandHandler[command] === 'function') {
-                    this.logger.info(`Executing legacy command: ${command} for user: ${username} (ID: ${userId})`);
-                    await this.commandHandler[command](this.bot, msg, args, messageThreadId);
                 } else {
                     throw new Error(`No handler found for command: ${command}`);
                 }                
@@ -261,12 +258,7 @@ class MessageHandler {
             // Vérification si le message contient une adresse Solana valide
             const solanaAddressRegex = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
             if (solanaAddressRegex.test(messageText)) {
-                // Si l'adresse Solana est trouvée, on enregistre le message
-                this.logger.info(`Solana address detected in message: ${messageText}`);
                 groupMessageLogger.logGroupMessage(msg);
-            } else {
-                // Si pas d'adresse Solana, on ne fait rien
-                this.logger.info(`No Solana address found in message: ${messageText}`);
             }
         } catch (error) {
             this.logger.error(`Error handling non-command message:`, error);
