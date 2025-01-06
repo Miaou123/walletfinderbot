@@ -19,11 +19,11 @@ class SolanaApi {
       ApiCallCounter.incrementCall('Helius', method, mainContext, subContext);
       
       // Log la requête envoyée
-      console.log(`[Helius Request] ${method}:`, {
-        params,
-        mainContext,
-        subContext
-      });
+      // console.log(`[Helius Request] ${method}:`, {
+      //   params,
+      //   mainContext,
+      //   subContext
+      // });
   
       const response = await HeliusRateLimiter.rateLimitedAxios({
         method: 'post',
@@ -49,12 +49,12 @@ class SolanaApi {
       }
   
       // Log la réponse complète
-      console.log(`[Helius Response] ${method}:`, {
-        status: response.status,
-        statusText: response.statusText,
-        headers: response.headers,
-        data: response.data
-      });
+      // console.log(`[Helius Response] ${method}:`, {
+      //   status: response.status,
+      //   statusText: response.statusText,
+      //   headers: response.headers,
+      //   data: response.data
+      // });
   
       if (!response.data) {
         console.error(`[Helius Debug] Empty response data for ${method}:`, {
@@ -400,13 +400,19 @@ class SolanaApi {
   }
 
   async getTransaction(signature, options = { encoding: 'jsonParsed', maxSupportedTransactionVersion: 0 }, mainContext = 'default', subContext = null) {
-    const result = await this.callHelius('getTransaction', [signature, options], 'rpc', mainContext, subContext);
-    if (!result) {
-      console.error(`No transaction details found for signature ${signature}`);
-      return null;
+    try {
+      const result = await this.callHelius('getTransaction', [signature, options], 'rpc', mainContext, subContext);
+      if (!result) {
+        console.error(`No transaction details found for signature ${signature} in context ${mainContext}/${subContext}`);
+        return null;
+      }
+      return result;
+    } catch (error) {
+      console.error(`Error in getTransaction with signature ${signature} and context ${mainContext}/${subContext}:`, error);
+      throw error;
     }
-    return result;
   }
+  
   
   async getBalance(address, mainContext = 'default', subContext = null) {
     const result = await this.callHelius('getBalance', [address], 'rpc', mainContext, subContext);
