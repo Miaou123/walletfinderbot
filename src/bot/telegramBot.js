@@ -251,14 +251,9 @@ class TelegramBotService {
             return;
         }
     
-        // Log du message complet avant de le découper
-        this.logger.info(`sendLongMessage -> full original message:\n${JSON.stringify(message)}`);
-    
         const messages = this.splitMessage(String(message));
         for (const msg of messages) {
             if (msg.trim().length > 0) {
-                // Log du chunk juste avant de l'envoyer
-                this.logger.info(`sendLongMessage -> sending chunk:\n${JSON.stringify(msg)}`);
     
                 try {
                     await this.bot.sendMessage(chatId, msg, {
@@ -276,7 +271,6 @@ class TelegramBotService {
                         // Découpe encore en sous-chunks et log à nouveau
                         const subMessages = this.splitMessage(msg);
                         for (const subMsg of subMessages) {
-                            this.logger.info(`sendLongMessage -> sending sub-chunk:\n${JSON.stringify(subMsg)}`);
                             await this.bot.sendMessage(chatId, subMsg, {
                                 parse_mode: 'HTML',
                                 disable_web_page_preview: true,
