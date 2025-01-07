@@ -1,6 +1,7 @@
 const { formatDevAnalysis } = require('../formatters/devFormatter');
 const devAnalyzer = require('../../analysis/devAnalyzer');
 const { validateSolanaAddress } = require('./helpers');
+const logger = require('../../utils/logger');
 
 class DevCommandHandler {
     constructor(userManager, accessControl) {
