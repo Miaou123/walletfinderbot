@@ -3,6 +3,7 @@ const config = require('../utils/config');
 const logger = require('../utils/logger'); 
 const { validateWallet } = require('./models/wallet');
 const { validateSubscription } = require('./models/subscription.js');
+const { validateGroupSubscription } = require('./models/group_subscription');
 
 let mongoClient = null;
 let db = null;
@@ -64,6 +65,14 @@ async function updateIndexes(db) {
                     { key: { active: 1 }, options: {} }
                 ]
             },
+            group_subscriptions: {
+                collection: db.collection("group_subscriptions"),
+                indexes: [
+                    { key: { groupId: 1 }, options: { unique: true } },
+                    { key: { expiresAt: 1 }, options: {} },
+                    { key: { active: 1 }, options: {} }
+                ]
+            },
             payment_addresses: {
                 collection: db.collection("payment_addresses"),
                 indexes: [
@@ -74,6 +83,19 @@ async function updateIndexes(db) {
                 ]
             }
         };
+
+        // Créer les collections si elles n'existent pas
+        for (const [collectionName, config] of Object.entries(collections)) {
+            try {
+                await db.createCollection(collectionName);
+                logger.info(`Collection ${collectionName} created or already exists`);
+            } catch (error) {
+                // Ignore l'erreur si la collection existe déjà
+                if (error.code !== 48) { // 48 = collection already exists
+                    logger.error(`Error creating collection ${collectionName}:`, error);
+                }
+            }
+        }
 
         // Traiter chaque collection
         for (const [collectionName, config] of Object.entries(collections)) {
@@ -219,7 +241,7 @@ async function saveInterestingWallet(address, walletData) {
 }
 
 // Fonction pour créer un abonnement
-async function createOrUpdateSubscription(username, duration, paymentId, amount) {
+async function createOrUpdateSubscription(username, duration, paymentId, amount, transactionHashes = {}) {
     const database = await getDatabase();
     const collection = database.collection("subscriptions");
     
@@ -243,7 +265,9 @@ async function createOrUpdateSubscription(username, duration, paymentId, amount)
                 duration,
                 amount,
                 paymentDate: now,
-                paymentStatus: 'completed'
+                paymentStatus: 'completed',
+                transactionHash: transactionHashes.transactionHash, // Ajout du hash de la transaction
+                transferHash: transactionHashes.transferHash       // Ajout du hash du transfert
             };
 
             // Mettre à jour l'abonnement existant
@@ -276,7 +300,9 @@ async function createOrUpdateSubscription(username, duration, paymentId, amount)
                     duration,
                     amount,
                     paymentDate: now,
-                    paymentStatus: 'completed'
+                    paymentStatus: 'completed',
+                    transactionHash: transactionHashes.transactionHash, // Ajout du hash de la transaction
+                    transferHash: transactionHashes.transferHash       // Ajout du hash du transfert
                 }]
             };
 
@@ -486,6 +512,137 @@ async function cleanupExpiredPaymentAddresses() {
     }
 }
 
+// Fonctions pour les groupes
+async function createOrUpdateGroupSubscription(groupId, groupName, duration, paidByUser, paymentId, amount, transactionHashes = {}) {
+    const database = await getDatabase();
+    const collection = database.collection("group_subscriptions");
+    
+    try {
+        const now = new Date();
+        const durationMs = groupSubscriptionDurations[duration];
+        
+        // Rechercher un abonnement existant
+        const existingSubscription = await collection.findOne({ groupId });
+        
+        if (existingSubscription) {
+            // Calculer la nouvelle date d'expiration
+            const currentExpiryDate = new Date(existingSubscription.expiresAt);
+            const newExpiryDate = new Date(
+                Math.max(now.getTime(), currentExpiryDate.getTime()) + durationMs
+            );
+
+            const paymentRecord = {
+                paymentId,
+                duration,
+                amount,
+                paymentDate: now,
+                paymentStatus: 'completed',
+                transactionHash: transactionHashes.transactionHash,
+                transferHash: transactionHashes.transferHash,
+                paidByUserId: paidByUser.id,
+                paidByUsername: paidByUser.username
+            };
+
+            const result = await collection.updateOne(
+                { groupId },
+                {
+                    $set: {
+                        groupName, // Mettre à jour le nom du groupe au cas où il a changé
+                        active: true,
+                        expiresAt: newExpiryDate,
+                        lastUpdated: now
+                    },
+                    $push: {
+                        paymentHistory: paymentRecord
+                    }
+                }
+            );
+
+            logger.info(`Group subscription updated for ${groupName} (${groupId})`);
+            return result;
+        } else {
+            // Créer un nouvel abonnement
+            const newSubscription = {
+                groupId,
+                groupName,
+                active: true,
+                startDate: now,
+                expiresAt: new Date(now.getTime() + durationMs),
+                lastUpdated: now,
+                paymentHistory: [{
+                    paymentId,
+                    duration,
+                    amount,
+                    paymentDate: now,
+                    paymentStatus: 'completed',
+                    transactionHash: transactionHashes.transactionHash,
+                    transferHash: transactionHashes.transferHash,
+                    paidByUserId: paidByUser.id,
+                    paidByUsername: paidByUser.username
+                }]
+            };
+
+            const { error, value } = validateGroupSubscription(newSubscription);
+            if (error) throw error;
+
+            const result = await collection.insertOne(value);
+            logger.info(`New group subscription created for ${groupName} (${groupId})`);
+            return result;
+        }
+    } catch (error) {
+        logger.error(`Error creating/updating group subscription for ${groupId}:`, error);
+        throw error;
+    }
+}
+
+async function getGroupSubscription(groupId) {
+    const database = await getDatabase();
+    const collection = database.collection("group_subscriptions");
+    
+    try {
+        const subscription = await collection.findOne({ groupId });
+        if (!subscription) return null;
+
+        subscription.active = subscription.expiresAt > new Date();
+        return subscription;
+    } catch (error) {
+        logger.error(`Error getting group subscription for ${groupId}:`, error);
+        return null;
+    }
+}
+
+async function updateGroupSubscriptionPayment(groupId, paymentId, status, transactionHashes = {}) {
+    const database = await getDatabase();
+    const collection = database.collection("group_subscriptions");
+    
+    try {
+        const result = await collection.updateOne(
+            { 
+                groupId,
+                "paymentHistory.paymentId": paymentId
+            },
+            {
+                $set: {
+                    lastUpdated: new Date(),
+                    "paymentHistory.$[elem].paymentStatus": status,
+                    "paymentHistory.$[elem].transactionHash": transactionHashes.transactionHash,
+                    "paymentHistory.$[elem].transferHash": transactionHashes.transferHash
+                }
+            },
+            {
+                arrayFilters: [{ "elem.paymentId": paymentId }]
+            }
+        );
+
+        logger.info(`Updated group payment status for ${groupId}, payment ${paymentId} to ${status}`);
+        return result.modifiedCount > 0;
+    } catch (error) {
+        logger.error(`Error updating group payment for ${groupId}:`, error);
+        return false;
+    }
+}
+
+
 process.on('SIGINT', async () => {
    if (mongoClient) {
        await mongoClient.close();
@@ -505,5 +662,8 @@ module.exports = {
     savePaymentAddress,
     getPaymentAddress,
     updatePaymentAddressStatus,
-    cleanupExpiredPaymentAddresses
+    cleanupExpiredPaymentAddresses,
+    createOrUpdateGroupSubscription,
+    getGroupSubscription,
+    updateGroupSubscriptionPayment
 };

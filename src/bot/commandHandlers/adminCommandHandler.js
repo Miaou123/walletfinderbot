@@ -317,8 +317,7 @@ class AdminCommandHandler {
             }
     
             if (args.length < 1) {
-                // Échapper
-                await bot.sendMessage(chatId, "Usage: /checksub &lt;username&gt;");
+                await bot.sendMessage(chatId, "Usage: /checksub <username>");
                 return;
             }
     
@@ -330,24 +329,37 @@ class AdminCommandHandler {
                 return;
             }
     
-            let message = `📊 Subscription info for @${username}:\n\n`;
-            message += `Status: ${subscription.active ? '✅ Active' : '❌ Inactive'}\n`;
-            message += `Valid until: ${subscription.expiresAt.toLocaleString()}\n\n`;
-            message += `💳 Payment History:\n`;
-
-            // Show last 3 payments
-            const recentPayments = subscription.paymentHistory
-                .slice(-3)
-                .reverse()
-                .map(payment =>
-                    `• ${new Date(payment.paymentDate).toLocaleDateString()}: ` +
-                    `${payment.duration} (${payment.paymentStatus})`
-                )
-                .join('\n');
-
-            message += recentPayments;
+            const daysRemaining = Math.ceil((subscription.expiresAt - new Date()) / (1000 * 60 * 60 * 24));
             
-            await bot.sendMessage(chatId, message);
+            let message = "📊 Subscription info for @${username}:\n\n";
+            message += `Status: ${subscription.active ? '✅ Active' : '❌ Inactive'}\n`;
+            message += `Valid until: ${subscription.expiresAt.toLocaleString()}\n`;
+            message += `⚡ Days remaining: ${daysRemaining}\n`;
+            message += `🕒 Member since: ${new Date(subscription.startDate).toLocaleString()}\n\n`;
+            message += `💳 Payment History:\n`;
+    
+            // Trier l'historique par date décroissante
+            const sortedHistory = [...subscription.paymentHistory].sort((a, b) => 
+                new Date(b.paymentDate) - new Date(a.paymentDate)
+            );
+    
+            for (const payment of sortedHistory) {
+                const date = new Date(payment.paymentDate).toLocaleDateString();
+                message += `• ${date}: ${payment.duration} (ID: ${payment.paymentId}`;
+                
+                if (payment.transactionHash) {
+                    const hash = payment.transactionHash;
+                    const shortHash = `${hash.slice(0, 3)}...${hash.slice(-3)}`;
+                    message += `, <a href="https://solscan.io/tx/${hash}">tx: ${shortHash}</a>`;
+                }
+                
+                message += `)\n`;
+            }
+    
+            await bot.sendMessage(chatId, message, {
+                parse_mode: 'HTML',
+                disable_web_page_preview: true
+            });
         } catch (error) {
             logger.error('Error in checksub command:', error);
             await bot.sendMessage(chatId, "An error occurred while checking the subscription.");
@@ -399,37 +411,36 @@ class AdminCommandHandler {
                 return;
             }
     
+            const now = new Date();
             const subscriptions = await this.accessControl.subscriptionsCollection
-                .find({ active: true })
+                .find()
                 .sort({ username: 1 })
                 .toArray();
     
-            if (subscriptions.length === 0) {
+            // Filtrer pour ne garder que les abonnements actifs
+            const activeSubscriptions = subscriptions.filter(sub => new Date(sub.expiresAt) > now);
+    
+            if (activeSubscriptions.length === 0) {
                 await bot.sendMessage(chatId, "No active subscriptions found.");
                 return;
             }
     
-            let message = "🔄 Active Subscriptions List\n\n";
+            let message = "📊 Active Subscriptions:\n\n";
             
-            for (const sub of subscriptions) {
-                const daysLeft = Math.ceil((new Date(sub.expiresAt) - new Date()) / (1000 * 60 * 60 * 24));
-                
-                message += `👤 User: @${sub.username}\n`;
-                message += `📅 Valid until: ${sub.expiresAt.toLocaleString()}\n`;
-                message += `⚡ Days remaining: ${daysLeft}\n`;
-                message += `💳 Last payment: ${sub.paymentHistory[sub.paymentHistory.length - 1].paymentId}\n`;
-                message += `${'─'.repeat(30)}\n\n`;
+            for (const sub of activeSubscriptions) {
+                const daysLeft = Math.ceil((new Date(sub.expiresAt) - now) / (1000 * 60 * 60 * 24));
+                message += `✅ @${sub.username}: ${daysLeft} days left\n`;
             }
     
-            message += `📊 Total Active Subscriptions: ${subscriptions.length}\n`;
+            message += `\nTotal active subscriptions: ${activeSubscriptions.length}`;
     
             await bot.sendMessage(chatId, message);
+    
         } catch (error) {
             logger.error('Error in listsubs command:', error);
             await bot.sendMessage(chatId, "An error occurred while listing subscriptions.");
         }
     }
-
     /**
      * Handle the removesub command
      */
@@ -444,12 +455,12 @@ class AdminCommandHandler {
             }
     
             if (args.length < 1) {
-                // Échapper
-                await bot.sendMessage(chatId, "Usage: /removesub &lt;username&gt;");
+                await bot.sendMessage(chatId, "Usage: /removesub <username>");
                 return;
             }
     
             const username = args[0];
+            const normalizedUsername = this.accessControl.normalizeUsername(username);
             const subscription = await this.accessControl.getSubscription(username);
     
             if (!subscription) {
@@ -457,24 +468,19 @@ class AdminCommandHandler {
                 return;
             }
     
-            const result = await this.accessControl.subscriptionsCollection.updateOne(
-                { username: this.accessControl.normalizeUsername(username) },
-                { 
-                    $set: { 
-                        active: false,
-                        lastUpdated: new Date()
-                    }
-                }
+            // Supprimer complètement l'entrée au lieu de juste la désactiver
+            const result = await this.accessControl.subscriptionsCollection.deleteOne(
+                { username: normalizedUsername }
             );
     
-            if (result.modifiedCount > 0) {
+            if (result.deletedCount > 0) {
                 await bot.sendMessage(
                     chatId, 
-                    `Subscription deactivated for @${username}\n` +
+                    `✅ Subscription successfully removed for @${username}\n` +
                     `Last valid until: ${subscription.expiresAt.toLocaleString()}`
                 );
             } else {
-                await bot.sendMessage(chatId, `Failed to deactivate subscription for @${username}`);
+                await bot.sendMessage(chatId, `❌ Failed to remove subscription for @${username}`);
             }
         } catch (error) {
             logger.error('Error in removesub command:', error);

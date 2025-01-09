@@ -12,7 +12,6 @@ const CrossHandler = require('./crossHandler');
 const BestTradersHandler = require('./bestTradersHandler');
 const SearchHandler = require('./searchHandler');
 const TopHoldersHandler = require('./topHoldersHandler');
-const UserSubscriptionHandler = require('./mySubHandler');
 const SubscriptionCommandHandler  = require('./subscriptionCommandHandler');
 const TrackingActionHandler = require('./trackingActionHandler');
 const { SupplyTracker } = require('../../tools/SupplyTracker');
@@ -21,6 +20,7 @@ const HelpHandler = require('./helpHandler');
 const StartHandler = require('./startHandler');
 const ScanHandler = require('./scanHandler');
 const TeamHandler = require('./teamHandler');
+const GroupSubscriptionHandler = require('./groupSubhandler');
 const stateManager = require('../../utils/stateManager');
 
 const config = require('../../utils/config');
@@ -31,8 +31,8 @@ class CommandHandlers {
     constructor(userManager, accessControl, bot) {
         this.adminHandler = new AdminCommandHandler(userManager, accessControl, bot);
         this.broadcastHandler = new BroadcastHandler(userManager, accessControl, bot);
-        this.userSubscriptionHandler = new UserSubscriptionHandler(accessControl);
         this.subscriptionHandler = new SubscriptionCommandHandler (accessControl, config.HELIUS_RPC_URL);
+        this.groupSubscriptionHandler = new GroupSubscriptionHandler(accessControl, config.HELIUS_RPC_URL);
         this.startHandler = new StartHandler(userManager);
         this.scanHandler = new ScanHandler(stateManager);
         this.bundleHandler = new BundleHandler();
@@ -67,7 +67,7 @@ class CommandHandlers {
             'start': { handler: this.startHandler.handleCommand, context: this.startHandler },
             'scan': { handler: this.scanHandler.handleCommand, context: this.scanHandler },
             'subscribe': { handler: this.subscriptionHandler.handleCommand, context: this.subscriptionHandler },
-            'mysubscription': { handler: this.userSubscriptionHandler.handleMySubscription, context: this.userSubscriptionHandler },
+            'subscribe_group': { handler: this.groupSubscriptionHandler.handleCommand, context: this.groupSubscriptionHandler },
             'adduser': { handler: this.adminHandler.handleAddUser, context: this.adminHandler },
             'removeuser': { handler: this.adminHandler.handleRemoveUser, context: this.adminHandler },
             'addgroup': { handler: this.adminHandler.handleAddGroup, context: this.adminHandler },
@@ -113,6 +113,7 @@ class CommandHandlers {
               const callbackHandlers = {
                 'sub': this.subscriptionHandler,
                 'check': this.subscriptionHandler,
+                'check_group': this.groupSubscriptionHandler,
                 'track': this.trackingActionHandler,
                 'details': this.teamHandler,
                 'sd': this.trackingActionHandler,
