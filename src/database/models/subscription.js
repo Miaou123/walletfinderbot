@@ -43,23 +43,17 @@ function validateSubscription(subscription) {
 
 // Durées des abonnements en millisecondes
 const subscriptionDurations = {
-    '1month': 30 * 24 * 60 * 60 * 1000,   // 30 jours
-    '3month': 90 * 24 * 60 * 60 * 1000,   // 90 jours
-    '6month': 180 * 24 * 60 * 60 * 1000   // 180 jours
+    '1month': 30 * 24 * 60 * 60 * 1000 // 30 jours
 };
 
-// Configuration du plan d'abonnement
 const subscriptionPlan = {
-    name: 'Standard',
+    name: 'Basic Plan',
     features: [
         'Access to all commands',
+        'Monthly subscription',
         'Priority support'
     ],
-    prices: {
-        '1month': 10,
-        '3month': 25,
-        '6month': 45
-    }
+    price: 0.5 // 0.5 SOL par mois
 };
 
 module.exports = {

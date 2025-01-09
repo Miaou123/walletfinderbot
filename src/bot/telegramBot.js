@@ -12,6 +12,7 @@ const { commandConfigs } = require('./commandsManager/commandConfigs');
 const AccessControlDB = require('./accessManager/accessControlDB');
 const RateLimiter = require('./commandsManager/commandRateLimiter');
 const CommandUsageTracker = require('./commandsManager/commandUsageTracker');
+const SolanaPaymentHandler = require('../solanaPaymentHandler/solanaPaymentHandler.js');
 const groupMessageLogger = require('./messageDataManager/groupMessageLogger');
 const MessageHandler = require('./messageHandler');
 const { getDatabase } = require('../database/database');
@@ -173,15 +174,20 @@ class TelegramBotService {
         this.usageTracker = new CommandUsageTracker(path.join(this.configPath, 'command_usage.json'));
         this.logger.info('Rate limiter and usage tracker initialized');
 
-        // 4. Instancier les handlers
+        // 4. Créer une seule instance de SolanaPaymentHandler
+        this.paymentHandler = new SolanaPaymentHandler(config.HELIUS_RPC_URL);
+        this.logger.info('Payment handler initialized');
+
+        // 5. Instancier les handlers
         //    -> On y passe le userManager, l'accessControl, et le bot 
         this.commandHandlers = new CommandHandlers(
             this.userManager,
             this.accessControl,
-            this.bot
+            this.bot,
+            this.paymentHandler 
         );
 
-        // 5. Initialiser le groupMessageLogger si nécessaire
+        // 6. Initialiser le groupMessageLogger si nécessaire
         groupMessageLogger.initialize();
         this.logger.info('All managers initialized successfully');
     }
@@ -197,7 +203,8 @@ class TelegramBotService {
             config,
             logger: this.logger,
             ActiveCommandsTracker,
-            commandConfigs
+            commandConfigs,
+            paymentHandler: this.paymentHandler 
         });
     
         // Initialiser le messageHandler

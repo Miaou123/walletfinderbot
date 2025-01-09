@@ -1,23 +1,22 @@
-const SolanaPaymentHandler = require('../../solanaPaymentHandler/solanaPaymentHandler');
 const logger = require('../../utils/logger');
 const { updatePaymentAddressStatus } = require('../../database/database');
 
 class SubscriptionCommandHandler {
-    constructor(accessControl, heliusUrl) {
+    constructor(accessControl, paymentHandler) {
         this.accessControl = accessControl;
-        this.paymentHandler = new SolanaPaymentHandler(heliusUrl);
+        this.paymentHandler = paymentHandler; 
     }
 
     async handleCommand(bot, msg, args) {
         const chatId = msg.chat.id;
         const username = (msg.from.username || '').toLowerCase().replace(/^@/, '');
-
+    
         try {
             const subscription = await this.accessControl.getSubscription(username);
-
+    
             if (subscription?.active && subscription.expiresAt > new Date()) {
                 const daysLeft = Math.ceil((new Date(subscription.expiresAt) - new Date()) / (1000 * 60 * 60 * 24));
-
+    
                 let message = 
                     `📊 Subscription Status\n\n` +
                     `👤 Username: @${subscription.username}\n` +
@@ -25,14 +24,14 @@ class SubscriptionCommandHandler {
                     `⚡ Days remaining: ${daysLeft}\n` +
                     `🕒 Member since: ${new Date(subscription.startDate).toLocaleString()}\n\n` +
                     `💳 Payment History:\n`;
-
+    
                 const sortedPayments = [...subscription.paymentHistory].sort((a, b) => 
                     new Date(b.paymentDate) - new Date(a.paymentDate)
                 );
-
+    
                 for (const payment of sortedPayments) {
                     const date = new Date(payment.paymentDate).toLocaleDateString();
-                    message += `• ${date}: ${payment.duration} (ID: ${payment.paymentId}`;
+                    message += `• ${date}: (ID: ${payment.paymentId}`;
                     
                     if (payment.transactionHash) {
                         const hash = payment.transactionHash;
@@ -42,9 +41,9 @@ class SubscriptionCommandHandler {
                     
                     message += ")\n";
                 }
-
+    
                 message += `\n${'─'.repeat(30)}\n`;
-
+    
                 const opts = {
                   parse_mode: 'HTML',
                   disable_web_page_preview: true,
@@ -54,28 +53,26 @@ class SubscriptionCommandHandler {
                       ]
                   }
                 };
-
+    
                 await bot.sendMessage(chatId, message, opts);
                 return;
             }
-
+    
             const keyboard = {
                 inline_keyboard: [
-                    [{ text: "🥉 1 Month (0.5 SOL)", callback_data: "sub_1month" }],
-                    [{ text: "🥈 3 Months (1.2 SOL)", callback_data: "sub_3month" }],
-                    [{ text: "🥇 6 Months (2.0 SOL)", callback_data: "sub_6month" }]
+                    [{ text: "🥉 Subscribe (0.5 SOL/month)", callback_data: "sub_subscribe" }]
                 ]
             };
-
+    
             await bot.sendMessage(
                 chatId,
-                "🔰 Subscription Options\nPlease select your subscription duration:",
+                "🔰 Subscription\nClick to subscribe:",
                 {
                     parse_mode: 'Markdown',
                     reply_markup: keyboard
                 }
             );
-
+    
         } catch (error) {
             logger.error('Error in /subscribe handleCommand:', error);
             await bot.sendMessage(chatId,
@@ -88,42 +85,20 @@ class SubscriptionCommandHandler {
         const chatId = query.message.chat.id;
         const callbackData = query.data;
         const username = (query.from.username || '').toLowerCase().replace(/^@/, '');
-
+    
         try {
-            if (callbackData.startsWith('sub_')) {
-                if (callbackData === 'sub_extend') {
-                    const keyboard = {
-                        inline_keyboard: [
-                            [{ text: "🥉 1 Month (0.5 SOL)", callback_data: "sub_1month" }],
-                            [{ text: "🥈 3 Months (1.2 SOL)", callback_data: "sub_3month" }],
-                            [{ text: "🥇 6 Months (2.0 SOL)", callback_data: "sub_6month" }]
-                        ]
-                    };
-
-                    await bot.editMessageText(
-                        "🔰 Subscription Options\nPlease select your subscription duration:",
-                        {
-                            chat_id: chatId,
-                            message_id: query.message.message_id,
-                            reply_markup: keyboard
-                        }
-                    );
-                    await bot.answerCallbackQuery(query.id);
-                    return;
-                }
-
-                const duration = callbackData.slice(4);
-                const session = await this.paymentHandler.createPaymentSession(username, duration);
-
+            if (callbackData === 'sub_extend' || callbackData === 'sub_subscribe') {
+                const session = await this.paymentHandler.createPaymentSession(username);
+    
                 const message =
                     `💳 <b>Payment Details</b>\n\n` +
-                    `Amount: ${session.amount} SOL\n` +
-                    `Duration: ${session.duration}\n\n` +
+                    `Amount: 0.5 SOL\n` +
+                    `Duration: 1 month\n\n` +
                     `Please send exactly this amount to:\n<code>${session.paymentAddress}</code>\n\n` +
                     `Then click "Check Payment" once done.\n\n` +
                     `Session expires in 30 minutes.\n\n` +
                     `If you're encountering issues, please DM @rengon0x`;
-
+    
                 const keyboard = {
                     inline_keyboard: [
                         [{
@@ -132,14 +107,14 @@ class SubscriptionCommandHandler {
                         }]
                     ]
                 };
-
+    
                 await bot.editMessageText(message, {
                     chat_id: chatId,
                     message_id: query.message.message_id,
                     parse_mode: 'HTML',
                     reply_markup: keyboard
                 });
-
+    
                 await bot.answerCallbackQuery(query.id);
                 return;
             }
