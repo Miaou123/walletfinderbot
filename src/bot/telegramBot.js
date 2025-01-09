@@ -8,7 +8,7 @@ const config = require('../utils/config');
 const CommandHandlers = require('./commandHandlers/commandHandlers');
 const { UserManager } = require('./accessManager/userManager');
 const ActiveCommandsTracker = require('./commandsManager/activeCommandsTracker');
-const { parseCommand, validateArgs, commandConfigs } = require('./commandsManager/commandParser');
+const { commandConfigs } = require('./commandsManager/commandConfigs');
 const AccessControlDB = require('./accessManager/accessControlDB');
 const RateLimiter = require('./commandsManager/commandRateLimiter');
 const CommandUsageTracker = require('./commandsManager/commandUsageTracker');
@@ -61,8 +61,8 @@ class TelegramBotService {
             await this.initializeDatabase();
             await this.ensureFilesExist();
             await this.initializeBot();
-            await this.initializeManagers();    // <— on initialise nos managers et handlers
-            this.setupMessageHandler();
+            await this.initializeManagers();
+            await this.setupMessageHandler();
             this.setupEventListeners();
 
             this.logger.info('Bot successfully started and ready to handle messages!');
@@ -186,12 +186,11 @@ class TelegramBotService {
         this.logger.info('All managers initialized successfully');
     }
 
-    setupMessageHandler() {
+    async setupMessageHandler() {
         // On crée le MessageHandler en lui passant nos dépendances 
         this.messageHandler = new MessageHandler({
             bot: this.bot,
             commandHandlers: this.commandHandlers,
-            // Plus besoin de `commandHandler`, c'est `commandHandlers` qui gère tout
             accessControl: this.accessControl,
             rateLimiter: this.rateLimiter,
             usageTracker: this.usageTracker,
@@ -200,6 +199,10 @@ class TelegramBotService {
             ActiveCommandsTracker,
             commandConfigs
         });
+    
+        // Initialiser le messageHandler
+        await this.messageHandler.initialize();
+        this.logger.info('MessageHandler initialized successfully');
     }
 
     setupEventListeners() {

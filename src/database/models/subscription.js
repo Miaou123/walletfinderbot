@@ -6,7 +6,9 @@ const paymentRecordSchema = Joi.object({
     duration: Joi.string().valid('1month', '3month', '6month').required(),
     paymentDate: Joi.date().default(Date.now),
     paymentStatus: Joi.string().valid('pending', 'completed', 'failed').default('completed'),
-    amount: Joi.number().optional()
+    amount: Joi.number().optional(),
+    transactionHash: Joi.string().optional(),
+    transferHash: Joi.string().optional()  
 });
 
 // Main subscription schema

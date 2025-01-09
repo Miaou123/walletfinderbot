@@ -1,4 +1,4 @@
-const { parseCommand, validateArgs, isAdminCommand } = require('./commandsManager/commandParser');
+const CommandParser = require('./commandsManager/commandParser');  // Nouvelle classe
 const { getAvailableSpots } = require('../utils/accessSpots');
 const groupMessageLogger = require('./messageDataManager/groupMessageLogger');
 
@@ -14,8 +14,21 @@ class MessageHandler {
         this.ActiveCommandsTracker = dependencies.ActiveCommandsTracker;
         this.MAX_MESSAGE_AGE = 600;
         this.commandConfigs = dependencies.commandConfigs;
-        console.log('MessageHandler: commandHandlers:', this.commandHandlers);
+        this.commandParser = null;
     }
+
+    async initialize() {
+        try {
+            const botInfo = await this.bot.getMe();
+            this.botUsername = botInfo.username;
+            this.commandParser = new CommandParser(this.botUsername);
+            this.logger.info(`Bot initialized with username: ${this.botUsername}`);
+        } catch (error) {
+            this.logger.error('Failed to initialize CommandParser:', error);
+            throw error;
+        }
+    }
+    
     
     // Getter pour les commandes limitées (requiresAuth: true)
     get limitedCommands() {
@@ -32,6 +45,12 @@ class MessageHandler {
     }
 
     async handleMessage(msg) {
+        
+        if (!this.commandParser) {
+            this.logger.error('CommandParser not initialized. Call initialize() first');
+            return;
+        }
+
         if (!msg.text || !msg.from.username) {
             if (!msg.from.username) {
                 await this.bot.sendMessage(msg.chat.id, 
@@ -57,21 +76,41 @@ class MessageHandler {
     
         // Vérification initiale des permissions
         if (msg.text.startsWith('/')) {
-            const { command } = parseCommand(msg.text);
-            
-            // Vérifie si la commande existe et si elle nécessite une authentification
+            const { command, isAdmin } = this.commandParser.parseCommand(msg.text);
             const commandConfig = this.commandConfigs[command];
-            const requiresAuth = commandConfig?.requiresAuth ?? true; // Par défaut, on requiert l'auth si pas de config
-            const allowed = await this.accessControl.isAllowed(username, chatId);
-
-            if (requiresAuth && !allowed) {
-                if (!isGroup) {
+            const requiresAuth = commandConfig?.requiresAuth ?? true;
+        
+            let allowed;
+            if (isAdmin) {
+                // Vérifier les droits admin en premier
+                allowed = await this.accessControl.isAllowed(username, 'admin');
+                if (!allowed) {
+                    this.logger.warn(`Non-admin user ${username} tried to use admin command: ${command}`);
+                    return;
+                }
+            } else if (isGroup) {
+                // Vérification des groupes
+                // Ajouter une exception pour subscribe_group
+                if (command !== 'subscribe_group') {  
+                    allowed = await this.accessControl.isAllowed(chatId, 'group');
+                    if (!allowed && requiresAuth) {
+                        await this.bot.sendMessage(chatId,
+                            "This group doesn't have an active subscription. Use /subscribe_group to subscribe.",
+                            { message_thread_id: messageThreadId }
+                        );
+                        return;
+                    }
+                }
+            } else {
+                // Vérification des utilisateurs normaux
+                allowed = await this.accessControl.isAllowed(username, 'user');
+                if (requiresAuth && !allowed) {
                     const spotsInfo = getAvailableSpots();
                     await this.bot.sendMessage(chatId,
                         `You don't have access to this bot. ${spotsInfo ? `There are currently ${spotsInfo.availableSpots}/${spotsInfo.maxUsers} spots available.` : ''} Please contact @Rengon0x for access.`
                     );
+                    return;
                 }
-                return;
             }
         } else if (!this.accessControl.isAllowed(username, chatId)) {
             // Pour les messages non-commandes, on vérifie toujours les permissions
@@ -96,16 +135,10 @@ class MessageHandler {
     }
 
     async handleCommand(msg, isGroup, messageThreadId) {
-        const { command, args, isAdmin } = parseCommand(msg.text);
+        const { command, args, isAdmin } = this.commandParser.parseCommand(msg.text);
         const userId = msg.from.id;
-
-        if (isGroup) {
-            const botUsername = this.bot.options.username;
-            const mentionRegex = new RegExp(`@${botUsername}$`);
-            if (!mentionRegex.test(msg.text.split(' ')[0]) && msg.text.includes('@')) {
-                return;
-            }
-        }
+        const username = msg.from.username;
+        const chatId = msg.chat.id;
 
         this.logger.info(`Received command: ${command} with args: [${args}] from user: ${msg.from.username} (ID: ${userId})`);
 
@@ -118,13 +151,13 @@ class MessageHandler {
 
         // Gestion des commandes admin
         if (isAdmin) {
-            if (!this.accessControl.isAdmin(msg.from.username)) {
-                this.logger.warn(`Non-admin user ${msg.from.username} tried to use admin command: ${command}`);
+            if (!await this.accessControl.isAllowed(username, 'admin')) {
+                this.logger.warn(`Non-admin user ${username} tried to use admin command: ${command}`);
                 return;
             }
             
             // Validation avec les arguments
-            const validationErrors = validateArgs(command, args, true);
+            const validationErrors = this.commandParser.validateArgs(command, args, true);
             if (validationErrors.length > 0) {
                 if (!isGroup) {
                     await this.bot.sendLongMessage(msg.chat.id, validationErrors.join('\n\n'), { message_thread_id: messageThreadId });
@@ -135,10 +168,6 @@ class MessageHandler {
             await this.handleAdminCommand(command, msg, args, messageThreadId);
             return;
         }
-
-        // Ici on gère toutes les autres commandes (basic ou requiresAuth)
-        const username = msg.from.username;
-        const chatId = msg.chat.id;
 
         try {
             // 1. Vérification des permissions de base
@@ -175,7 +204,7 @@ class MessageHandler {
             }
 
             // 4. Validation des arguments
-            const validationErrors = validateArgs(command, args);
+            const validationErrors = this.commandParser.validateArgs(command, args);
             if (validationErrors.length > 0) {
                 if (!isGroup) {
                     await this.bot.sendLongMessage(chatId, validationErrors.join('\n\n'), 
