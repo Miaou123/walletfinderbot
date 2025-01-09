@@ -170,46 +170,66 @@ class SolanaPaymentHandler {
 
     async checkPayment(sessionId) {
         const session = this.getPaymentSession(sessionId);
-
+    
         if (!session) {
             return { success: false, reason: 'Session not found.' };
         }
-
+    
         if (session.type === 'group') {
             return this.checkGroupPayment(sessionId);
         }
-
+    
         if (Date.now() > session.expiresAt.getTime()) {
             return { success: false, reason: 'Session expired.' };
         }
-
+    
         if (session.paid) {
-            return { success: true, alreadyPaid: true };
+            return { 
+                success: true, 
+                alreadyPaid: true,
+                transactionHash: session.transactionHash // Ajouter le hash existant
+            };
         }
-
+    
         try {
             // Récupérer l'historique des transactions
             const signatures = await this.connection.getSignaturesForAddress(
                 new PublicKey(session.paymentAddress),
                 { limit: 10 }
             );
-
+    
             const balanceLamports = await this.connection.getBalance(
                 new PublicKey(session.paymentAddress)
             );
             const balanceSol = balanceLamports / 1e9;
-
+    
             logger.info(
                 `Balance of address ${session.paymentAddress}: ${balanceSol} SOL (expected: ${session.amount})`
             );
-
+    
             if (balanceSol >= session.amount) {
+                // Vérifier que nous avons bien trouvé la transaction
+                if (!signatures || signatures.length === 0) {
+                    logger.error(`No transaction signatures found for a funded address: ${session.paymentAddress}`);
+                    return {
+                        success: false,
+                        reason: 'Payment detected but transaction signature not found'
+                    };
+                }
+    
+                const lastTransaction = signatures[0].signature;
+                if (!lastTransaction) {
+                    logger.error(`Invalid transaction signature for address: ${session.paymentAddress}`);
+                    return {
+                        success: false,
+                        reason: 'Payment detected but invalid transaction signature'
+                    };
+                }
+    
                 session.paid = true;
-                // Récupérer le hash de la dernière transaction entrante
-                const lastTransaction = signatures[0]?.signature || null;
                 session.transactionHash = lastTransaction;
                 this.sessions.set(sessionId, session);
-
+    
                 return { 
                     success: true,
                     transactionHash: lastTransaction 
