@@ -268,94 +268,123 @@ class AccessControlDB {
       }
   
       async createGroupSubscription(groupId, groupName, duration, payerInfo, paymentData = {}) {
-          try {
-              const paymentId = paymentData.paymentId || `group_payment_${Date.now()}`;
-              const subscription = await this.groupSubscriptionsCollection.findOne({ groupId });
-              
-              if (subscription) {
-                  // Extend existing subscription
-                  const currentExpiryDate = new Date(subscription.expiresAt);
-                  const now = new Date();
-                  const durationInMs = groupSubscriptionDurations[duration];
-                  const newExpiryDate = new Date(
-                      Math.max(now.getTime(), currentExpiryDate.getTime()) + durationInMs
-                  );
-  
-                  const paymentRecord = {
-                      paymentId,
-                      duration,
-                      paymentDate: now,
-                      paymentStatus: paymentData.status || 'completed',
-                      amount: 2.0, // Fixed price for groups
-                      transactionHash: paymentData.transactionHash,
-                      transferHash: paymentData.transferHash,
-                      paidByUserId: payerInfo.id,
-                      paidByUsername: payerInfo.username
-                  };
-  
-                  const updatedSubscription = {
-                      ...subscription,
-                      groupName, // Update group name in case it changed
-                      active: true,
-                      expiresAt: newExpiryDate,
-                      lastUpdated: now,
-                      paymentHistory: [...(subscription.paymentHistory || []), paymentRecord]
-                  };
-  
-                  // Validate before update
-                  const { error, value } = validateGroupSubscription(updatedSubscription);
-                  if (error) throw error;
-  
-                  await this.groupSubscriptionsCollection.updateOne(
-                      { groupId },
-                      {
-                          $set: {
-                              active: true,
-                              groupName,
-                              expiresAt: newExpiryDate,
-                              lastUpdated: now
-                          },
-                          $push: {
-                              paymentHistory: paymentRecord
-                          }
-                      }
-                  );
-              } else {
-                  // Create new subscription
-                  const now = new Date();
-                  const subscriptionData = {
-                      groupId,
-                      groupName,
-                      startDate: now,
-                      expiresAt: new Date(now.getTime() + groupSubscriptionDurations[duration]),
-                      active: true,
-                      paymentHistory: [{
-                          paymentId,
-                          duration,
-                          paymentDate: now,
-                          paymentStatus: paymentData.status || 'completed',
-                          amount: 2.0,
-                          transactionHash: paymentData.transactionHash,
-                          transferHash: paymentData.transferHash,
-                          paidByUserId: payerInfo.id,
-                          paidByUsername: payerInfo.username
-                      }],
-                      lastUpdated: now
-                  };
-  
-                  // Validate before insert
-                  const { error, value } = validateGroupSubscription(subscriptionData);
-                  if (error) throw error;
-  
-                  await this.groupSubscriptionsCollection.insertOne(value);
-              }
-  
-              return paymentId;
-          } catch (error) {
-              logger.error(`Error creating group subscription for "${groupId}":`, error);
-              throw error;
-          }
-      }
+        try {
+            const paymentId = paymentData.paymentId || `group_payment_${Date.now()}`;
+            const subscription = await this.groupSubscriptionsCollection.findOne({ groupId });
+            
+            // Log détaillé pour le débogage
+            logger.debug('Group Subscription Creation - Input:', {
+                groupId,
+                groupName,
+                duration,
+                payerInfo,
+                paymentData
+            });
+            
+            if (subscription) {
+                // Extend existing subscription
+                const currentExpiryDate = new Date(subscription.expiresAt);
+                const now = new Date();
+                const durationInMs = groupSubscriptionDurations[duration];
+                const newExpiryDate = new Date(
+                    Math.max(now.getTime(), currentExpiryDate.getTime()) + durationInMs
+                );
+    
+                const paymentRecord = {
+                    paymentId,
+                    duration,
+                    paymentDate: now,
+                    paymentStatus: paymentData.status || 'completed',
+                    amount: 2.0, // Fixed price for groups
+                    transactionHash: paymentData.transactionHash,
+                    transferHash: paymentData.transferHash,
+                    paidByUserId: payerInfo.id,
+                    paidByUsername: payerInfo.username
+                };
+    
+                const updatedSubscription = {
+                    ...subscription,
+                    groupName, // Update group name in case it changed
+                    active: true,
+                    expiresAt: newExpiryDate,
+                    lastUpdated: now,
+                    paymentHistory: [...(subscription.paymentHistory || []), paymentRecord]
+                };
+    
+                // Validate before update
+                const { error, value } = validateGroupSubscription(updatedSubscription);
+                
+                // Log validation details
+                if (error) {
+                    logger.error('Group Subscription Validation Error (Update):', {
+                        error: error.details,
+                        subscription: updatedSubscription
+                    });
+                    throw error;
+                }
+    
+                const result = await this.groupSubscriptionsCollection.updateOne(
+                    { groupId },
+                    {
+                        $set: {
+                            active: true,
+                            groupName,
+                            expiresAt: newExpiryDate,
+                            lastUpdated: now
+                        },
+                        $push: {
+                            paymentHistory: paymentRecord
+                        }
+                    }
+                );
+    
+                logger.info(`Group subscription updated for ${groupName} (${groupId})`, result);
+            } else {
+                // Create new subscription
+                const now = new Date();
+                const subscriptionData = {
+                    groupId,
+                    groupName,
+                    startDate: now,
+                    expiresAt: new Date(now.getTime() + groupSubscriptionDurations[duration]),
+                    active: true,
+                    paymentHistory: [{
+                        paymentId,
+                        duration,
+                        paymentDate: now,
+                        paymentStatus: paymentData.status || 'completed',
+                        amount: 2.0,
+                        transactionHash: paymentData.transactionHash,
+                        transferHash: paymentData.transferHash,
+                        paidByUserId: payerInfo.id,
+                        paidByUsername: payerInfo.username
+                    }],
+                    lastUpdated: now
+                };
+    
+                // Validate before insert
+                const { error, value } = validateGroupSubscription(subscriptionData);
+                
+                // Log validation details
+                if (error) {
+                    logger.error('Group Subscription Validation Error (Insert):', {
+                        error: error.details,
+                        subscription: subscriptionData
+                    });
+                    throw error;
+                }
+    
+                const result = await this.groupSubscriptionsCollection.insertOne(value);
+                
+                logger.info(`New group subscription created for ${groupName} (${groupId})`, result);
+            }
+    
+            return paymentId;
+        } catch (error) {
+            logger.error(`Error creating group subscription for "${groupId}":`, error);
+            throw error;
+        }
+    }
   
       async getGroupSubscription(groupId) {
           try {

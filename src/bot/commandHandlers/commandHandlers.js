@@ -23,16 +23,15 @@ const TeamHandler = require('./teamHandler');
 const GroupSubscriptionHandler = require('./groupSubhandler');
 const stateManager = require('../../utils/stateManager');
 
-const config = require('../../utils/config');
 const logger = require('../../utils/logger');
 
 
 class CommandHandlers {
-    constructor(userManager, accessControl, bot) {
+    constructor(userManager, accessControl, bot, paymentHandler) {
         this.adminHandler = new AdminCommandHandler(userManager, accessControl, bot);
         this.broadcastHandler = new BroadcastHandler(userManager, accessControl, bot);
-        this.subscriptionHandler = new SubscriptionCommandHandler (accessControl, config.HELIUS_RPC_URL);
-        this.groupSubscriptionHandler = new GroupSubscriptionHandler(accessControl, config.HELIUS_RPC_URL);
+        this.subscriptionHandler = new SubscriptionCommandHandler (accessControl, paymentHandler);
+        this.groupSubscriptionHandler = new GroupSubscriptionHandler(accessControl, paymentHandler);
         this.startHandler = new StartHandler(userManager);
         this.scanHandler = new ScanHandler(stateManager);
         this.bundleHandler = new BundleHandler();
@@ -61,6 +60,19 @@ class CommandHandlers {
         
         // Mapping des commandes aux handlers
         this.handlers = {};
+
+        this.callbackHandlers = {
+          'check_group': this.groupSubscriptionHandler,
+          'sub_extend_group': this.groupSubscriptionHandler,
+          'check': this.subscriptionHandler,
+          'sub_extend': this.subscriptionHandler,
+          'track': this.trackingActionHandler,
+          'details': this.teamHandler,
+          'sd': this.trackingActionHandler,
+          'sc': this.trackingActionHandler,
+          'st': this.trackingActionHandler,
+          'stop': this.trackingActionHandler
+      };
 
         // Définir toutes les commandes avec leurs handlers et contextes
         const commands = {
@@ -106,37 +118,43 @@ class CommandHandlers {
         }
 
         bot.on('callback_query', async (query) => {
-            try {
-              const [actionType] = query.data.split('_');
-      
-              // Map des handlers de callback
-              const callbackHandlers = {
-                'sub': this.subscriptionHandler,
-                'check': this.subscriptionHandler,
-                'check_group': this.groupSubscriptionHandler,
-                'track': this.trackingActionHandler,
-                'details': this.teamHandler,
-                'sd': this.trackingActionHandler,
-                'sc': this.trackingActionHandler,
-                'st': this.trackingActionHandler,
-                'stop': this.trackingActionHandler
-              };
-      
-              const handler = callbackHandlers[actionType];
-              if (handler) {
-                await handler.handleCallback(bot, query);
+          try {
+              const parts = query.data.split('_');
+              
+              // Pour gérer correctement les cas comme 'sub_extend_group'
+              let baseHandlerKey;
+              if (parts.length >= 3 && parts[2] === 'group') {
+                  // Pour les actions liées aux groupes
+                  baseHandlerKey = `${parts[0]}_${parts[1]}_${parts[2]}`;
               } else {
-                throw new Error(`Unknown action type: ${actionType}`);
+                  // Pour les autres actions
+                  baseHandlerKey = `${parts[0]}_${parts[1]}`;
               }
-            } catch (error) {
-              logger.error('Error in callback query handler:', error);
-              await bot.answerCallbackQuery(query.id, {
-                text: "An error occurred",
-                show_alert: true
+              
+              console.log('Callback Debug:', {
+                  data: query.data,
+                  parts,
+                  baseHandlerKey,
+                  availableHandlers: Object.keys(this.callbackHandlers)
               });
-            }
-        });
 
+              const handler = this.callbackHandlers[baseHandlerKey];
+              
+              if (handler) {
+                  console.log(`Handler found for ${baseHandlerKey}, executing callback`);
+                  await handler.handleCallback(bot, query);
+              } else {
+                  console.log(`No handler found for base key: ${baseHandlerKey}`);
+                  throw new Error(`No handler found for callback: ${query.data}`);
+              }
+          } catch (error) {
+              console.error('Error in callback query handler:', error);
+              await bot.answerCallbackQuery(query.id, {
+                  text: "An error occurred",
+                  show_alert: true
+              });
+          }
+        });
         console.log('Command Handlers Mapping:', Object.keys(this.handlers));
     }
 
