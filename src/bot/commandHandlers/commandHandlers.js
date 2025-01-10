@@ -38,6 +38,7 @@ class CommandHandlers {
           'sub': this.subscriptionHandler,
           'group': this.groupSubscriptionHandler,
           'track': this.trackingActionHandler,
+          'scan': this.scanHandler,
           'team': this.teamHandler,
           'sd': this.trackingActionHandler,
           'sc': this.trackingActionHandler,

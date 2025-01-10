@@ -11,6 +11,70 @@ class TrackerHandler {
     this.supplyTracker = supplyTracker;
   }
 
+  generateCallbackData(action, params = {}) {
+    let callbackData = `track:${action}`;
+    if (params.tokenAddress) {
+        callbackData += `:${params.tokenAddress}`;
+    }
+    if (params.trackType) {
+        callbackData += `:${params.trackType}`;
+    }
+    
+    // Debug logs
+    logger.debug('Generated callback data:', {
+        action,
+        params,
+        callbackData,
+        length: callbackData.length
+    });
+    
+    // La limite de Telegram est de 64 bytes
+    if (callbackData.length > 64) {
+        logger.warn(`Callback data exceeds 64 bytes: ${callbackData.length} bytes`);
+        // Tronquer si nécessaire
+        const truncatedAddress = params.tokenAddress.slice(0, 32);
+        callbackData = `track:${action}:${truncatedAddress}:${params.trackType}`;
+    }
+
+    return callbackData;
+  }
+
+  
+  /**
+   * Construit le tableau de boutons "Stop tracking X".
+   */
+  buildTrackerKeyboard(trackedSupplies) {
+    const inlineKeyboard = [];
+    
+    // Debug log des supplies avant création des boutons
+    logger.debug('Building keyboard with supplies:', 
+        trackedSupplies.map(s => ({
+            ticker: s.ticker,
+            address: s.tokenAddress,
+            type: s.trackType
+        }))
+    );
+
+    trackedSupplies.forEach((supply) => {
+        const { ticker, tokenAddress, trackType } = supply;
+
+        const button = {
+            text: `Stop tracking ${ticker}`,
+            callback_data: this.generateCallbackData('stop', { 
+                tokenAddress, 
+                trackType 
+            })
+        };
+
+        // Debug log pour chaque bouton
+        logger.debug('Created button:', button);
+
+        inlineKeyboard.push([button]);
+    });
+
+    return inlineKeyboard;
+  }
+
   /**
    * Méthode appelée lorsque l'utilisateur tape `/tracker`.
    */
@@ -29,7 +93,10 @@ class TrackerHandler {
       await bot.sendMessage(
         chatId,
         "No active tracking. Use /team or /scan to start tracking.",
-        { message_thread_id: messageThreadId }
+        { 
+          message_thread_id: messageThreadId,
+          disable_web_page_preview: true  
+        }
       );
       return;
     }
@@ -38,12 +105,18 @@ class TrackerHandler {
     const message = this.formatTrackerMessage(trackedSupplies);
     const inlineKeyboard = this.buildTrackerKeyboard(trackedSupplies);
 
-    // Envoie le message final
-    await bot.sendMessage(chatId, message, {
-      parse_mode: 'HTML',
-      reply_markup: { inline_keyboard: inlineKeyboard },
-      message_thread_id: messageThreadId
-    });
+        // Log pour debug
+        logger.debug('Generated tracker data:', {
+          message,
+          keyboard: inlineKeyboard.map(row => row.map(btn => btn.callback_data))
+      });
+
+      await bot.sendMessage(chatId, message, {
+          parse_mode: 'HTML',
+          reply_markup: { inline_keyboard: inlineKeyboard },
+          message_thread_id: messageThreadId,
+          disable_web_page_preview: true
+      });
   }
 
   /**
@@ -94,24 +167,6 @@ class TrackerHandler {
     entry += `   Threshold: ${significantChangeThreshold}%\n\n`;
 
     return entry;
-  }
-
-  /**
-   * Construit le tableau de boutons "Stop tracking X".
-   */
-  buildTrackerKeyboard(trackedSupplies) {
-    const inlineKeyboard = [];
-    trackedSupplies.forEach((supply) => {
-      const { ticker, tokenAddress, trackType } = supply;
-
-      inlineKeyboard.push([
-        {
-          text: `Stop tracking ${ticker}`,
-          callback_data: `stop_${tokenAddress}_${trackType}` // géré dans votre TrackingActionHandler ou similaire
-        }
-      ]);
-    });
-    return inlineKeyboard;
   }
 }
 

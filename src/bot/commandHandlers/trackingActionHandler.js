@@ -18,34 +18,83 @@ class TrackingActionHandler {
    this.supplyTracker = supplyTracker;
  }
 
- async handleCallback(bot, query) {
-    try {
-      const [actionType, tokenAddress, trackType] = query.data.split('_');
-      const chatId = query.message.chat.id;
-
-      if (actionType === 'stop') {
-        await this.handleStopTracking(bot, query, tokenAddress, trackType, query.from.username);
-        return;
-      }
-  
-      const trackingInfo = stateManager.getTrackingInfo(chatId, tokenAddress);
-      if (!this.validateTrackingInfo(trackingInfo, tokenAddress)) {
-        return await this.handleInvalidTracking(bot, query);
-      }
-  
-      await this.executeAction(actionType, bot, query, trackingInfo);
-      if (!query.answered) {
-        await bot.answerCallbackQuery(query.id);
-      }
-    } catch (error) {
-      await this.handleError(bot, query, error);
-    }
+ generateCallbackData(action, params = {}) {
+  if (action === ACTIONS.TRACK) {
+      const { trackType, tokenAddress } = params;
+      return `track:${trackType}:${tokenAddress}`;
   }
   
+  let callbackData = `track:${action}:${params.tokenAddress}`;
+  if (params.threshold) {
+      callbackData += `:${params.threshold}`;
+  }
+  return callbackData;
+}
 
- validateTrackingInfo(trackingInfo, tokenAddress) {
-   return trackingInfo && trackingInfo.tokenAddress === tokenAddress;
- }
+  async handleCallback(bot, query) {
+    try {
+        const [category, action, tokenAddress, threshold] = query.data.split(':');
+        const chatId = query.message.chat.id;
+        const username = query.from.username;
+
+        // Cas spécial pour le tracking initial (venant de scan ou team)
+        if (category === 'track' && (action === 'supply' || action === 'team')) {
+            const trackType = action === 'team' ? 'team' : 'topHolders';
+            let trackingInfo = stateManager.getTrackingInfo(username, tokenAddress);
+
+            if (!trackingInfo && action !== 'track') {
+              trackingInfo = stateManager.findTrackingByPartialAddress(
+                  chatId, 
+                  tokenAddress, 
+                  trackType
+              );
+          }
+            
+            if (!this.validateTrackingInfo(trackingInfo, tokenAddress)) {
+                return await this.handleInvalidTracking(bot, query);
+            }
+
+            // Met à jour le type de tracking et déclenche l'action de tracking
+            trackingInfo.trackType = trackType;
+            await this.handleTrackAction(bot, chatId, tokenAddress, trackingInfo);
+            await bot.answerCallbackQuery(query.id);
+            return;
+        }
+
+        // Gestion des autres actions de tracking
+        let trackingInfo = stateManager.getTrackingInfo(chatId, tokenAddress);
+
+        if (!trackingInfo) {
+          trackingInfo = stateManager.findTrackingByPartialAddress(
+              chatId, 
+              tokenAddress, 
+              'topHolders' // ou un type par défaut
+          );
+        }
+
+        if (!this.validateTrackingInfo(trackingInfo, tokenAddress)) {
+            return await this.handleInvalidTracking(bot, query);
+        }
+
+        await this.executeAction(action, bot, query, trackingInfo, threshold);
+        
+        if (!query.answered) {
+            await bot.answerCallbackQuery(query.id);
+        }
+    } catch (error) {
+        await this.handleError(bot, query, error);
+    }
+  }
+
+  
+
+  validateTrackingInfo(trackingInfo, tokenAddress) {
+    // More flexible validation
+    return trackingInfo && (
+      trackingInfo.tokenAddress === tokenAddress || 
+      tokenAddress.includes(trackingInfo.tokenAddress)
+    );
+  }
 
  async handleInvalidTracking(bot, query) {
    logger.warn('Invalid tracking info');
@@ -160,19 +209,62 @@ class TrackingActionHandler {
  }
 
  async handleStopTracking(bot, query, tokenAddress, trackType, username) {
-    const trackerId = `${tokenAddress}_${trackType}`;
+  // More robust tracking ID generation
+  const trackerId = `${tokenAddress}_${trackType}`;
+  
+  try {
     const success = this.supplyTracker.stopTracking(username, trackerId);
   
     if (success) {
-      await bot.answerCallbackQuery(query.id, { text: "Tracking stopped successfully." });
-      await bot.editMessageText("Tracking stopped. Use /tracker to see current trackers.", {
-        chat_id: query.message.chat.id,
-        message_id: query.message.message_id
+      await bot.answerCallbackQuery(query.id, { 
+        text: "Tracking stopped successfully." 
       });
-    } else {
-      await bot.answerCallbackQuery(query.id, { text: "Failed to stop tracking." });
+      await bot.editMessageText(
+        "Tracking stopped. Use /tracker to see current trackers.", 
+        {
+          chat_id: query.message.chat.id,
+          message_id: query.message.message_id
+        }
+      );
+      } else {
+        // Fallback error handling
+        const partialTracker = this.supplyTracker.findTrackerByPartialId(
+          username, 
+          tokenAddress, 
+          trackType
+        );
+        
+        if (partialTracker) {
+          const altSuccess = this.supplyTracker.stopTracking(
+            username, 
+            partialTracker.id
+          );
+          
+          if (altSuccess) {
+            await bot.answerCallbackQuery(query.id, { 
+              text: "Tracking stopped successfully (alternative method)." 
+            });
+          } else {
+            await bot.answerCallbackQuery(query.id, { 
+              text: "Failed to stop tracking.", 
+              show_alert: true 
+            });
+          }
+        } else {
+          await bot.answerCallbackQuery(query.id, { 
+            text: "No matching tracker found.", 
+            show_alert: true 
+          });
+        }
+      }
+    } catch (error) {
+      logger.error('Error stopping tracking:', error);
+      await bot.answerCallbackQuery(query.id, { 
+        text: "An unexpected error occurred.",
+        show_alert: true 
+      });
     }
-  }  
+  }
 
  async updateTrackingMessage(bot, chatId, trackingInfo) {
    const message = this.createTrackingMessage(trackingInfo, 
@@ -203,30 +295,48 @@ class TrackingActionHandler {
    return baseMessage + `You will receive a notification when ${supplyType} changes by more than ${threshold}%`;
  }
 
- createTrackingKeyboard(tokenAddress) {
-   return {
-     inline_keyboard: [
-       [
-         { text: "✅1%", callback_data: `sd_${tokenAddress}_1` },
-         { text: "Custom %", callback_data: `sc_${tokenAddress}` }
-       ],
-       [{ text: "Start tracking", callback_data: `st_${tokenAddress}_1` }]
-     ]
-   };
- }
+  createTrackingKeyboard(tokenAddress) {
+    return {
+        inline_keyboard: [
+            [
+                { 
+                    text: "✅1%", 
+                    callback_data: `track:${ACTIONS.SET_DEFAULT}:${tokenAddress}:1` 
+                },
+                { 
+                    text: "Custom %", 
+                    callback_data: `track:${ACTIONS.SET_CUSTOM}:${tokenAddress}` 
+                }
+            ],
+            [{ 
+                text: "Start tracking", 
+                callback_data: `track:${ACTIONS.START}:${tokenAddress}:1` 
+            }]
+        ]
+    };
+  }
 
- createThresholdKeyboard(tokenAddress, threshold) {
-   const isDefaultThreshold = threshold === 1;
-   return {
-     inline_keyboard: [
-       [
-         { text: isDefaultThreshold ? "✅1%" : "1%", callback_data: `sd_${tokenAddress}_1` },
-         { text: !isDefaultThreshold ? `✅${threshold}%` : "Custom %", callback_data: `sc_${tokenAddress}` }
-       ],
-       [{ text: "Start tracking", callback_data: `st_${tokenAddress}_${threshold}` }]
-     ]
-   };
- }
+  createThresholdKeyboard(tokenAddress, threshold) {
+    const isDefaultThreshold = threshold === 1;
+    return {
+        inline_keyboard: [
+            [
+                { 
+                    text: isDefaultThreshold ? "✅1%" : "1%",
+                    callback_data: `track:${ACTIONS.SET_DEFAULT}:${tokenAddress}:1`
+                },
+                { 
+                    text: !isDefaultThreshold ? `✅${threshold}%` : "Custom %",
+                    callback_data: `track:${ACTIONS.SET_CUSTOM}:${tokenAddress}`
+                }
+            ],
+            [{ 
+                text: "Start tracking",
+                callback_data: `track:${ACTIONS.START}:${tokenAddress}:${threshold}`
+            }]
+        ]
+    };
+  }
 
     async handleCustomThresholdInput(bot, msg) {
         const chatId = msg.chat.id;
