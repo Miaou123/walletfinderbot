@@ -1,5 +1,7 @@
 // utils/stateManager.js
 const { RequestCache } = require('./requestCache');
+const fs = require('fs');
+const path = require('path');
 
 class StateManager {
   constructor() {
@@ -9,6 +11,28 @@ class StateManager {
     this.pendingTracking = new Map();
     this.scanCache = new RequestCache(3 * 60 * 1000);
     this.teamSupplyCache = new RequestCache(2 * 60 * 1000);
+
+    this.trackingDataPath = path.join(__dirname, '..', 'data', 'trackers.json');
+  }
+
+  getTrackings(username) {
+    // Utilisez directement la méthode du supplyTracker
+    console.log(`Fetching trackings for username: ${username}`);
+    
+    const trackedSupplies = this.supplyTracker.getTrackedSuppliesByUser(username);
+    
+    console.log('Tracked supplies:', trackedSupplies);
+    return trackedSupplies;
+  }
+
+  // Modifiez getTrackingInfo pour travailler avec le username
+  getTrackingInfo(username, tokenAddress) {
+    const trackedSupplies = this.getTrackings(username);
+    
+    return trackedSupplies.find(tracking => 
+      tracking.tokenAddress === tokenAddress || 
+      tokenAddress.includes(tracking.tokenAddress)
+    );
   }
 
   setTrackingInfo(chatId, tokenAddress, info) {
@@ -17,9 +41,12 @@ class StateManager {
     this.pendingTracking.set(trackingId, info);
   }
 
-  getTrackingInfo(chatId, tokenAddress) {
-    const trackingId = `${chatId}_${tokenAddress}`;
-    return this.pendingTracking.get(trackingId) || this.lastAnalysisResults[chatId];
+  findTrackingByPartialAddress(chatId, partialAddress, trackType) {
+    const allTrackings = this.getTrackings(chatId);
+    return allTrackings.find(tracking => 
+      tracking.tokenAddress.includes(partialAddress) && 
+      tracking.trackType === trackType
+    );
   }
 
   setUserState(chatId, state) {
