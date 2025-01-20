@@ -50,7 +50,7 @@ class HeliusRateLimiter {
     const requestId = Math.random().toString(36).substring(7);
     const requestKey = this.getRequestKey(requestConfig);
     
-    logger.debug(`[${requestId}] Queueing request: ${requestKey}`);
+
 
     return new Promise((resolve, reject) => {
       if (!this.requestQueue[apiType].has(requestKey)) {
@@ -107,7 +107,6 @@ class HeliusRateLimiter {
     this.stats.totalRequests++;
 
     try {
-      logger.debug(`[${requestId}] Executing request...`);
       
       const response = await axios({
         ...config,
@@ -128,7 +127,6 @@ class HeliusRateLimiter {
         return null;
       }
 
-      logger.debug(`[${requestId}] Success in ${Date.now() - startTime}ms`);
       return response;
 
     } catch (error) {

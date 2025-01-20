@@ -93,7 +93,7 @@ class SupplyTracker {
 
     logger.debug('Starting cleanup check...');
 
-    for (const [username, trackers] of this.userTrackers.entries()) {
+    for (const [chatId, trackers] of this.userTrackers.entries()) {
       for (const [trackerId, tracker] of trackers.entries()) {
         const age = now - tracker.startTimestamp;
         logger.debug(
@@ -101,9 +101,9 @@ class SupplyTracker {
         );
 
         if (age > EXPIRY_TIME) {
-          logger.debug(`Removing expired tracker ${trackerId} for user ${username}`);
+          logger.debug(`Removing expired tracker ${trackerId} for chat ${chatId}`);
           await this.notifyExpiry(tracker);
-          this.stopTracking(username, trackerId);
+          this.stopTracking(chatId, trackerId);
           trackersRemoved++;
         }
       }
@@ -134,8 +134,8 @@ class SupplyTracker {
    */
   async saveTrackers() {
     const trackersData = {};
-    for (const [username, trackers] of this.userTrackers.entries()) {
-      trackersData[username] = Array.from(trackers.entries()).map(([trackerId, tracker]) => ({
+    for (const [chatId, trackers] of this.userTrackers.entries()) {
+      trackersData[chatId] = Array.from(trackers.entries()).map(([trackerId, tracker]) => ({
         trackerId,
         chatId: tracker.chatId,
         wallets: tracker.wallets,
@@ -166,7 +166,7 @@ class SupplyTracker {
       const trackersData = JSON.parse(data);
       const now = Date.now();
 
-      for (const [username, trackers] of Object.entries(trackersData)) {
+      for (const [chatId, trackers] of Object.entries(trackersData)) {
         const userTrackers = new Map();
         for (const tracker of trackers) {
           // Ignore les trackers déjà expirés
@@ -182,12 +182,12 @@ class SupplyTracker {
             totalSupply: new BigNumber(tracker.totalSupply),
             significantChangeThreshold: new BigNumber(tracker.significantChangeThreshold),
             // Recrée l'interval de check
-            intervalId: setInterval(() => this.checkSupply(username, tracker.trackerId), CHECK_INTERVAL)
+            intervalId: setInterval(() => this.checkSupply(chatId, tracker.trackerId), CHECK_INTERVAL)
           };
           userTrackers.set(tracker.trackerId, restoredTracker);
         }
         if (userTrackers.size > 0) {
-          this.userTrackers.set(username, userTrackers);
+          this.userTrackers.set(chatId, userTrackers);
         }
       }
       logger.debug('Trackers loaded successfully');
@@ -213,9 +213,8 @@ class SupplyTracker {
     ticker,
     decimals,
     trackType,
-    username
   ) {
-    logger.debug(`Starting tracking for user ${username}`, {
+    logger.debug(`Starting tracking for user ${chatId}`, {
       tokenAddress,
       chatId,
       hasWallets: !!wallets,
@@ -227,13 +226,13 @@ class SupplyTracker {
       trackType
     });
 
-    if (!this.userTrackers.has(username)) {
-      this.userTrackers.set(username, new Map());
+    if (!this.userTrackers.has(chatId)) {
+      this.userTrackers.set(chatId, new Map());
     }
-    const userTrackers = this.userTrackers.get(username);
+    const userTrackers = this.userTrackers.get(chatId);
 
     // Récupération du rôle pour gérer le nombre max de trackers
-    const userRole = this.accessControl.getUserRole(username);
+    const userRole = this.accessControl.getUserRole(chatId);
     let maxTrackers;
     if (userRole === 'admin') {
       maxTrackers = Infinity;
@@ -268,11 +267,11 @@ class SupplyTracker {
       decimals,
       trackType,
       tokenAddress,
-      username,
+      chatId,
       startTimestamp: now,
       // Ne stocker wallets que pour le tracking de team
       ...(trackType === 'team' && { wallets }),
-      intervalId: setInterval(() => this.checkSupply(username, trackerId), CHECK_INTERVAL)
+      intervalId: setInterval(() => this.checkSupply(chatId, trackerId), CHECK_INTERVAL)
     };
 
     userTrackers.set(trackerId, tracker);
@@ -281,22 +280,22 @@ class SupplyTracker {
   /**
    * Stoppe un tracking en cours pour un utilisateur donné.
    */
-  stopTracking(username, trackerId) {
-    const userTrackers = this.userTrackers.get(username);
+  stopTracking(chatId, trackerId) {
+    const userTrackers = this.userTrackers.get(chatId);
     if (!userTrackers) {
-      logger.debug(`No trackers found for user ${username}`);
+      logger.debug(`No trackers found for user ${chatId}`);
       return false;
     }
     const tracker = userTrackers.get(trackerId);
     if (!tracker) {
-      logger.debug(`No tracker found for ID ${trackerId} of user ${username}`);
+      logger.debug(`No tracker found for ID ${trackerId} of user ${chatId}`);
       return false;
     }
     clearInterval(tracker.intervalId);
     userTrackers.delete(trackerId);
 
     if (userTrackers.size === 0) {
-      this.userTrackers.delete(username);
+      this.userTrackers.delete(chatId);
     }
     return true;
   }
@@ -304,10 +303,10 @@ class SupplyTracker {
   /**
    * Retourne la liste des supply trackées par un utilisateur.
    */
-  getTrackedSuppliesByUser(username) {
-    const userTrackers = this.userTrackers.get(username);
+  getTrackedSuppliesByUser(chatId) {
+    const userTrackers = this.userTrackers.get(chatId);
     if (!userTrackers) {
-      logger.debug(`No trackers found for user ${username}`);
+      logger.debug(`No trackers found for user ${chatId}`);
       return [];
     }
 
@@ -324,18 +323,18 @@ class SupplyTracker {
   /**
    * Vérifie la supply (team ou top holders) et notifie en cas de changement significatif.
    */
-  async checkSupply(username, trackerId) {
-    logger.debug(`Checking supply for ${username}, trackerId: ${trackerId}`);
-    const userTrackers = this.userTrackers.get(username);
+  async checkSupply(chatId, trackerId) {
+    logger.debug(`Checking supply for ${chatId}, trackerId: ${trackerId}`);
+    const userTrackers = this.userTrackers.get(chatId);
     if (!userTrackers) {
-      logger.debug(`No trackers found for user ${username}`);
+      logger.debug(`No trackers found for user ${chatId}`);
       return;
     }
 
     const tracker = userTrackers.get(trackerId);
     logger.debug(`Current tracker info:`, tracker);
     if (!tracker) {
-      logger.debug(`No tracker found for ID ${trackerId} of user ${username}`);
+      logger.debug(`No tracker found for ID ${trackerId} of user ${chatId}`);
       return;
     }
 

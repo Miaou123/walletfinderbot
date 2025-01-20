@@ -162,7 +162,7 @@ class GroupSubscriptionHandler {
     async initiateNewSubscription(bot, msg) {
         const chatId = msg.chat.id;
         const adminInfo = {
-            id: msg.from.id,
+            chatId: msg.from.id,
             username: msg.from.username
         };
 
@@ -283,7 +283,7 @@ class GroupSubscriptionHandler {
         };
 
         await this.accessControl.createGroupSubscription(
-            sessionData.groupId,
+            sessionData.chatId,
             sessionData.groupName,
             '1month',
             payerInfo,
@@ -323,7 +323,7 @@ class GroupSubscriptionHandler {
     }
 
     async sendSuccessMessage(bot, chatId, sessionData) {
-        const subscription = await this.accessControl.getGroupSubscription(sessionData.groupId);
+        const subscription = await this.accessControl.getGroupSubscription(sessionData.chatId);
         let statusMessage = "🎉 Group subscription is now active!\n\n";
         statusMessage += `Group: ${sessionData.groupName}\n`;
         statusMessage += `Expires at: ${subscription.expiresAt.toLocaleString()}\n\n`;

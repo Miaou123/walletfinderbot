@@ -32,7 +32,6 @@ class ScanHandler {
 
   async handleCommand(bot, msg, args) {
       const chatId = msg.chat.id;
-      const username = msg.from.username;
 
       try {
           const [tokenAddress, numberOfHoldersStr] = args;
@@ -80,8 +79,8 @@ class ScanHandler {
           });
 
           if (scanResult.trackingInfo) {
-              const trackingData = this.prepareTrackingData(scanResult.trackingInfo, username);
-              await this.saveTrackingData(chatId, tokenAddress, trackingData);
+            const trackingData = this.prepareTrackingData(scanResult.trackingInfo, chatId);
+            await this.saveTrackingData(chatId, tokenAddress, trackingData);
           }
       } catch (error) {
           logger.error('Error in handleScanCommand:', error);
@@ -89,9 +88,10 @@ class ScanHandler {
       }
   }
 
-  prepareTrackingData(trackingInfo, username) {
+  prepareTrackingData(trackingInfo, chatId) {
       return {
           tokenAddress: trackingInfo.tokenAddress,
+          trackType: 'topHolders',
           tokenInfo: {
               symbol: trackingInfo.tokenSymbol,
               totalSupply: trackingInfo.totalSupply,
@@ -101,18 +101,19 @@ class ScanHandler {
           initialSupplyPercentage: trackingInfo.totalSupplyControlled,
           topHoldersWallets: trackingInfo.topHoldersWallets,
           teamWallets: [],
-          analysisType: 'tokenScanner',
-          trackType: 'topHolders',
-          username
+          chatId 
       };
   }
 
   async saveTrackingData(chatId, tokenAddress, trackingData) {
-      const validationResult = validateTrackingData(trackingData);
-      if (!validationResult.isValid) {
-          throw new Error(`Invalid tracking data: ${validationResult.message}`);
-      }
-      stateManager.setTrackingInfo(chatId, tokenAddress, trackingData);
+    logger.debug('Saving tracking data:', JSON.stringify(trackingData, null, 2));
+    const validationResult = validateTrackingData(trackingData);
+    if (!validationResult.isValid) {
+        logger.warn(`Invalid tracking data: ${validationResult.message}`);
+        throw new Error(`Invalid tracking data: ${validationResult.message}`);
+    }
+    logger.debug(`Setting tracking info for chatId: ${chatId}, tokenAddress: ${tokenAddress}`);
+    stateManager.setTrackingInfo(chatId, tokenAddress, trackingData);
   }
 }
 

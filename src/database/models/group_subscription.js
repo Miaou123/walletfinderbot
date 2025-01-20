@@ -15,7 +15,7 @@ const groupPaymentRecordSchema = Joi.object({
 
 // Main group subscription schema
 const groupSubscriptionSchema = Joi.object({
-    groupId: Joi.string().required(), // ID Telegram du groupe
+    chatId: Joi.string().required(), // ID Telegram du groupe
     groupName: Joi.string().required(), // Nom du groupe
     startDate: Joi.date().default(Date.now),
     expiresAt: Joi.date().greater('now').required(),
