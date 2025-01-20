@@ -14,72 +14,97 @@ class AccessControlDB {
         this.groupSubscriptionsCollection = this.db.collection('group_subscriptions');
     }
 
-    // Pour la compatibilité avec le système existant
     async ensureIndexes() {
-        logger.info('AccessControlDB is ready');
-        return true;
+        try {
+
+            await this.usersCollection.createIndex({ chatId: 1 }, { unique: true });
+    
+            const indexes = await this.usersCollection.listIndexes().toArray();
+            const usernameIndex = indexes.find(index => index.key.username === 1);
+    
+            if (usernameIndex) {
+
+                if (usernameIndex.unique) {
+                    await this.usersCollection.dropIndex("username_1");
+                    await this.usersCollection.createIndex({ username: 1 }, { unique: false });
+                }
+            } else {
+                await this.usersCollection.createIndex({ username: 1 }, { unique: false });
+            }
+    
+            await this.subscriptionsCollection.createIndex({ chatId: 1 }, { unique: true });
+            await this.groupSubscriptionsCollection.createIndex({ chatId: 1 }, { unique: true });
+    
+            logger.info('AccessControlDB indexes ensured');
+            return true;
+        } catch (error) {
+            logger.error('Error ensuring indexes:', error);
+            throw error;
+        }
     }
 
     normalizeUsername(username) {
         return username?.replace(/^@/, '').toLowerCase();
     }
 
-    // User Management
-    async isAdmin(username) {
-        const normalizedUsername = this.normalizeUsername(username);
-        return normalizedUsername === 'rengon0x';
+    async isAdmin(chatId) {
+        try {
+            const user = await this.usersCollection.findOne({ chatId });
+            return user?.username === 'rengon0x';
+        } catch (error) {
+            logger.error(`Error checking admin status for "${chatId}":`, error);
+            return false;
+        }
     }
 
-    async addUser(username, role = 'user', chatId = null) {
+    async addUser(chatId, username, role = 'user') {
         const normalizedUsername = this.normalizeUsername(username);
         try {
             const userData = {
+                chatId,
                 username: normalizedUsername,
                 role,
-                chatId,
                 lastUpdated: new Date(),
                 firstSeen: new Date()
             };
 
             await this.usersCollection.updateOne(
-                { username: normalizedUsername },
+                { chatId },
                 { $set: userData },
                 { upsert: true }
             );
 
-            logger.info(`User "${normalizedUsername}" added/updated as "${role}"`);
+            logger.info(`User "${chatId}" (${normalizedUsername}) added/updated as "${role}"`);
             return true;
         } catch (error) {
-            logger.error(`Error adding/updating user "${normalizedUsername}":`, error);
+            logger.error(`Error adding/updating user "${chatId}":`, error);
             return false;
         }
     }
 
-    async removeUser(username) {
-        const normalizedUsername = this.normalizeUsername(username);
+    async removeUser(chatId) {
         try {
-            const result = await this.usersCollection.deleteOne({ username: normalizedUsername });
-            logger.info(`User "${normalizedUsername}" removed (${result.deletedCount} document)`);
+            const result = await this.usersCollection.deleteOne({ chatId });
+            logger.info(`User "${chatId}" removed (${result.deletedCount} document)`);
             return result.deletedCount > 0;
         } catch (error) {
-            logger.error(`Error removing user "${normalizedUsername}":`, error);
+            logger.error(`Error removing user "${chatId}":`, error);
             return false;
         }
     }
 
-    async getUserRole(username) {
-        const normalizedUsername = this.normalizeUsername(username);
+    async getUserRole(chatId) {
         try {
-            const user = await this.usersCollection.findOne({ username: normalizedUsername });
+            const user = await this.usersCollection.findOne({ chatId });
             return user ? user.role : 'guest';
         } catch (error) {
-            logger.error(`Error getting role for user "${normalizedUsername}":`, error);
+            logger.error(`Error getting role for user "${chatId}":`, error);
             return 'guest';
         }
     }
 
-    async isVIP(username) {
-        const role = await this.getUserRole(username);
+    async isVIP(chatId) {
+        const role = await this.getUserRole(chatId);
         return role === 'vip' || role === 'admin';
     }
 
@@ -92,189 +117,174 @@ class AccessControlDB {
         }
     }
 
-    async updateUserChatId(username, chatId) {
-        const normalizedUsername = this.normalizeUsername(username);
+    async updateUsername(chatId, newUsername) {
+        const normalizedUsername = this.normalizeUsername(newUsername);
         try {
             await this.usersCollection.updateOne(
-                { username: normalizedUsername },
-                { $set: { chatId, lastUpdated: new Date() } }
+                { chatId },
+                { $set: { username: normalizedUsername, lastUpdated: new Date() } }
             );
-            logger.info(`Updated chatId for user "${normalizedUsername}"`);
+            logger.info(`Updated username for user "${chatId}" to "${normalizedUsername}"`);
             return true;
         } catch (error) {
-            logger.error(`Error updating chatId for "${normalizedUsername}":`, error);
+            logger.error(`Error updating username for "${chatId}":`, error);
             return false;
         }
     }
 
-    // Subscription Management
-    async hasActiveSubscription(username) {
-        const normalizedUsername = this.normalizeUsername(username);
+    async hasActiveSubscription(chatId) {
         try {
-            const subscription = await this.getSubscription(normalizedUsername);
+            const subscription = await this.getSubscription(chatId);
             return subscription?.active && 
                    subscription?.paymentHistory?.some(p => p.paymentStatus === 'completed') &&
                    subscription?.expiresAt > new Date();
         } catch (error) {
-            logger.error(`Error checking subscription for "${normalizedUsername}":`, error);
+            logger.error(`Error checking subscription for "${chatId}":`, error);
             return false;
         }
     }
 
-    async createSubscription(username, duration, paymentData = {}) {
-      const normalizedUsername = this.normalizeUsername(username);
-      try {
-          const paymentId = paymentData.paymentId || `payment_${Date.now()}`;
-          const subscription = await this.subscriptionsCollection.findOne({ username: normalizedUsername });
-          
-          if (subscription) {
-              // Extend existing subscription
-              const currentExpiryDate = new Date(subscription.expiresAt);
-              const now = new Date();
-              const durationInMs = subscriptionDurations[duration];
-              const newExpiryDate = new Date(
-                  Math.max(now.getTime(), currentExpiryDate.getTime()) + durationInMs
-              );
-  
-              const paymentRecord = {
-                  paymentId,
-                  duration,
-                  paymentDate: now,
-                  paymentStatus: paymentData.status || 'completed',
-                  transactionHash: paymentData.transactionHash,
-                  transferHash: paymentData.transferHash
-              };
-  
-              const updatedSubscription = {
-                  ...subscription,
-                  active: true,
-                  expiresAt: newExpiryDate,
-                  lastUpdated: now,
-                  currentPaymentId: paymentId,
-                  paymentHistory: [...(subscription.paymentHistory || []), paymentRecord]
-              };
-  
-              // Validate before update
-              const { error, value } = validateSubscription(updatedSubscription);
-              if (error) throw error;
-  
-              await this.subscriptionsCollection.updateOne(
-                  { username: normalizedUsername },
-                  {
-                      $set: {
-                          active: true,
-                          expiresAt: newExpiryDate,
-                          lastUpdated: now,
-                          currentPaymentId: paymentId
-                      },
-                      $push: {
-                          paymentHistory: paymentRecord
-                      }
-                  }
-              );
-          } else {
-              // Create new subscription
-              const now = new Date();
-              const subscriptionData = {
-                  username: normalizedUsername,
-                  startDate: now,
-                  expiresAt: new Date(now.getTime() + subscriptionDurations[duration]),
-                  active: true,
-                  currentPaymentId: paymentId,
-                  paymentHistory: [{
-                      paymentId,
-                      duration,
-                      paymentDate: now,
-                      paymentStatus: paymentData.status || 'completed',
-                      transactionHash: paymentData.transactionHash,
-                      transferHash: paymentData.transferHash
-                  }],
-                  lastUpdated: now
-              };
-  
-              // Validate before insert
-              const { error, value } = validateSubscription(subscriptionData);
-              if (error) throw error;
-  
-              await this.subscriptionsCollection.insertOne(value);
-          }
-  
-          return paymentId;
-      } catch (error) {
-          logger.error(`Error creating subscription for "${normalizedUsername}":`, error);
-          throw error;
-      }
-  }
-
-    async getSubscription(username) {
-        const normalizedUsername = this.normalizeUsername(username);
+    async createSubscription(chatId, duration, paymentData = {}) {
         try {
-            const subscription = await this.subscriptionsCollection.findOne({
-                username: normalizedUsername
-            });
-
-            if (!subscription) return null;
-
-            // Update active status
-            subscription.active = subscription.expiresAt > new Date();
+            const paymentId = paymentData.paymentId || `payment_${Date.now()}`;
+            const subscription = await this.subscriptionsCollection.findOne({ chatId });
             
+            if (subscription) {
+                // Extend existing subscription
+                const currentExpiryDate = new Date(subscription.expiresAt);
+                const now = new Date();
+                const durationInMs = subscriptionDurations[duration];
+                const newExpiryDate = new Date(
+                    Math.max(now.getTime(), currentExpiryDate.getTime()) + durationInMs
+                );
+
+                const paymentRecord = {
+                    paymentId,
+                    duration,
+                    paymentDate: now,
+                    paymentStatus: paymentData.status || 'completed',
+                    transactionHash: paymentData.transactionHash,
+                    transferHash: paymentData.transferHash
+                };
+
+                const updatedSubscription = {
+                    ...subscription,
+                    active: true,
+                    expiresAt: newExpiryDate,
+                    lastUpdated: now,
+                    currentPaymentId: paymentId,
+                    paymentHistory: [...(subscription.paymentHistory || []), paymentRecord]
+                };
+
+                const { error, value } = validateSubscription(updatedSubscription);
+                if (error) throw error;
+
+                await this.subscriptionsCollection.updateOne(
+                    { chatId },
+                    {
+                        $set: {
+                            active: true,
+                            expiresAt: newExpiryDate,
+                            lastUpdated: now,
+                            currentPaymentId: paymentId
+                        },
+                        $push: {
+                            paymentHistory: paymentRecord
+                        }
+                    }
+                );
+            } else {
+                // Create new subscription
+                const now = new Date();
+                const subscriptionData = {
+                    chatId,
+                    startDate: now,
+                    expiresAt: new Date(now.getTime() + subscriptionDurations[duration]),
+                    active: true,
+                    currentPaymentId: paymentId,
+                    paymentHistory: [{
+                        paymentId,
+                        duration,
+                        paymentDate: now,
+                        paymentStatus: paymentData.status || 'completed',
+                        transactionHash: paymentData.transactionHash,
+                        transferHash: paymentData.transferHash
+                    }],
+                    lastUpdated: now
+                };
+
+                const { error, value } = validateSubscription(subscriptionData);
+                if (error) throw error;
+
+                await this.subscriptionsCollection.insertOne(value);
+            }
+
+            return paymentId;
+        } catch (error) {
+            logger.error(`Error creating subscription for "${chatId}":`, error);
+            throw error;
+        }
+    }
+
+    async getSubscription(chatId) {
+        try {
+            const subscription = await this.subscriptionsCollection.findOne({ chatId });
+            if (!subscription) return null;
+            subscription.active = subscription.expiresAt > new Date();
             return subscription;
         } catch (error) {
-            logger.error(`Error getting subscription for "${normalizedUsername}":`, error);
+            logger.error(`Error getting subscription for "${chatId}":`, error);
             return null;
         }
     }
 
-    async updateSubscriptionPayment(username, paymentId, status, transactionHashes = {}) {
-      const normalizedUsername = this.normalizeUsername(username);
-      try {
-          const result = await this.subscriptionsCollection.updateOne(
-              { 
-                  username: normalizedUsername,
-                  "paymentHistory.paymentId": paymentId
-              },
-              {
-                  $set: {
-                      lastUpdated: new Date(),
-                      "paymentHistory.$[elem].paymentStatus": status,
-                      "paymentHistory.$[elem].transactionHash": transactionHashes.transactionHash,
-                      "paymentHistory.$[elem].transferHash": transactionHashes.transferHash
-                  }
-              },
-              {
-                  arrayFilters: [{ "elem.paymentId": paymentId }]
-              }
-          );
-  
-          logger.info(`Updated payment status for ${normalizedUsername}, payment ${paymentId} to ${status} with hashes`, transactionHashes);
-          return result.modifiedCount > 0;
-          } catch (error) {
-              logger.error(`Error updating payment for "${normalizedUsername}":`, error);
-              return false;
-          }
-      }
+    async updateSubscriptionPayment(chatId, paymentId, status, transactionHashes = {}) {
+        try {
+            const result = await this.subscriptionsCollection.updateOne(
+                { 
+                    chatId,
+                    "paymentHistory.paymentId": paymentId
+                },
+                {
+                    $set: {
+                        lastUpdated: new Date(),
+                        "paymentHistory.$[elem].paymentStatus": status,
+                        "paymentHistory.$[elem].transactionHash": transactionHashes.transactionHash,
+                        "paymentHistory.$[elem].transferHash": transactionHashes.transferHash
+                    }
+                },
+                {
+                    arrayFilters: [{ "elem.paymentId": paymentId }]
+                }
+            );
 
-        // Group Subscription Management
-        async hasActiveGroupSubscription(groupId) {
-          try {
-              const subscription = await this.getGroupSubscription(groupId);
-              return subscription?.active && 
-                     subscription?.paymentHistory?.some(p => p.paymentStatus === 'completed') &&
-                     subscription?.expiresAt > new Date();
-          } catch (error) {
-              logger.error(`Error checking group subscription for "${groupId}":`, error);
-              return false;
-          }
-      }
-  
-      async createGroupSubscription(groupId, groupName, duration, payerInfo, paymentData = {}) {
+            logger.info(`Updated payment status for ${chatId}, payment ${paymentId} to ${status} with hashes`, transactionHashes);
+            return result.modifiedCount > 0;
+        } catch (error) {
+            logger.error(`Error updating payment for "${chatId}":`, error);
+            return false;
+        }
+    }
+
+    async hasActiveGroupSubscription(chatId) {
+        try {
+            const subscription = await this.getGroupSubscription(chatId);
+            return subscription?.active && 
+                   subscription?.paymentHistory?.some(p => p.paymentStatus === 'completed') &&
+                   subscription?.expiresAt > new Date();
+        } catch (error) {
+            logger.error(`Error checking group subscription for "${chatId}":`, error);
+            return false;
+        }
+    }
+
+    async createGroupSubscription(chatId, groupName, duration, payerInfo, paymentData = {}) {
         try {
             const paymentId = paymentData.paymentId || `group_payment_${Date.now()}`;
-            const subscription = await this.groupSubscriptionsCollection.findOne({ groupId });
+            const subscription = await this.groupSubscriptionsCollection.findOne({ chatId });
             
-            // Log détaillé pour le débogage
             logger.debug('Group Subscription Creation - Input:', {
-                groupId,
+                chatId,
                 groupName,
                 duration,
                 payerInfo,
@@ -289,7 +299,7 @@ class AccessControlDB {
                 const newExpiryDate = new Date(
                     Math.max(now.getTime(), currentExpiryDate.getTime()) + durationInMs
                 );
-    
+
                 const paymentRecord = {
                     paymentId,
                     duration,
@@ -301,20 +311,18 @@ class AccessControlDB {
                     paidByUserId: payerInfo.id,
                     paidByUsername: payerInfo.username
                 };
-    
+
                 const updatedSubscription = {
                     ...subscription,
-                    groupName, // Update group name in case it changed
+                    groupName,
                     active: true,
                     expiresAt: newExpiryDate,
                     lastUpdated: now,
                     paymentHistory: [...(subscription.paymentHistory || []), paymentRecord]
                 };
-    
-                // Validate before update
+
                 const { error, value } = validateGroupSubscription(updatedSubscription);
                 
-                // Log validation details
                 if (error) {
                     logger.error('Group Subscription Validation Error (Update):', {
                         error: error.details,
@@ -322,9 +330,9 @@ class AccessControlDB {
                     });
                     throw error;
                 }
-    
+
                 const result = await this.groupSubscriptionsCollection.updateOne(
-                    { groupId },
+                    { chatId },
                     {
                         $set: {
                             active: true,
@@ -337,13 +345,13 @@ class AccessControlDB {
                         }
                     }
                 );
-    
-                logger.info(`Group subscription updated for ${groupName} (${groupId})`, result);
+
+                logger.info(`Group subscription updated for ${groupName} (${chatId})`, result);
             } else {
                 // Create new subscription
                 const now = new Date();
                 const subscriptionData = {
-                    groupId,
+                    chatId,
                     groupName,
                     startDate: now,
                     expiresAt: new Date(now.getTime() + groupSubscriptionDurations[duration]),
@@ -361,11 +369,9 @@ class AccessControlDB {
                     }],
                     lastUpdated: now
                 };
-    
-                // Validate before insert
+
                 const { error, value } = validateGroupSubscription(subscriptionData);
                 
-                // Log validation details
                 if (error) {
                     logger.error('Group Subscription Validation Error (Insert):', {
                         error: error.details,
@@ -373,78 +379,74 @@ class AccessControlDB {
                     });
                     throw error;
                 }
-    
+
                 const result = await this.groupSubscriptionsCollection.insertOne(value);
                 
-                logger.info(`New group subscription created for ${groupName} (${groupId})`, result);
+                logger.info(`New group subscription created for ${groupName} (${chatId})`, result);
             }
-    
+
             return paymentId;
         } catch (error) {
-            logger.error(`Error creating group subscription for "${groupId}":`, error);
+            logger.error(`Error creating group subscription for "${chatId}":`, error);
             throw error;
         }
     }
-  
-      async getGroupSubscription(groupId) {
-          try {
-              const subscription = await this.groupSubscriptionsCollection.findOne({ groupId });
-              if (!subscription) return null;
-  
-              subscription.active = subscription.expiresAt > new Date();
-              return subscription;
-          } catch (error) {
-              logger.error(`Error getting group subscription for "${groupId}":`, error);
-              return null;
-          }
-      }
-  
-      async updateGroupSubscriptionPayment(groupId, paymentId, status, payerInfo, transactionHashes = {}) {
-          try {
-              const result = await this.groupSubscriptionsCollection.updateOne(
-                  { 
-                      groupId,
-                      "paymentHistory.paymentId": paymentId
-                  },
-                  {
-                      $set: {
-                          lastUpdated: new Date(),
-                          "paymentHistory.$[elem].paymentStatus": status,
-                          "paymentHistory.$[elem].transactionHash": transactionHashes.transactionHash,
-                          "paymentHistory.$[elem].transferHash": transactionHashes.transferHash,
-                          "paymentHistory.$[elem].paidByUserId": payerInfo.id,
-                          "paymentHistory.$[elem].paidByUsername": payerInfo.username
-                      }
-                  },
-                  {
-                      arrayFilters: [{ "elem.paymentId": paymentId }]
-                  }
-              );
-  
-              logger.info(`Updated group payment status for ${groupId}, payment ${paymentId} to ${status}`);
-              return result.modifiedCount > 0;
-          } catch (error) {
-              logger.error(`Error updating group payment for "${groupId}":`, error);
-              return false;
-          }
-      }
-  
 
-      async isAllowed(identifier, context = 'user') {
+    async getGroupSubscription(chatId) {
         try {
-            // Pour les commandes admin
+            const subscription = await this.groupSubscriptionsCollection.findOne({ chatId });
+            if (!subscription) return null;
+
+            subscription.active = subscription.expiresAt > new Date();
+            return subscription;
+        } catch (error) {
+            logger.error(`Error getting group subscription for "${chatId}":`, error);
+            return null;
+        }
+    }
+
+    async updateGroupSubscriptionPayment(chatId, paymentId, status, payerInfo, transactionHashes = {}) {
+        try {
+            const result = await this.groupSubscriptionsCollection.updateOne(
+                { 
+                    chatId,
+                    "paymentHistory.paymentId": paymentId
+                },
+                {
+                    $set: {
+                        lastUpdated: new Date(),
+                        "paymentHistory.$[elem].paymentStatus": status,
+                        "paymentHistory.$[elem].transactionHash": transactionHashes.transactionHash,
+                        "paymentHistory.$[elem].transferHash": transactionHashes.transferHash,
+                        "paymentHistory.$[elem].paidByUserId": payerInfo.id,
+                        "paymentHistory.$[elem].paidByUsername": payerInfo.username
+                    }
+                },
+                {
+                    arrayFilters: [{ "elem.paymentId": paymentId }]
+                }
+            );
+
+            logger.info(`Updated group payment status for ${chatId}, payment ${paymentId} to ${status}`);
+            return result.modifiedCount > 0;
+        } catch (error) {
+            logger.error(`Error updating group payment for "${chatId}":`, error);
+            return false;
+        }
+    }
+
+    async isAllowed(identifier, context = 'user') {
+        try {
             if (context === 'admin') {
-                const normalizedUsername = this.normalizeUsername(identifier);
-                return normalizedUsername === 'rengon0x';
+                const user = await this.usersCollection.findOne({ chatId: identifier });
+                return user?.username === 'rengon0x';
             }
-    
-            // Pour les groupes
+
             if (context === 'group') {
                 return await this.hasActiveGroupSubscription(identifier);
             }
-    
-            // Pour les utilisateurs normaux
-            return await this.hasActiveSubscription(this.normalizeUsername(identifier));
+
+            return await this.hasActiveSubscription(identifier);
         } catch (error) {
             logger.error(`Error in isAllowed check for ${identifier} (${context}):`, error);
             return false;

@@ -138,7 +138,6 @@ async function processWallet(address, solPrice, mainContext, subContext) {
     logger.info(`Processing wallet: ${address}`);
     
     const poolCheck = await isLiquidityPool(address, mainContext, subContext);
-    logger.debug(`Pool check result for ${address}:`, poolCheck);
 
     if (poolCheck.isPool) {
       await addExcludedAddress(address, 'liquidityPool');
@@ -146,7 +145,6 @@ async function processWallet(address, solPrice, mainContext, subContext) {
     }
 
     const { items, nativeBalance } = await fetchAllItems(address, mainContext, subContext);
-    logger.debug(`Fetched items for ${address}:`, { itemCount: items.length });
 
     if (items.length > MAX_UNIQUE_TOKENS) {
       await addExcludedAddress(address, 'bot');
@@ -305,7 +303,6 @@ async function fetchDexScreenerPrices(tokenAddresses, chunkSize = 10) {
               if (hasValidLiquidity) {
                   prices[tokenAddress] = tokenData;
               } else {
-                  logger.debug(`Insufficient liquidity for token ${tokenAddress}`);
                   prices[tokenAddress] = { priceUsd: 0 };
               }
           }

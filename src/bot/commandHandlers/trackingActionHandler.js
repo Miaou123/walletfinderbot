@@ -35,22 +35,18 @@ class TrackingActionHandler {
     try {
         const [category, action, tokenAddress, threshold] = query.data.split(':');
         const chatId = query.message.chat.id;
-        const username = query.from.username;
+
+        logger.debug(`Handling callback - category: ${category}, action: ${action}, tokenAddress: ${tokenAddress}`);
 
         // Cas spécial pour le tracking initial (venant de scan ou team)
         if (category === 'track' && (action === 'supply' || action === 'team')) {
             const trackType = action === 'team' ? 'team' : 'topHolders';
-            let trackingInfo = stateManager.getTrackingInfo(username, tokenAddress);
-
-            if (!trackingInfo && action !== 'track') {
-              trackingInfo = stateManager.findTrackingByPartialAddress(
-                  chatId, 
-                  tokenAddress, 
-                  trackType
-              );
-          }
+            let trackingInfo = stateManager.getTrackingInfo(chatId, tokenAddress);
             
+            logger.debug('Retrieved tracking info:', JSON.stringify(trackingInfo, null, 2));
+
             if (!this.validateTrackingInfo(trackingInfo, tokenAddress)) {
+                logger.warn('Invalid tracking info detected');
                 return await this.handleInvalidTracking(bot, query);
             }
 
@@ -63,14 +59,6 @@ class TrackingActionHandler {
 
         // Gestion des autres actions de tracking
         let trackingInfo = stateManager.getTrackingInfo(chatId, tokenAddress);
-
-        if (!trackingInfo) {
-          trackingInfo = stateManager.findTrackingByPartialAddress(
-              chatId, 
-              tokenAddress, 
-              'topHolders' // ou un type par défaut
-          );
-        }
 
         if (!this.validateTrackingInfo(trackingInfo, tokenAddress)) {
             return await this.handleInvalidTracking(bot, query);
@@ -89,11 +77,14 @@ class TrackingActionHandler {
   
 
   validateTrackingInfo(trackingInfo, tokenAddress) {
-    // More flexible validation
-    return trackingInfo && (
-      trackingInfo.tokenAddress === tokenAddress || 
-      tokenAddress.includes(trackingInfo.tokenAddress)
+    logger.debug('Validating tracking info:', JSON.stringify(trackingInfo, null, 2));
+    logger.debug(`Token address to validate: ${tokenAddress}`);
+    const isValid = trackingInfo && (
+        trackingInfo.tokenAddress === tokenAddress || 
+        tokenAddress.includes(trackingInfo.tokenAddress)
     );
+    logger.debug(`Tracking info validation result: ${isValid}`);
+    return isValid;
   }
 
  async handleInvalidTracking(bot, query) {
@@ -106,7 +97,6 @@ class TrackingActionHandler {
 
  async executeAction(actionType, bot, query, trackingInfo) {
    const chatId = query.message.chat.id;
-   const username = query.from.username;
    const tokenAddress = trackingInfo.tokenAddress;
    const threshold = parseFloat(query.data.split('_')[2]);
    const trackType = query.data.split('_')[2] || 'topHolders';
@@ -116,8 +106,8 @@ class TrackingActionHandler {
      [ACTIONS.DETAILS]: () => this.handleDetails(bot, chatId, trackingInfo),
      [ACTIONS.SET_DEFAULT]: () => this.handleSetDefaultThreshold(bot, chatId, trackingInfo),
      [ACTIONS.SET_CUSTOM]: () => this.handleSetCustomThreshold(bot, chatId, trackingInfo), 
-     [ACTIONS.START]: () => this.handleStartTracking(bot, chatId, trackingInfo, threshold, username),
-     [ACTIONS.STOP]: () => this.handleStopTracking(bot, query, tokenAddress, trackType, username)
+     [ACTIONS.START]: () => this.handleStartTracking(bot, chatId, trackingInfo, threshold),
+     [ACTIONS.STOP]: () => this.handleStopTracking(bot, query, tokenAddress, trackType, chatId)
    };
 
    if (!actions[actionType]) {
@@ -174,7 +164,7 @@ class TrackingActionHandler {
    });
  }
 
- async handleStartTracking(bot, chatId, trackingInfo, threshold, username) {
+ async handleStartTracking(bot, chatId, trackingInfo, threshold) {
    const { tokenAddress, teamWallets, topHoldersWallets, tokenInfo } = trackingInfo;
    const trackType = trackingInfo.trackType || 'topHolders';
    const wallets = trackType === 'team' ? teamWallets : topHoldersWallets;
@@ -196,7 +186,7 @@ class TrackingActionHandler {
        tokenInfo.symbol,
        tokenInfo.decimals,
        trackType,
-       username
+       chatId
      );
 
      await bot.sendMessage(chatId,
@@ -208,12 +198,12 @@ class TrackingActionHandler {
    }
  }
 
- async handleStopTracking(bot, query, tokenAddress, trackType, username) {
+ async handleStopTracking(bot, query, tokenAddress, trackType) {
   // More robust tracking ID generation
   const trackerId = `${tokenAddress}_${trackType}`;
   
   try {
-    const success = this.supplyTracker.stopTracking(username, trackerId);
+    const success = this.supplyTracker.stopTracking(chatId, trackerId);
   
     if (success) {
       await bot.answerCallbackQuery(query.id, { 
@@ -229,14 +219,14 @@ class TrackingActionHandler {
       } else {
         // Fallback error handling
         const partialTracker = this.supplyTracker.findTrackerByPartialId(
-          username, 
+          chatId, 
           tokenAddress, 
           trackType
         );
         
         if (partialTracker) {
           const altSuccess = this.supplyTracker.stopTracking(
-            username, 
+            chatId, 
             partialTracker.id
           );
           

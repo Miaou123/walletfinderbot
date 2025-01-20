@@ -17,7 +17,6 @@ if (!uri.startsWith('mongodb://') && !uri.startsWith('mongodb+srv://')) {
    throw new Error(`Invalid MongoDB URI: ${uri}`);
 }
 
-// Création du client MongoDB avec gestion des listeners
 if (!mongoClient) {
    mongoClient = new MongoClient(uri, {
        connectTimeoutMS: 5000,
@@ -28,7 +27,6 @@ if (!mongoClient) {
    mongoClient.on('close', async () => {
        logger.warn("Connection to database lost. Attempting to reconnect...");
        db = null;
-       // Tentative de reconnexion
        try {
            await connectToDatabase();
        } catch (error) {
@@ -41,7 +39,6 @@ async function updateIndexes(db) {
     try {
         logger.info('Starting index verification...');
         
-        // Définir les index requis pour chaque collection
         const collections = {
             wallets: {
                 collection: db.collection("wallets"),
@@ -52,15 +49,16 @@ async function updateIndexes(db) {
             users: {
                 collection: db.collection("users"),
                 indexes: [
-                    { key: { username: 1 }, options: { unique: true } },
-                    { key: { chatId: 1 }, options: {} },
+                    { key: { chatId: 1 }, options: { unique: true } },
+                    { key: { username: 1 }, options: {} },
                     { key: { role: 1 }, options: {} }
                 ]
             },
             subscriptions: {
                 collection: db.collection("subscriptions"),
                 indexes: [
-                    { key: { username: 1 }, options: { unique: true } },
+                    { key: { chatId: 1 }, options: { unique: true } },
+                    { key: { username: 1 }, options: {} },
                     { key: { expiresAt: 1 }, options: {} },
                     { key: { active: 1 }, options: {} }
                 ]
@@ -68,7 +66,7 @@ async function updateIndexes(db) {
             group_subscriptions: {
                 collection: db.collection("group_subscriptions"),
                 indexes: [
-                    { key: { groupId: 1 }, options: { unique: true } },
+                    { key: { chatId: 1 }, options: { unique: true } },
                     { key: { expiresAt: 1 }, options: {} },
                     { key: { active: 1 }, options: {} }
                 ]
@@ -77,6 +75,7 @@ async function updateIndexes(db) {
                 collection: db.collection("payment_addresses"),
                 indexes: [
                     { key: { sessionId: 1 }, options: { unique: true } },
+                    { key: { chatId: 1 }, options: {} },
                     { key: { username: 1 }, options: {} },
                     { key: { expires: 1 }, options: {} },
                     { key: { publicKey: 1 }, options: { unique: true } }
@@ -84,34 +83,28 @@ async function updateIndexes(db) {
             }
         };
 
-        // Créer les collections si elles n'existent pas
         for (const [collectionName, config] of Object.entries(collections)) {
             try {
                 await db.createCollection(collectionName);
                 logger.info(`Collection ${collectionName} created or already exists`);
             } catch (error) {
-                // Ignore l'erreur si la collection existe déjà
-                if (error.code !== 48) { // 48 = collection already exists
+                if (error.code !== 48) {
                     logger.error(`Error creating collection ${collectionName}:`, error);
                 }
             }
         }
 
-        // Traiter chaque collection
         for (const [collectionName, config] of Object.entries(collections)) {
             logger.info(`Processing indexes for ${collectionName}...`);
             
             try {
-                // Obtenir les index existants
                 const existingIndexes = await config.collection.listIndexes().toArray();
                 
-                // Pour chaque index requis
                 for (const indexDef of config.indexes) {
                     const keyString = Object.entries(indexDef.key)
                         .map(([k, v]) => `${k}_${v}`)
                         .join('_');
                     
-                    // Vérifier si un index similaire existe
                     const existingIndex = existingIndexes.find(idx => 
                         JSON.stringify(idx.key) === JSON.stringify(indexDef.key)
                     );
@@ -126,7 +119,6 @@ async function updateIndexes(db) {
                         existingIndex.unique !== indexDef.options.unique && 
                         indexDef.options.unique !== undefined
                     ) {
-                        // S'il existe mais avec des options différentes
                         logger.info(`Recreating index ${keyString} for ${collectionName}`);
                         await config.collection.dropIndex(existingIndex.name);
                         await config.collection.createIndex(
@@ -137,21 +129,15 @@ async function updateIndexes(db) {
                 }
             } catch (error) {
                 logger.error(`Error processing indexes for ${collectionName}:`, error);
-                // Continue with next collection
             }
         }
 
         logger.info('Index verification completed successfully');
     } catch (error) {
         logger.error('Error during index verification:', error);
-        // Ne pas faire remonter l'erreur pour ne pas bloquer le démarrage
     }
 }
 
-/**
- * Fonction pour connecter à la base de données
- * @returns {Promise<void>}
- */
 async function connectToDatabase() {
     if (!db) {
         try {
@@ -159,7 +145,6 @@ async function connectToDatabase() {
             db = mongoClient.db("telegram_bot");
             logger.info("Connected to the database");
             
-            // Vérifier et mettre à jour les index si nécessaire
             await updateIndexes(db);
             
         } catch (error) {
@@ -170,11 +155,6 @@ async function connectToDatabase() {
     return db;
 }
 
-
-/**
- * Obtient la base de données connectée
- * @returns {Promise<Object>} La base de données MongoDB
- */
 async function getDatabase() {
     if (!db) {
         await connectToDatabase();
@@ -182,12 +162,6 @@ async function getDatabase() {
     return db;
 }
 
-/**
- * Sauvegarde un portefeuille intéressant dans la base de données
- * @param {string} address - L'adresse du portefeuille
- * @param {Object} walletData - Les données du portefeuille
- * @returns {Promise<Object|null>} Le résultat de l'opération ou null si ignoré
- */
 async function saveInterestingWallet(address, walletData) {
     const database = await getDatabase();
     const collection = database.collection("wallets");
@@ -240,8 +214,7 @@ async function saveInterestingWallet(address, walletData) {
     }
 }
 
-// Fonction pour créer un abonnement
-async function createOrUpdateSubscription(username, duration, paymentId, amount, transactionHashes = {}) {
+async function createOrUpdateSubscription(chatId, username, duration, paymentId, amount, transactionHashes = {}) {
     const database = await getDatabase();
     const collection = database.collection("subscriptions");
     
@@ -249,32 +222,29 @@ async function createOrUpdateSubscription(username, duration, paymentId, amount,
         const now = new Date();
         const durationMs = subscriptionDurations[duration];
         
-        // Rechercher un abonnement existant
-        const existingSubscription = await collection.findOne({ username });
+        const existingSubscription = await collection.findOne({ chatId });
         
         if (existingSubscription) {
-            // Calculer la nouvelle date d'expiration
             const currentExpiryDate = new Date(existingSubscription.expiresAt);
             const newExpiryDate = new Date(
                 Math.max(now.getTime(), currentExpiryDate.getTime()) + durationMs
             );
 
-            // Nouveau paiement à ajouter à l'historique
             const paymentRecord = {
                 paymentId,
                 duration,
                 amount,
                 paymentDate: now,
                 paymentStatus: 'completed',
-                transactionHash: transactionHashes.transactionHash, // Ajout du hash de la transaction
-                transferHash: transactionHashes.transferHash       // Ajout du hash du transfert
+                transactionHash: transactionHashes.transactionHash,
+                transferHash: transactionHashes.transferHash
             };
 
-            // Mettre à jour l'abonnement existant
             const result = await collection.updateOne(
-                { username },
+                { chatId },
                 {
                     $set: {
+                        username,
                         active: true,
                         expiresAt: newExpiryDate,
                         lastUpdated: now
@@ -285,11 +255,11 @@ async function createOrUpdateSubscription(username, duration, paymentId, amount,
                 }
             );
 
-            logger.info(`Subscription updated for user ${username}`);
+            logger.info(`Subscription updated for user ${chatId} (${username})`);
             return result;
         } else {
-            // Créer un nouvel abonnement
             const newSubscription = {
+                chatId,
                 username,
                 active: true,
                 startDate: now,
@@ -301,8 +271,8 @@ async function createOrUpdateSubscription(username, duration, paymentId, amount,
                     amount,
                     paymentDate: now,
                     paymentStatus: 'completed',
-                    transactionHash: transactionHashes.transactionHash, // Ajout du hash de la transaction
-                    transferHash: transactionHashes.transferHash       // Ajout du hash du transfert
+                    transactionHash: transactionHashes.transactionHash,
+                    transferHash: transactionHashes.transferHash
                 }]
             };
 
@@ -310,53 +280,50 @@ async function createOrUpdateSubscription(username, duration, paymentId, amount,
             if (error) throw error;
 
             const result = await collection.insertOne(value);
-            logger.info(`New subscription created for user ${username}`);
+            logger.info(`New subscription created for user ${chatId} (${username})`);
             return result;
         }
     } catch (error) {
-        logger.error(`Error creating/updating subscription for user ${username}:`, error);
+        logger.error(`Error creating/updating subscription for user ${chatId} (${username}):`, error);
         throw error;
     }
 }
 
-// Fonction pour vérifier un abonnement
-async function checkSubscription(userId) {
+async function checkSubscription(chatId) {
     const database = await getDatabase();
     const collection = database.collection("subscriptions");
     
     try {
         const subscription = await collection.findOne({
-            userId,
+            chatId,
             active: true,
-            paymentStatus: 'completed',
             expiresAt: { $gt: new Date() }
         });
         
         return subscription;
     } catch (error) {
-        logger.error(`Error checking subscription for user ${userId}:`, error);
+        logger.error(`Error checking subscription for user ${chatId}:`, error);
         return null;
     }
 }
 
-// Fonction pour obtenir les abonnements d'un utilisateur
-async function getSubscription(username) {
+async function getSubscription(identifier) {
     const database = await getDatabase();
     const collection = database.collection("subscriptions");
     
     try {
-        const subscription = await collection.findOne({ username });
+        const query = typeof identifier === 'number' ? { chatId: identifier } : { username: identifier };
+        const subscription = await collection.findOne(query);
         if (!subscription) return null;
 
         subscription.active = subscription.expiresAt > new Date();
         return subscription;
     } catch (error) {
-        logger.error(`Error getting subscription for user ${username}:`, error);
+        logger.error(`Error getting subscription for ${identifier}:`, error);
         return null;
     }
 }
 
-// Fonction pour compléter le paiement d'un abonnement
 async function completeSubscriptionPayment(subscriptionId) {
     const database = await getDatabase();
     const collection = database.collection("subscriptions");
@@ -379,13 +346,13 @@ async function completeSubscriptionPayment(subscriptionId) {
     }
 }
 
-// Fonction pour ajouter un administrateur
-async function addAdmin(username, addedBy = 'system') {
+async function addAdmin(chatId, username, addedBy = 'system') {
     const database = await getDatabase();
     const collection = database.collection("admins");
     
     const adminData = {
-        username: username.toLowerCase().replace(/^@/, ''),
+        chatId,
+        username: username?.toLowerCase().replace(/^@/, ''),
         addedBy,
         addedAt: new Date(),
         lastUpdated: new Date(),
@@ -400,25 +367,23 @@ async function addAdmin(username, addedBy = 'system') {
 
     try {
         const result = await collection.updateOne(
-            { username: adminData.username },
+            { chatId: adminData.chatId },
             { $set: validatedAdmin },
             { upsert: true }
         );
         
         if (result.upsertedCount > 0) {
-            logger.info(`New admin ${username} added by ${addedBy}`);
+            logger.info(`New admin ${chatId} (${username}) added by ${addedBy}`);
         } else if (result.modifiedCount > 0) {
-            logger.info(`Admin ${username} updated by ${addedBy}`);
+            logger.info(`Admin ${chatId} (${username}) updated by ${addedBy}`);
         }
         
         return result;
     } catch (error) {
-        logger.error(`Error adding/updating admin ${username}:`, error);
+        logger.error(`Error adding/updating admin ${chatId} (${username}):`, error);
         throw error;
     }
 }
-
-// Fonctions de payment et de sauvegarde des données temporaires
 
 async function savePaymentAddress(paymentData) {
     const database = await getDatabase();
@@ -426,9 +391,10 @@ async function savePaymentAddress(paymentData) {
     
     const paymentAddressData = {
         sessionId: paymentData.sessionId,
+        chatId: paymentData.chatId,
         username: paymentData.username,
         publicKey: paymentData.paymentAddress,
-        privateKey: Buffer.from(paymentData.privateKey).toString('base64'), // Encodage en base64 pour stockage sécurisé
+        privateKey: Buffer.from(paymentData.privateKey).toString('base64'),
         amount: paymentData.amount,
         duration: paymentData.duration,
         created: paymentData.created,
@@ -512,8 +478,7 @@ async function cleanupExpiredPaymentAddresses() {
     }
 }
 
-// Fonctions pour les groupes
-async function createOrUpdateGroupSubscription(groupId, groupName, duration, paidByUser, paymentId, amount, transactionHashes = {}) {
+async function createOrUpdateGroupSubscription(chatId, groupName, duration, paidByUser, paymentId, amount, transactionHashes = {}) {
     const database = await getDatabase();
     const collection = database.collection("group_subscriptions");
     
@@ -521,11 +486,9 @@ async function createOrUpdateGroupSubscription(groupId, groupName, duration, pai
         const now = new Date();
         const durationMs = groupSubscriptionDurations[duration];
         
-        // Rechercher un abonnement existant
-        const existingSubscription = await collection.findOne({ groupId });
+        const existingSubscription = await collection.findOne({ chatId });
         
         if (existingSubscription) {
-            // Calculer la nouvelle date d'expiration
             const currentExpiryDate = new Date(existingSubscription.expiresAt);
             const newExpiryDate = new Date(
                 Math.max(now.getTime(), currentExpiryDate.getTime()) + durationMs
@@ -539,15 +502,15 @@ async function createOrUpdateGroupSubscription(groupId, groupName, duration, pai
                 paymentStatus: 'completed',
                 transactionHash: transactionHashes.transactionHash,
                 transferHash: transactionHashes.transferHash,
-                paidByUserId: paidByUser.id,
+                paidByChatId: paidByUser.id,
                 paidByUsername: paidByUser.username
             };
 
             const result = await collection.updateOne(
-                { groupId },
+                { chatId },
                 {
                     $set: {
-                        groupName, // Mettre à jour le nom du groupe au cas où il a changé
+                        groupName,
                         active: true,
                         expiresAt: newExpiryDate,
                         lastUpdated: now
@@ -558,12 +521,11 @@ async function createOrUpdateGroupSubscription(groupId, groupName, duration, pai
                 }
             );
 
-            logger.info(`Group subscription updated for ${groupName} (${groupId})`);
+            logger.info(`Group subscription updated for ${groupName} (${chatId})`);
             return result;
         } else {
-            // Créer un nouvel abonnement
             const newSubscription = {
-                groupId,
+                chatId,
                 groupName,
                 active: true,
                 startDate: now,
@@ -577,7 +539,7 @@ async function createOrUpdateGroupSubscription(groupId, groupName, duration, pai
                     paymentStatus: 'completed',
                     transactionHash: transactionHashes.transactionHash,
                     transferHash: transactionHashes.transferHash,
-                    paidByUserId: paidByUser.id,
+                    paidByChatId: paidByUser.id,
                     paidByUsername: paidByUser.username
                 }]
             };
@@ -586,39 +548,39 @@ async function createOrUpdateGroupSubscription(groupId, groupName, duration, pai
             if (error) throw error;
 
             const result = await collection.insertOne(value);
-            logger.info(`New group subscription created for ${groupName} (${groupId})`);
+            logger.info(`New group subscription created for ${groupName} (${chatId})`);
             return result;
         }
     } catch (error) {
-        logger.error(`Error creating/updating group subscription for ${groupId}:`, error);
+        logger.error(`Error creating/updating group subscription for ${chatId}:`, error);
         throw error;
     }
 }
 
-async function getGroupSubscription(groupId) {
+async function getGroupSubscription(chatId) {
     const database = await getDatabase();
     const collection = database.collection("group_subscriptions");
     
     try {
-        const subscription = await collection.findOne({ groupId });
+        const subscription = await collection.findOne({ chatId });
         if (!subscription) return null;
 
         subscription.active = subscription.expiresAt > new Date();
         return subscription;
     } catch (error) {
-        logger.error(`Error getting group subscription for ${groupId}:`, error);
+        logger.error(`Error getting group subscription for ${chatId}:`, error);
         return null;
     }
 }
 
-async function updateGroupSubscriptionPayment(groupId, paymentId, status, transactionHashes = {}) {
+async function updateGroupSubscriptionPayment(chatId, paymentId, status, transactionHashes = {}) {
     const database = await getDatabase();
     const collection = database.collection("group_subscriptions");
     
     try {
         const result = await collection.updateOne(
             { 
-                groupId,
+                chatId,
                 "paymentHistory.paymentId": paymentId
             },
             {
@@ -634,14 +596,13 @@ async function updateGroupSubscriptionPayment(groupId, paymentId, status, transa
             }
         );
 
-        logger.info(`Updated group payment status for ${groupId}, payment ${paymentId} to ${status}`);
+        logger.info(`Updated group payment status for ${chatId}, payment ${paymentId} to ${status}`);
         return result.modifiedCount > 0;
     } catch (error) {
-        logger.error(`Error updating group payment for ${groupId}:`, error);
+        logger.error(`Error updating group payment for ${chatId}:`, error);
         return false;
     }
 }
-
 
 process.on('SIGINT', async () => {
    if (mongoClient) {

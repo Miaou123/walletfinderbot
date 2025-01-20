@@ -13,7 +13,8 @@ const paymentRecordSchema = Joi.object({
 
 // Main subscription schema
 const subscriptionSchema = Joi.object({
-    username: Joi.string().required(),
+    chatId: Joi.string().required(),
+    username: Joi.string().optional(), // Gardé en option pour la rétrocompatibilité
     startDate: Joi.date().default(Date.now),
     expiresAt: Joi.date().greater('now').required(),
     active: Joi.boolean().default(true),
@@ -43,7 +44,9 @@ function validateSubscription(subscription) {
 
 // Durées des abonnements en millisecondes
 const subscriptionDurations = {
-    '1month': 30 * 24 * 60 * 60 * 1000 // 30 jours
+    '1month': 30 * 24 * 60 * 60 * 1000, // 30 jours
+    '3month': 90 * 24 * 60 * 60 * 1000, // 90 jours
+    '6month': 180 * 24 * 60 * 60 * 1000 // 180 jours
 };
 
 const subscriptionPlan = {
