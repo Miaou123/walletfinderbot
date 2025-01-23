@@ -379,12 +379,6 @@ const validateSolanaAddress = (address) => {
       helpMessage: 'Send a message to all whitelisted users.\n\nExample:\n/broadcast Hello everyone!'
     }
   };
-  
-Object.values(commandConfigs).forEach(config => {
-    if (config.helpMessage) {
-        config.helpMessage += helpNote;
-    }
-});
 
 module.exports = {
     commandConfigs,
