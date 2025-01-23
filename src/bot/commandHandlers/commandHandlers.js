@@ -14,7 +14,7 @@ const SearchHandler = require('./searchHandler');
 const TopHoldersHandler = require('./topHoldersHandler');
 const SubscriptionCommandHandler  = require('./subscriptionCommandHandler');
 const TrackingActionHandler = require('./trackingActionHandler');
-const { SupplyTracker } = require('../../tools/SupplyTracker');
+const { SupplyTracker, initializeSupplyTracker } = require('../../tools/SupplyTracker');
 const TrackerHandler = require('./trackerHandler');
 const HelpHandler = require('./helpHandler');
 const StartHandler = require('./startHandler');
@@ -28,29 +28,30 @@ const logger = require('../../utils/logger');
 class CommandHandlers {
   constructor(userManager, accessControl, bot, paymentHandler) {
       // Initialisation des handlers...
-      this.initializeHandlers(userManager, accessControl, bot, paymentHandler);
-      
-      // Mapping des commandes
-      this.initializeCommandMapping();
-      
-      // Mapping des callbacks par catégorie
-      this.callbackHandlers = {
-          'sub': this.subscriptionHandler,
-          'group': this.groupSubscriptionHandler,
-          'track': this.trackingActionHandler,
-          'scan': this.scanHandler,
-          'team': this.teamHandler,
-          'sd': this.trackingActionHandler,
-          'sc': this.trackingActionHandler,
-          'st': this.trackingActionHandler,
-          'stop': this.trackingActionHandler
-      };
+      this.initializeHandlers(userManager, accessControl, bot, paymentHandler)
+          .then(() => {
+              // Mapping des commandes après l'initialisation des handlers
+              this.initializeCommandMapping();
+              
+              // Mapping des callbacks par catégorie
+              this.callbackHandlers = {
+                  'sub': this.subscriptionHandler,
+                  'group': this.groupSubscriptionHandler,
+                  'track': this.trackingActionHandler,
+                  'scan': this.scanHandler,
+                  'team': this.teamHandler,
+              };
 
-      // Setup du handler de callback
-      this.setupCallbackHandler(bot);
+              // Setup du handler de callback
+              this.setupCallbackHandler(bot);
+          })
+          .catch(error => {
+              logger.error('Error initializing handlers:', error);
+              throw error;
+          });
   }
 
-  initializeHandlers(userManager, accessControl, bot, paymentHandler) {
+  async initializeHandlers(userManager, accessControl, bot, paymentHandler) {
       this.adminHandler = new AdminCommandHandler(userManager, accessControl, bot);
       this.broadcastHandler = new BroadcastHandler(userManager, accessControl, bot);
       this.subscriptionHandler = new SubscriptionCommandHandler(accessControl, paymentHandler);
@@ -70,14 +71,12 @@ class CommandHandlers {
       this.topHoldersHandler = new TopHoldersHandler();
       this.helpHandler = new HelpHandler(bot);
       this.teamHandler = new TeamHandler(stateManager);
-      
-      this.supplyTracker = new SupplyTracker(bot, accessControl);
+
+      this.supplyTracker = await initializeSupplyTracker(bot, accessControl);
+ 
       this.trackerHandler = new TrackerHandler(this.supplyTracker);
       this.trackingActionHandler = new TrackingActionHandler(this.supplyTracker);
 
-      this.initializeSupplyTracker().catch(err => {
-          logger.error('Failed to initialize SupplyTracker:', err);
-      });
   }
 
   initializeCommandMapping() {
@@ -125,36 +124,33 @@ class CommandHandlers {
   }
 
   setupCallbackHandler(bot) {
-      bot.on('callback_query', async (query) => {
-          try {
-              const [category, action, ...params] = query.data.split(':');
-              
-              console.log('Callback Debug:', {
-                  data: query.data,
-                  category,
-                  action,
-                  params,
-                  availableHandlers: Object.keys(this.callbackHandlers)
-              });
-
-              const handler = this.callbackHandlers[category];
-              
-              if (handler) {
-                  console.log(`Handler found for category ${category}, executing callback`);
-                  await handler.handleCallback(bot, query);
-              } else {
-                  console.log(`No handler found for category: ${category}`);
-                  throw new Error(`No handler found for callback: ${query.data}`);
-              }
-          } catch (error) {
-              console.error('Error in callback query handler:', error);
-              await bot.answerCallbackQuery(query.id, {
-                  text: "An error occurred",
-                  show_alert: true
-              });
-          }
-      });
-  }
+    bot.on('callback_query', async (query) => {
+        try {
+            const [category, action, ...params] = query.data.split(':');
+            
+            // Ajouter une validation plus stricte
+            if (!category || !action) {
+                throw new Error('Invalid callback data format');
+            }
+ 
+            // Log plus concis
+            logger.debug('Callback received:', { category, action, params });
+            
+            const handler = this.callbackHandlers[category];
+            if (handler) {
+                await handler.handleCallback(bot, query);
+            } else {
+                throw new Error(`No handler found for category: ${category}`);
+            }
+        } catch (error) {
+            logger.error('Callback error:', error);
+            await bot.answerCallbackQuery(query.id, {
+                text: "An error occurred",
+                show_alert: true
+            });
+        }
+    });
+ }
 
   async initializeSupplyTracker() {
       await this.supplyTracker.init();

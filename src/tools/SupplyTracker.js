@@ -203,7 +203,7 @@ class SupplyTracker {
   /**
    * Démarre un nouveau tracking (top holders ou team).
    */
-  startTracking(
+  async startTracking(
     tokenAddress,
     chatId,
     wallets,
@@ -275,50 +275,62 @@ class SupplyTracker {
     };
 
     userTrackers.set(trackerId, tracker);
+    this.userTrackers.set(chatId.toString(), userTrackers);
+    await this.saveTrackers();
   }
 
   /**
    * Stoppe un tracking en cours pour un utilisateur donné.
    */
   stopTracking(chatId, trackerId) {
-    const userTrackers = this.userTrackers.get(chatId);
+    // Si c'est un ID de groupe (les IDs de groupe sont négatifs dans Telegram)
+    const isGroup = chatId < 0;
+    let userTrackers;
+    
+    if (isGroup) {
+        // Pour les groupes, chercher avec l'ID du groupe
+        userTrackers = this.userTrackers.get(chatId.toString());
+    } else {
+        // Pour les chats privés, comportement normal
+        userTrackers = this.userTrackers.get(chatId.toString());
+    }
+
     if (!userTrackers) {
-      logger.debug(`No trackers found for user ${chatId}`);
-      return false;
+        logger.debug(`No trackers found for ${isGroup ? 'group' : 'user'} ${chatId}`);
+        return false;
     }
+    
     const tracker = userTrackers.get(trackerId);
-    if (!tracker) {
-      logger.debug(`No tracker found for ID ${trackerId} of user ${chatId}`);
-      return false;
-    }
+    if (!tracker) return false;
+
     clearInterval(tracker.intervalId);
     userTrackers.delete(trackerId);
 
     if (userTrackers.size === 0) {
-      this.userTrackers.delete(chatId);
+        this.userTrackers.delete(chatId.toString());
     }
     return true;
   }
-
   /**
    * Retourne la liste des supply trackées par un utilisateur.
    */
   getTrackedSuppliesByUser(chatId) {
-    const userTrackers = this.userTrackers.get(chatId);
+    const userTrackers = this.userTrackers.get(chatId.toString());
     if (!userTrackers) {
       logger.debug(`No trackers found for user ${chatId}`);
       return [];
     }
-
+   
     return Array.from(userTrackers.entries()).map(([trackerId, tracker]) => ({
       trackerId,
       tokenAddress: tracker.tokenAddress,
       ticker: tracker.ticker,
       currentSupplyPercentage: tracker.currentSupplyPercentage.toFixed(2),
       trackType: tracker.trackType,
-      significantChangeThreshold: tracker.significantChangeThreshold.toFixed(2)
+      significantChangeThreshold: tracker.significantChangeThreshold.toFixed(2),
+      wallets: tracker.trackType === 'team' ? tracker.wallets : [] // Ajout des wallets pour team tracking
     }));
-  }
+   }
 
   /**
    * Vérifie la supply (team ou top holders) et notifie en cas de changement significatif.
@@ -348,7 +360,9 @@ class SupplyTracker {
             tracker.wallets,
             tracker.tokenAddress,
             tracker.totalSupply,
-            tracker.decimals
+            tracker.decimals,
+            'supply', 
+            'check' 
           );
         } else {
           // Pour le tracking top holders, utiliser scanToken

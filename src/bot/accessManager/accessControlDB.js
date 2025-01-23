@@ -2,8 +2,9 @@ const logger = require('../../utils/logger');
 const { validateSubscription, subscriptionDurations } = require('../../database/models/subscription');
 const { validateGroupSubscription, groupSubscriptionDurations } = require('../../database/models/group_subscription');
 
+
 class AccessControlDB {
-    constructor(database) {
+    constructor(database, config) {
         if (!database) {
             throw new Error('Database instance is required');
         }
@@ -12,6 +13,7 @@ class AccessControlDB {
         this.adminsCollection = this.db.collection('admins');
         this.subscriptionsCollection = this.db.collection('subscriptions');
         this.groupSubscriptionsCollection = this.db.collection('group_subscriptions');
+        this.config = config; 
     }
 
     async ensureIndexes() {
@@ -49,8 +51,9 @@ class AccessControlDB {
 
     async isAdmin(chatId) {
         try {
-            const user = await this.usersCollection.findOne({ chatId });
-            return user?.username === 'rengon0x';
+            const userId = Number(chatId);
+
+            return this.config.adminIds.includes(userId);
         } catch (error) {
             logger.error(`Error checking admin status for "${chatId}":`, error);
             return false;
@@ -438,8 +441,7 @@ class AccessControlDB {
     async isAllowed(identifier, context = 'user') {
         try {
             if (context === 'admin') {
-                const user = await this.usersCollection.findOne({ chatId: identifier });
-                return user?.username === 'rengon0x';
+                return await this.isAdmin(identifier);
             }
 
             if (context === 'group') {
