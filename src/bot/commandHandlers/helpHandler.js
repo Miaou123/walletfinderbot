@@ -16,13 +16,10 @@ class HelpHandler {
 
     async sendGeneralHelp(bot, msg, messageThreadId) {
         const generalHelpMessage = `
-Available commands:
-
-If you are not whitelisted yet please use /access.
-
-If you are already whitelisted:
 You can use "/help [command]", "[command] help" or "/[command]" for a full detail on how the command works.
 For example "/help /eb", "/eb help" or "/eb" with no arguments will give you a full explanation on how the early buyers command works.
+
+Available commands:
 
 /start - Start the bot
 /help - Show help
