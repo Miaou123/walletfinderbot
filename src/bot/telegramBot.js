@@ -8,7 +8,7 @@ const config = require('../utils/config');
 const CommandHandlers = require('./commandHandlers/commandHandlers');
 const { UserManager } = require('./accessManager/userManager');
 const ActiveCommandsTracker = require('./commandsManager/activeCommandsTracker');
-const { commandConfigs } = require('./commandsManager/commandConfigs');
+const { commandConfigs, adminCommandConfigs } = require('./commandsManager/commandConfigs');
 const AccessControlDB = require('./accessManager/accessControlDB');
 const RateLimiter = require('./commandsManager/commandRateLimiter');
 const CommandUsageTracker = require('./commandsManager/commandUsageTracker');
@@ -160,7 +160,7 @@ class TelegramBotService {
         }
 
         // 1. Access Control
-        this.accessControl = new AccessControlDB(this.db);
+        this.accessControl = new AccessControlDB(this.db, config);
         await this.accessControl.ensureIndexes();
         this.logger.info('Access control system initialized');
 
@@ -193,6 +193,8 @@ class TelegramBotService {
     }
 
     async setupMessageHandler() {
+
+        await new Promise(resolve => setTimeout(resolve, 100));
         // On crée le MessageHandler en lui passant nos dépendances 
         this.messageHandler = new MessageHandler({
             bot: this.bot,
@@ -204,6 +206,7 @@ class TelegramBotService {
             logger: this.logger,
             ActiveCommandsTracker,
             commandConfigs,
+            adminCommandConfigs,
             paymentHandler: this.paymentHandler 
         });
     

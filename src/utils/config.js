@@ -7,6 +7,7 @@ const sensitiveConfig = {
   CIELO_API_KEY: process.env.CIELO_API_KEY,
   MONGODB_URI: process.env.MONGODB_URI,
   DEFINED_API_KEY: process.env.DEFINED_API_KEY,
+  adminIds: process.env.ADMIN_IDS,
 };
 
 const nonSensitiveConfig = {

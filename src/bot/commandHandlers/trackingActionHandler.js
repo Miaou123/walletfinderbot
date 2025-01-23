@@ -18,63 +18,65 @@ class TrackingActionHandler {
    this.supplyTracker = supplyTracker;
  }
 
- generateCallbackData(action, params = {}) {
-  if (action === ACTIONS.TRACK) {
-      const { trackType, tokenAddress } = params;
-      return `track:${trackType}:${tokenAddress}`;
+generateCallbackData(action, params = {}) {
+  // Format standard: track:action:tokenAddress[:extraParam]
+  let callbackData = `track:${action}:${params.tokenAddress}`;
+  
+  if (params.threshold) {
+    callbackData += `:${params.threshold}`;
+  }
+  if (params.trackType) {
+    callbackData += `:${params.trackType}`;
   }
   
-  let callbackData = `track:${action}:${params.tokenAddress}`;
-  if (params.threshold) {
-      callbackData += `:${params.threshold}`;
-  }
   return callbackData;
 }
 
-  async handleCallback(bot, query) {
-    try {
-        const [category, action, tokenAddress, threshold] = query.data.split(':');
-        const chatId = query.message.chat.id;
+async handleCallback(bot, query) {
+  try {
+      const [category, action, tokenAddress, threshold] = query.data.split(':');
+      const chatId = query.message.chat.id;
 
-        logger.debug(`Handling callback - category: ${category}, action: ${action}, tokenAddress: ${tokenAddress}`);
+      logger.debug(`Handling callback - category: ${category}, action: ${action}, tokenAddress: ${tokenAddress}`);
 
-        // Cas spécial pour le tracking initial (venant de scan ou team)
-        if (category === 'track' && (action === 'supply' || action === 'team')) {
-            const trackType = action === 'team' ? 'team' : 'topHolders';
-            let trackingInfo = stateManager.getTrackingInfo(chatId, tokenAddress);
-            
-            logger.debug('Retrieved tracking info:', JSON.stringify(trackingInfo, null, 2));
+      if (action === 'stop') {
+        await this.executeAction(action, bot, query, { tokenAddress });
+        return;
+      }
 
-            if (!this.validateTrackingInfo(trackingInfo, tokenAddress)) {
-                logger.warn('Invalid tracking info detected');
-                return await this.handleInvalidTracking(bot, query);
-            }
+      // Initial tracking from scan or team
+      if (action === 'supply' || action === 'team') {
+          const trackType = action === 'team' ? 'team' : 'topHolders';
+          let trackingInfo = stateManager.getTrackingInfo(chatId, tokenAddress);
+          
+          logger.debug('Retrieved tracking info:', JSON.stringify(trackingInfo, null, 2));
 
-            // Met à jour le type de tracking et déclenche l'action de tracking
-            trackingInfo.trackType = trackType;
-            await this.handleTrackAction(bot, chatId, tokenAddress, trackingInfo);
-            await bot.answerCallbackQuery(query.id);
-            return;
-        }
+          if (!this.validateTrackingInfo(trackingInfo, tokenAddress)) {
+              logger.warn('Invalid tracking info detected');
+              return await this.handleInvalidTracking(bot, query);
+          }
 
-        // Gestion des autres actions de tracking
-        let trackingInfo = stateManager.getTrackingInfo(chatId, tokenAddress);
+          trackingInfo.trackType = trackType;
+          await this.handleTrackAction(bot, chatId, tokenAddress, trackingInfo);
+      }
+      // Actions de configuration et contrôle (sd, sc, st, stop)
+      else {
+          let trackingInfo = stateManager.getTrackingInfo(chatId, tokenAddress);
 
-        if (!this.validateTrackingInfo(trackingInfo, tokenAddress)) {
-            return await this.handleInvalidTracking(bot, query);
-        }
+          if (!this.validateTrackingInfo(trackingInfo, tokenAddress)) {
+              return await this.handleInvalidTracking(bot, query);
+          }
 
-        await this.executeAction(action, bot, query, trackingInfo, threshold);
-        
-        if (!query.answered) {
-            await bot.answerCallbackQuery(query.id);
-        }
-    } catch (error) {
-        await this.handleError(bot, query, error);
-    }
+          await this.executeAction(action, bot, query, trackingInfo);
+      }
+      
+      if (!query.answered) {
+          await bot.answerCallbackQuery(query.id);
+      }
+  } catch (error) {
+      await this.handleError(bot, query, error);
   }
-
-  
+}
 
   validateTrackingInfo(trackingInfo, tokenAddress) {
     logger.debug('Validating tracking info:', JSON.stringify(trackingInfo, null, 2));
@@ -96,26 +98,26 @@ class TrackingActionHandler {
  }
 
  async executeAction(actionType, bot, query, trackingInfo) {
-   const chatId = query.message.chat.id;
-   const tokenAddress = trackingInfo.tokenAddress;
-   const threshold = parseFloat(query.data.split('_')[2]);
-   const trackType = query.data.split('_')[2] || 'topHolders';
+  const chatId = query.message.chat.id;
+  const tokenAddress = trackingInfo.tokenAddress || query.data.split(':')[2];
+  const threshold = query.data.split(':')[3];
+  const trackType = trackingInfo.trackType || 'topHolders';
 
-   const actions = {
-     [ACTIONS.TRACK]: () => this.handleTrackAction(bot, chatId, tokenAddress, trackingInfo),
-     [ACTIONS.DETAILS]: () => this.handleDetails(bot, chatId, trackingInfo),
-     [ACTIONS.SET_DEFAULT]: () => this.handleSetDefaultThreshold(bot, chatId, trackingInfo),
-     [ACTIONS.SET_CUSTOM]: () => this.handleSetCustomThreshold(bot, chatId, trackingInfo), 
-     [ACTIONS.START]: () => this.handleStartTracking(bot, chatId, trackingInfo, threshold),
-     [ACTIONS.STOP]: () => this.handleStopTracking(bot, query, tokenAddress, trackType, chatId)
-   };
+  const actions = {
+    [ACTIONS.TRACK]: () => this.handleTrackAction(bot, chatId, tokenAddress, trackingInfo),
+    [ACTIONS.DETAILS]: () => this.handleDetails(bot, chatId, trackingInfo),
+    [ACTIONS.SET_DEFAULT]: () => this.handleSetDefaultThreshold(bot, chatId, trackingInfo),
+    [ACTIONS.SET_CUSTOM]: () => this.handleSetCustomThreshold(bot, chatId, trackingInfo), 
+    [ACTIONS.START]: () => this.handleStartTracking(bot, chatId, trackingInfo, threshold),
+    [ACTIONS.STOP]: () => this.handleStopTracking(bot, query, tokenAddress, trackType)
+  };
 
-   if (!actions[actionType]) {
-     throw new Error(`Unknown action type: ${actionType}`);
-   }
+  if (!actions[actionType]) {
+    throw new Error(`Unknown action type: ${actionType}`);
+  }
 
-   await actions[actionType]();
- }
+  await actions[actionType]();
+}
 
  async handleError(bot, query, error) {
    logger.error('Error in tracking callback:', error);
@@ -155,14 +157,15 @@ class TrackingActionHandler {
    await this.updateTrackingMessage(bot, chatId, trackingInfo);
  }
 
- async handleSetCustomThreshold(bot, chatId, trackingInfo) {
-   await bot.sendMessage(chatId, "Enter new supply change percentage (e.g., 2.5):");
-   trackingInfo.awaitingCustomThreshold = true;
-   stateManager.setUserState(chatId, {
-     action: 'awaiting_custom_threshold',
-     trackingId: `${chatId}_${trackingInfo.tokenAddress}`
-   });
- }
+  async handleSetCustomThreshold(bot, chatId, trackingInfo) {
+    await bot.sendMessage(chatId, "Enter new supply change percentage (e.g., 2.5):");
+    trackingInfo.awaitingCustomThreshold = true;
+    stateManager.setUserState(chatId, {
+        action: 'awaiting_custom_threshold',
+        tokenAddress: trackingInfo.tokenAddress,
+        currentThreshold: trackingInfo.threshold  // Ajouter le seuil actuel
+    });
+  }
 
  async handleStartTracking(bot, chatId, trackingInfo, threshold) {
    const { tokenAddress, teamWallets, topHoldersWallets, tokenInfo } = trackingInfo;
@@ -186,7 +189,6 @@ class TrackingActionHandler {
        tokenInfo.symbol,
        tokenInfo.decimals,
        trackType,
-       chatId
      );
 
      await bot.sendMessage(chatId,
@@ -198,54 +200,45 @@ class TrackingActionHandler {
    }
  }
 
- async handleStopTracking(bot, query, tokenAddress, trackType) {
-  // More robust tracking ID generation
-  const trackerId = `${tokenAddress}_${trackType}`;
-  
-  try {
-    const success = this.supplyTracker.stopTracking(chatId, trackerId);
-  
-    if (success) {
-      await bot.answerCallbackQuery(query.id, { 
-        text: "Tracking stopped successfully." 
-      });
-      await bot.editMessageText(
-        "Tracking stopped. Use /tracker to see current trackers.", 
-        {
-          chat_id: query.message.chat.id,
-          message_id: query.message.message_id
-        }
-      );
-      } else {
-        // Fallback error handling
-        const partialTracker = this.supplyTracker.findTrackerByPartialId(
-          chatId, 
-          tokenAddress, 
-          trackType
-        );
-        
-        if (partialTracker) {
-          const altSuccess = this.supplyTracker.stopTracking(
-            chatId, 
-            partialTracker.id
-          );
-          
-          if (altSuccess) {
-            await bot.answerCallbackQuery(query.id, { 
-              text: "Tracking stopped successfully (alternative method)." 
-            });
-          } else {
-            await bot.answerCallbackQuery(query.id, { 
-              text: "Failed to stop tracking.", 
-              show_alert: true 
-            });
-          }
-        } else {
-          await bot.answerCallbackQuery(query.id, { 
+  // Modification de handleStopTracking pour inclure le chatId
+  async handleStopTracking(bot, query, tokenAddress) {
+    const chatId = query.message.chat.id; 
+    const trackedSupplies = this.supplyTracker.getTrackedSuppliesByUser(chatId);
+    logger.debug('Available trackers:', JSON.stringify(trackedSupplies));
+
+    // Récupérer le tracker qui contient déjà le trackType
+    const tracker = this.supplyTracker.getTrackedSuppliesByUser(chatId)
+    .find(t => t.tokenAddress === tokenAddress);
+    
+    if (!tracker) {
+        await bot.answerCallbackQuery(query.id, { 
             text: "No matching tracker found.", 
             show_alert: true 
-          });
-        }
+        });
+        return;
+    }
+
+    const trackerId = `${tokenAddress}_${tracker.trackType}`;
+    
+    try {
+      const success = this.supplyTracker.stopTracking(chatId, trackerId);
+      
+      if (success) {
+        await bot.answerCallbackQuery(query.id, { 
+          text: "Tracking stopped successfully." 
+        });
+        await bot.editMessageText(
+          "Tracking stopped. Use /tracker to see current trackers.", 
+          {
+            chat_id: chatId,
+            message_id: query.message.message_id
+          }
+        );
+      } else {
+        await bot.answerCallbackQuery(query.id, { 
+          text: "No matching tracker found.", 
+          show_alert: true 
+        });
       }
     } catch (error) {
       logger.error('Error stopping tracking:', error);
@@ -306,48 +299,55 @@ class TrackingActionHandler {
     };
   }
 
-  createThresholdKeyboard(tokenAddress, threshold) {
-    const isDefaultThreshold = threshold === 1;
-    return {
-        inline_keyboard: [
-            [
-                { 
-                    text: isDefaultThreshold ? "✅1%" : "1%",
-                    callback_data: `track:${ACTIONS.SET_DEFAULT}:${tokenAddress}:1`
-                },
-                { 
-                    text: !isDefaultThreshold ? `✅${threshold}%` : "Custom %",
-                    callback_data: `track:${ACTIONS.SET_CUSTOM}:${tokenAddress}`
-                }
-            ],
-            [{ 
-                text: "Start tracking",
-                callback_data: `track:${ACTIONS.START}:${tokenAddress}:${threshold}`
-            }]
-        ]
-    };
-  }
+  async handleCustomThresholdInput(bot, msg) {
+    const chatId = msg.chat.id;
+    const userState = stateManager.getUserState(chatId);
 
-    async handleCustomThresholdInput(bot, msg) {
-        const chatId = msg.chat.id;
-        const userState = stateManager.getUserState(chatId);
-        const trackingInfo = stateManager.getTrackingInfo(chatId, userState.trackingId.split('_')[1]);
-
-        const thresholdInput = msg.text.replace('%', '').trim();
-        const threshold = parseFloat(thresholdInput);
-
-        if (isNaN(threshold) || threshold < 0.1 || threshold > 100) {
-            await bot.sendMessage(chatId, "Invalid input. Please enter a number between 0.1 and 100.");
-            return;
-        }
-
-        trackingInfo.threshold = threshold;
-        trackingInfo.awaitingCustomThreshold = false;
-        stateManager.setTrackingInfo(chatId, trackingInfo.tokenAddress, trackingInfo);
-
-        await this.updateTrackingMessage(bot, chatId, trackingInfo);
-        stateManager.deleteUserState(chatId);
+    if (!userState?.tokenAddress) {
+        await bot.sendMessage(chatId, "Session expired. Please run the scan or team command again.");
+        return;
     }
+
+    const trackingInfo = stateManager.getTrackingInfo(chatId, userState.tokenAddress);
+
+    const thresholdInput = msg.text.replace('%', '').trim();
+    const threshold = parseFloat(thresholdInput);
+
+    if (isNaN(threshold) || threshold < 0.1 || threshold > 100) {
+        await bot.sendMessage(chatId, "Invalid input. Please enter a number between 0.1 and 100.");
+        return;
+    }
+
+    trackingInfo.threshold = threshold;
+    trackingInfo.isCustomThreshold = true;  // Ajouter un flag pour le seuil personnalisé
+    stateManager.setTrackingInfo(chatId, userState.tokenAddress, trackingInfo);
+
+    await this.updateTrackingMessage(bot, chatId, trackingInfo);
+    stateManager.clearUserState(chatId);
+}
+
+createThresholdKeyboard(tokenAddress, threshold) {
+  const isCustomThreshold = threshold !== 1;
+  return {
+      inline_keyboard: [
+          [
+              { 
+                  text: !isCustomThreshold ? "✅1%" : "1%",
+                  callback_data: `track:${ACTIONS.SET_DEFAULT}:${tokenAddress}:1`
+              },
+              { 
+                  text: isCustomThreshold ? `✅${threshold}%` : "Custom %",
+                  callback_data: `track:${ACTIONS.SET_CUSTOM}:${tokenAddress}`
+              }
+          ],
+          [{ 
+              text: "Start tracking",
+              callback_data: `track:${ACTIONS.START}:${tokenAddress}:${threshold}`
+          }]
+      ]
+  };
+}
+
 }
 
 module.exports = TrackingActionHandler;

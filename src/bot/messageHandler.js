@@ -5,7 +5,8 @@ const groupMessageLogger = require('./messageDataManager/groupMessageLogger');
 class MessageHandler {
     constructor(dependencies) {
         this.bot = dependencies.bot;
-        this.commandHandlers = dependencies.commandHandlers.getHandlers();
+        this.commandHandlersInstance = dependencies.commandHandlers;
+        this.commandHandlers = {}; 
         this.accessControl = dependencies.accessControl;
         this.rateLimiter = dependencies.rateLimiter;
         this.usageTracker = dependencies.usageTracker;
@@ -14,6 +15,7 @@ class MessageHandler {
         this.ActiveCommandsTracker = dependencies.ActiveCommandsTracker;
         this.MAX_MESSAGE_AGE = 600;
         this.commandConfigs = dependencies.commandConfigs;
+        this.adminCommandConfigs = dependencies.adminCommandConfigs;
         this.commandParser = null;
     }
 
@@ -22,13 +24,16 @@ class MessageHandler {
             const botInfo = await this.bot.getMe();
             this.botUsername = botInfo.username;
             this.commandParser = new CommandParser(this.botUsername);
+            
+            // Récupérer les handlers après leur initialisation
+            this.commandHandlers = this.commandHandlersInstance.getHandlers();
+            
             this.logger.info(`Bot initialized with username: ${this.botUsername}`);
         } catch (error) {
-            this.logger.error('Failed to initialize CommandParser:', error);
+            this.logger.error('Failed to initialize MessageHandler:', error);
             throw error;
         }
     }
-    
     
     // Getter pour les commandes limitées (requiresAuth: true)
     get limitedCommands() {
@@ -77,15 +82,23 @@ class MessageHandler {
         // Vérification initiale des permissions
         if (msg.text.startsWith('/')) {
             const { command, isAdmin } = this.commandParser.parseCommand(msg.text);
-            const commandConfig = this.commandConfigs[command];
+
+            if (!command || (!this.commandConfigs[command] && !this.adminCommandConfigs[command])) {
+                if (!isGroup) {
+                    await this.bot.sendMessage(chatId, "Unknown command. Use /help to see available commands.");
+                }
+                return;
+            }
+            
+            const commandConfig = isAdmin ? this.adminCommandConfigs[command] : this.commandConfigs[command];
             const requiresAuth = commandConfig?.requiresAuth ?? true;
         
             let allowed;
             if (isAdmin) {
                 // Vérifier les droits admin en premier
-                allowed = await this.accessControl.isAllowed(username, 'admin');
+                allowed = await this.accessControl.isAllowed(chatId, 'admin');
                 if (!allowed) {
-                    this.logger.warn(`Non-admin user ${username} tried to use admin command: ${command}`);
+                    this.logger.warn(`Non-admin user ${username}, with chatId ${chatId}, tried to use admin command: ${command}`);
                     return;
                 }
             } else if (isGroup) {
@@ -103,7 +116,7 @@ class MessageHandler {
                 }
             } else {
                 // Vérification des utilisateurs normaux
-                allowed = await this.accessControl.isAllowed(username, 'user');
+                allowed = await this.accessControl.isAllowed(chatId, 'user');
                 if (requiresAuth && !allowed) {
                     const spotsInfo = getAvailableSpots();
                     await this.bot.sendMessage(chatId,
@@ -151,7 +164,7 @@ class MessageHandler {
 
         // Gestion des commandes admin
         if (isAdmin) {
-            if (!await this.accessControl.isAllowed(username, 'admin')) {
+            if (!await this.accessControl.isAllowed(chatId, 'admin')) {
                 this.logger.warn(`Non-admin user ${username} tried to use admin command: ${command}`);
                 return;
             }
