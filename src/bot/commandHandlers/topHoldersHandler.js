@@ -13,7 +13,6 @@ class TopHoldersHandler {
     }
 
     async handleCommand(bot, msg, args, messageThreadId) {
-        const userId = msg.from.id;
         logger.info(`Starting TopHolders command for user ${msg.from.username}`);
 
         try {

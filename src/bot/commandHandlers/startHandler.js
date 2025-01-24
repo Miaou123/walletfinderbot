@@ -1,34 +1,32 @@
-const { getAvailableSpots } = require('../../utils/accessSpots');
 const logger = require('../../utils/logger');
+const UserService = require('../../database/services/userService');
 
 class StartHandler {
-  constructor(userManager) {
-    this.userManager = userManager;
-    this.COMMAND_NAME = 'start';
-  }
+ constructor(userManager) {
+   this.userManager = userManager;
+   this.COMMAND_NAME = 'start';
+ }
 
-  async handleCommand(bot, msg, args) {
-    const chatId = msg.chat.id;
-    const userId = msg.from.id;
-    const username = msg.from.username;
+ async handleCommand(bot, msg, args) {
+   const chatId = String(msg.chat.id);
+   const userId = msg.from.id;
+   const username = msg.from.username;
 
-    if (!this.userManager) {
-      logger.error('UserManager not initialized');
-      return;
-    }
+   if (args.length > 0 && args[0].startsWith('r-')) {
+     const referrerUsername = args[0].slice(2).toLowerCase();
+     try {
+       await UserService.storeReferralUsage(username, referrerUsername);
+     } catch (error) {
+       logger.error(`Error processing referral: ${error}`);
+     }
+   }
 
-    // On ajoute l'utilisateur
-    this.userManager.addUser(userId, chatId, username);
-
-    // On récupère les infos de spots
-    const spotsInfo = getAvailableSpots();
-    if (!spotsInfo) {
-      await bot.sendMessage(chatId, "An error occurred while processing your request.");
-      return;
-    }
-
-    // Destructurer pour accéder directement
-    const { availableSpots, maxUsers } = spotsInfo;
+   try {
+     // On ajoute/met à jour l'utilisateur dans la DB
+     await UserService.createOrUpdateUser(chatId, username);
+   } catch (error) {
+     logger.error(`Error creating/updating user: ${error}`);
+   }
 
     // Construire le message avec les propriétés correctes
     const startMessage = `

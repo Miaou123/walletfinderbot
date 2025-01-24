@@ -12,7 +12,7 @@ class AdminCommandHandler {
      * Handle the adduser command
      */
     async handleAddUser(bot, msg, args) {
-        const chatId = msg.chat.id;
+        const chatId = String(msg.chat.id);
         const adminUsername = msg.from.username;
     
         try {
@@ -47,7 +47,7 @@ class AdminCommandHandler {
      * Handle the removeuser command
      */
     async handleRemoveUser(bot, msg, args) {
-        const chatId = msg.chat.id;
+        const chatId = String(msg.chat.id);
         const adminUsername = msg.from.username;
 
         try {
@@ -75,7 +75,7 @@ class AdminCommandHandler {
      * Handle the addgroup command
      */
     async handleAddGroup(bot, msg, args) {
-        const chatId = msg.chat.id;
+        const chatId = String(msg.chat.id);
         const adminUsername = msg.from.username;
         
         try {
@@ -191,7 +191,7 @@ class AdminCommandHandler {
      * Handle the removegroup command
      */
     async handleRemoveGroup(bot, msg, args) {
-        const chatId = msg.chat.id;
+        const chatId = String(msg.chat.id);
         const adminUsername = msg.from.username;
         
         try {
@@ -234,7 +234,7 @@ class AdminCommandHandler {
      * Handle the addsub command (Add Subscription)
      */
     async handleAddSubscription(bot, msg, args) {
-        const chatId = msg.chat.id;
+        const chatId = String(msg.chat.id);
         const adminUsername = msg.from.username;
     
         try {
@@ -307,7 +307,7 @@ class AdminCommandHandler {
      * Handle the checksub command
      */
     async handleCheckSubscription(bot, msg, args) {
-        const chatId = msg.chat.id;
+        const chatId = String(msg.chat.id);
         const adminUsername = msg.from.username;
     
         try {
@@ -370,7 +370,7 @@ class AdminCommandHandler {
      * Handle the listgroups command
      */
     async handleListGroups(bot, msg) {
-        const chatId = msg.chat.id;
+        const chatId = String(msg.chat.id);
         const adminUsername = msg.from.username;
         
         try {
@@ -402,7 +402,7 @@ class AdminCommandHandler {
      * Handle the listsubs command (List Subscriptions)
      */
     async handleListSubscriptions(bot, msg) {
-        const chatId = msg.chat.id;
+        const chatId = String(msg.chat.id);
         const adminUsername = msg.from.username;
     
         try {
@@ -445,7 +445,7 @@ class AdminCommandHandler {
      * Handle the removesub command
      */
     async handleRemoveSubscription(bot, msg, args) {
-        const chatId = msg.chat.id;
+        const chatId = String(msg.chat.id);
         const adminUsername = msg.from.username;
     
         try {
@@ -492,7 +492,7 @@ class AdminCommandHandler {
      * Handle the usagestats command
      */
     async handleUsageStats(bot, msg, usageTracker) {
-        const chatId = msg.chat.id;
+        const chatId = String(msg.chat.id);
         const adminUsername = msg.from.username;
         try {
             if (!this.accessControl.isAdmin(adminUsername)) {

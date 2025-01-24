@@ -31,7 +31,7 @@ class ScanHandler {
   }
 
   async handleCommand(bot, msg, args) {
-      const chatId = msg.chat.id;
+    const chatId = String(msg.chat.id);
 
       try {
           const [tokenAddress, numberOfHoldersStr] = args;

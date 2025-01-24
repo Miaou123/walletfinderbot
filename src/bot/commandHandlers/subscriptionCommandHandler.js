@@ -1,5 +1,4 @@
 const logger = require('../../utils/logger');
-const { updatePaymentAddressStatus } = require('../../database/database');
 
 class SubscriptionCommandHandler {
     constructor(accessControl, paymentHandler) {
@@ -42,11 +41,11 @@ class SubscriptionCommandHandler {
         const username = (msg.from.username || '').toLowerCase().replace(/^@/, '');
     
         try {
-            const subscription = await this.accessControl.getSubscription(username);
+            const subscription = await this.accessControl.subscriptionService.getSubscription(String(chatId));
     
             if (subscription?.active && subscription.expiresAt > new Date()) {
                 const daysLeft = Math.ceil((new Date(subscription.expiresAt) - new Date()) / (1000 * 60 * 60 * 24));
-                let message = this.formatSubscriptionStatus(subscription, daysLeft);
+                let message = this.formatSubscriptionStatus(subscription, daysLeft, username);
     
                 const opts = {
                     parse_mode: 'HTML',
@@ -62,7 +61,7 @@ class SubscriptionCommandHandler {
                 return;
             }
     
-            const session = await this.paymentHandler.createPaymentSession(username);
+            const session = await this.paymentHandler.createPaymentSession(chatId, username);
 
             const message = this.formatPaymentMessage(session);
     
@@ -114,7 +113,7 @@ class SubscriptionCommandHandler {
     async handlePaymentProcess(bot, query) {
         const chatId = query.message.chat.id;
         const username = (query.from.username || '').toLowerCase().replace(/^@/, '');
-        const session = await this.paymentHandler.createPaymentSession(username);
+        const session = await this.paymentHandler.createPaymentSession(chatId, username);
 
         const message =
             `💳 <b>Payment Details</b>\n\n` +
@@ -155,7 +154,7 @@ class SubscriptionCommandHandler {
 
     async processSuccessfulPayment(bot, chatId, sessionId, username, result) {
         await bot.sendMessage(chatId, "✅ Payment confirmed! Your subscription is being activated...");
-        await updatePaymentAddressStatus(sessionId, 'completed');
+        await this.accessControl.paymentService.updatePaymentAddressStatus(sessionId, 'completed');
 
         let transferResult = {};
         try {
@@ -167,15 +166,20 @@ class SubscriptionCommandHandler {
 
         const sessionData = this.paymentHandler.getPaymentSession(sessionId);
         const paymentId = `sol_payment_${Date.now()}`;
+        const transactionHashes = {
+          transactionHash: result.transactionHash,
+          transferHash: transferResult?.signature
+        };
 
-        await this.accessControl.createSubscription(username, sessionData.duration, {
-            paymentId,
-            status: 'completed',
-            transactionHash: result.transactionHash,
-            transferHash: transferResult?.signature
-        });
+        await this.accessControl.subscriptionService.createOrUpdateSubscription(
+          String(chatId), 
+          username, 
+          paymentId,
+          sessionData.amount,
+          transactionHashes
+        );
 
-        const subscription = await this.accessControl.getSubscription(username);
+        const subscription = await this.accessControl.subscriptionService.getSubscription(String(chatId));
         if (subscription) {
             await this.sendSuccessMessage(bot, chatId, subscription);
         }

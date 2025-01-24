@@ -1,12 +1,10 @@
 // bot/telegramBot.js
-
 const path = require('path');
 const TelegramBot = require('node-telegram-bot-api');
 const winston = require('winston');
 const fs = require('fs').promises;
 const config = require('../utils/config');
 const CommandHandlers = require('./commandHandlers/commandHandlers');
-const { UserManager } = require('./accessManager/userManager');
 const ActiveCommandsTracker = require('./commandsManager/activeCommandsTracker');
 const { commandConfigs, adminCommandConfigs } = require('./commandsManager/commandConfigs');
 const AccessControlDB = require('./accessManager/accessControlDB');
@@ -15,7 +13,7 @@ const CommandUsageTracker = require('./commandsManager/commandUsageTracker');
 const SolanaPaymentHandler = require('../solanaPaymentHandler/solanaPaymentHandler.js');
 const groupMessageLogger = require('./messageDataManager/groupMessageLogger');
 const MessageHandler = require('./messageHandler');
-const { getDatabase } = require('../database/database');
+const { getDatabase } = require('../database');
 
 // ====================
 // TelegramBotService
@@ -164,11 +162,6 @@ class TelegramBotService {
         await this.accessControl.ensureIndexes();
         this.logger.info('Access control system initialized');
 
-        // 2. UserManager
-        this.userManager = new UserManager(this.userFilePath);
-        await this.userManager.loadUsers();
-        this.logger.info('User manager initialized');
-
         // 3. Taux/limites + Usage tracking
         this.rateLimiter = new RateLimiter(path.join(this.configPath, 'rate_limits.json'));
         this.usageTracker = new CommandUsageTracker(path.join(this.configPath, 'command_usage.json'));
@@ -207,7 +200,8 @@ class TelegramBotService {
             ActiveCommandsTracker,
             commandConfigs,
             adminCommandConfigs,
-            paymentHandler: this.paymentHandler 
+            paymentHandler: this.paymentHandler,
+            stateManager: this.commandHandlers.stateManager
         });
     
         // Initialiser le messageHandler
