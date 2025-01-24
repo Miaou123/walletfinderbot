@@ -7,7 +7,7 @@ class BroadcastHandler {
   }
 
   async handleBroadcastCommand(bot, msg) {
-    const chatId = msg.chat.id;
+    const chatId = String(msg.chat.id);
     const adminUsername = msg.from.username;
 
     if (!this.accessControl.isAdmin(adminUsername)) {

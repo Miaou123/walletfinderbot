@@ -33,6 +33,16 @@ const validateSolanaAddress = (address) => {
       usage: '/ping',
       helpMessage: ''
     },
+    'referral': {
+      aliases: ['ref'],
+      minArgs: 0,
+      maxArgs: 0,
+      requiresAuth: false,
+      description: 'Manage your referral settings and rewards',
+      dailyLimit: Infinity,
+      usage: '/referral',
+      helpMessage: 'View and manage your referral rewards. Set your reward wallet address and track earned commissions from referrals.'
+    },
     'dexpaid': {
       aliases: ['dp'],
       minArgs: 1,

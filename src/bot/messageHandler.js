@@ -17,6 +17,7 @@ class MessageHandler {
         this.commandConfigs = dependencies.commandConfigs;
         this.adminCommandConfigs = dependencies.adminCommandConfigs;
         this.commandParser = null;
+        this.stateManager = dependencies.stateManager;
     }
 
     async initialize() {
@@ -68,7 +69,7 @@ class MessageHandler {
         const isGroup = msg.chat.type === 'group' || msg.chat.type === 'supergroup';
         const messageThreadId = msg.message_thread_id;
         const username = msg.from.username;
-        const chatId = msg.chat.id;
+        const chatId = String(msg.chat.id);
     
         // Vérification de l'ancienneté du message
         const currentTimestamp = Math.floor(Date.now() / 1000);
@@ -82,6 +83,7 @@ class MessageHandler {
         // Vérification initiale des permissions
         if (msg.text.startsWith('/')) {
             const { command, isAdmin } = this.commandParser.parseCommand(msg.text);
+
 
             if (!command || (!this.commandConfigs[command] && !this.adminCommandConfigs[command])) {
                 if (!isGroup) {
@@ -151,7 +153,15 @@ class MessageHandler {
         const { command, args, isAdmin } = this.commandParser.parseCommand(msg.text);
         const userId = msg.from.id;
         const username = msg.from.username;
-        const chatId = msg.chat.id;
+        const chatId = String(msg.chat.id);
+
+        if (isGroup && command === 'subscribe') {
+            await this.bot.sendMessage(chatId,
+                '❌ You cannot use /subscribe in a group chat. Please use /subscribe_group instead.',
+                { message_thread_id: messageThreadId }
+            );
+            return;
+        }
 
         this.logger.info(`Received command: ${command} with args: [${args}] from user: ${msg.from.username} (ID: ${userId})`);
 
@@ -294,10 +304,17 @@ class MessageHandler {
 
     async handleNonCommand(msg, messageThreadId) {
         try {
-            // Si le message n'est pas une commande, on vérifie s'il contient une adresse Solana
+            // Récupérer l'état utilisateur
+            const userId = msg.from.id;
+            const userState = this.stateManager.getUserState(userId);
+            
+            // Si en attente d'une adresse referral
+            if (userState?.context === 'referral' && userState?.step === 'WAITING_ADDRESS') {
+                await this.commandHandlersInstance.referralHandler.handleAddressInput(this.bot, msg);
+                return;
+            }
+
             const messageText = msg.text || '';
-    
-            // Vérification si le message contient une adresse Solana valide
             const solanaAddressRegex = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
             if (solanaAddressRegex.test(messageText)) {
                 groupMessageLogger.logGroupMessage(msg);

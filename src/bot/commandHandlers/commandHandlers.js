@@ -21,34 +21,37 @@ const StartHandler = require('./startHandler');
 const ScanHandler = require('./scanHandler');
 const TeamHandler = require('./teamHandler');
 const GroupSubscriptionHandler = require('./groupSubhandler');
+const ReferralHandler = require('./referralHandler');
 const stateManager = require('../../utils/stateManager');
 
 const logger = require('../../utils/logger');
 
 class CommandHandlers {
   constructor(userManager, accessControl, bot, paymentHandler) {
-      // Initialisation des handlers...
-      this.initializeHandlers(userManager, accessControl, bot, paymentHandler)
-          .then(() => {
-              // Mapping des commandes après l'initialisation des handlers
-              this.initializeCommandMapping();
-              
-              // Mapping des callbacks par catégorie
-              this.callbackHandlers = {
-                  'sub': this.subscriptionHandler,
-                  'group': this.groupSubscriptionHandler,
-                  'track': this.trackingActionHandler,
-                  'scan': this.scanHandler,
-                  'team': this.teamHandler,
-              };
+      
+    this.stateManager = stateManager;
+    this.initializeHandlers(userManager, accessControl, bot, paymentHandler)
+    .then(() => {
+        // Mapping des commandes après l'initialisation des handlers
+        this.initializeCommandMapping();
+        
+        // Mapping des callbacks par catégorie
+        this.callbackHandlers = {
+            'sub': this.subscriptionHandler,
+            'group': this.groupSubscriptionHandler,
+            'track': this.trackingActionHandler,
+            'scan': this.scanHandler,
+            'team': this.teamHandler,
+            'referral': this.referralHandler,
+        };
 
-              // Setup du handler de callback
-              this.setupCallbackHandler(bot);
-          })
-          .catch(error => {
-              logger.error('Error initializing handlers:', error);
-              throw error;
-          });
+        // Setup du handler de callback
+        this.setupCallbackHandler(bot);
+    })
+    .catch(error => {
+        logger.error('Error initializing handlers:', error);
+        throw error;
+    });
   }
 
   async initializeHandlers(userManager, accessControl, bot, paymentHandler) {
@@ -58,6 +61,7 @@ class CommandHandlers {
       this.groupSubscriptionHandler = new GroupSubscriptionHandler(accessControl, paymentHandler);
       this.startHandler = new StartHandler(userManager);
       this.scanHandler = new ScanHandler(stateManager);
+      this.referralHandler = new ReferralHandler(stateManager);
       this.bundleHandler = new BundleHandler();
       this.crossBtHandler = new CrossBtHandler();
       this.freshRatioHandler = new FreshRatioHandler();
@@ -110,6 +114,10 @@ class CommandHandlers {
           'help': { handler: this.helpHandler.handleCommand, context: this.helpHandler },
           'team': { handler: this.teamHandler.handleCommand, context: this.teamHandler },
           'tracker': { handler: this.trackerHandler.handleCommand, context: this.trackerHandler },
+          'referral': { 
+            handler: this.referralHandler.handleCommand, 
+            context: this.referralHandler 
+          },
       };
 
       this.handlers = {};
