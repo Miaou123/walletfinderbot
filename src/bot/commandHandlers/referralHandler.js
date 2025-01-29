@@ -1,70 +1,96 @@
-// src/bot/commandHandlers/referralHandler.js
-
 const logger = require('../../utils/logger');
 const { UserService } = require('../../database'); 
 const solanaAddressRegex = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 
 class ReferralHandler {
   constructor(stateManager) {
-    this.stateManager = stateManager; // on récupère l'instance du stateManager
+    this.stateManager = stateManager;
   }
 
   /**
-   * Méthode principale pour /referral
+   * Format SOL amount to USD
+   */
+  async getUSDValue(solAmount) {
+    // TODO: Implement actual SOL/USD conversion
+    return (solAmount * 100).toFixed(2); // Example conversion rate: 1 SOL = $100
+  }
+
+  /**
+   * Format message with user's referral data
+   */
+  async formatReferralMessage(userData, referralLink) {
+    // Formatage des nombres avec 2 décimales
+    const formatSOL = (number) => parseFloat(number || 0).toFixed(2);
+
+    const totalRewards = formatSOL(userData.totalRewards);
+    const unclaimedRewards = formatSOL(userData.unclaimedRewards);
+    const claimedRewards = formatSOL(userData.claimedRewards);
+    const referralConversions = userData.referralConversions || 0;
+
+    let message = "💫 <b>Noesis Referral Program - Earn While You Share!</b>\n\n";
+
+    message += "💎 <b>How It Works</b>\n";
+    message += "• Share your unique referral link with friends\n";
+    message += "• They get 10% OFF their subscription\n";
+    message += "• You earn 10% of their subscription fee\n";
+    message += "• You can claim you rewards instantly\n";
+    message += "• No limit on the number of referrals!\n\n";
+    
+    message += "📊 <b>Your Statistics</b>\n";
+    message += `• Users referred: <code>${referralConversions}</code> (active subscribers)\n`;
+    message += `• Total rewards earned: <code>${totalRewards}</code> SOL\n`;
+    message += `• Unclaimed rewards: <code>${unclaimedRewards}</code> SOL\n`;
+    message += `• Claimed rewards: <code>${claimedRewards}</code> SOL\n\n`;
+
+    if (!userData.referralWallet) {
+        message += "Your Referral Link:\nPlease set up your deposit address to view your referral link.\n";
+    } else {
+        message += `🔗 <b>Your Referral Link:</b>\n<code>${referralLink}</code>\n\n`;
+        const fullAddr = userData.referralWallet;
+        const displayAddr = fullAddr.slice(0,4) + '...' + fullAddr.slice(-4);
+        message += `💰 Rewards Wallet: <code>${fullAddr}</code> (${displayAddr})`; 
+    }
+
+    return message;
+  }
+
+  /**
+   * Main handler for /referral command
    */
   async handleCommand(bot, msg) {
-    const chatId = msg.chat.id;
+    const chatId = msg.chat.id.toString();
     const username = (msg.from.username || '').toLowerCase();
     
     try {
-      // 1) Récupérer ou créer la doc de referral
-      const referralDoc = await UserService.createOrUpdateUser(chatId.toString(), username);
+        let referralDoc = await UserService.getUserByChatId(chatId);
 
-      // 2) Construire le message
-      let message = "💰 <b>Invite your friends and earn 10% of revenue share</b>\n\n";
-      message += `Total Rewards Paid: ${referralDoc.claimedRewards || 0} SOL\n\n`;
+        if (!referralDoc) {
+          logger.info(`No user found for chatId: ${chatId}. Creating new user.`);
+          referralDoc = await UserService.createOrUpdateUser(chatId, username);
+        }
 
-      if (!referralDoc.referralWallet) {
-        // Pas d'adresse => “Please set up your deposit address”
-        message += `Your Referral Link:\nPlease set up your deposit address to view your referral link.\n\n`;
-      } else {
-        // Si déjà une wallet => on affiche le lien
-        const referralLink = `https://t.me/Noesis_local_bot?start=r-${username}`;
-        message += `Your Referral Link:\n${referralLink}\n\n`;
-      }
+        const referralLink = referralDoc?.referralLink 
+          || await UserService.saveReferralLink(chatId, username);
 
-      // Afficher `(Deposit Address: xxx...)` si referralWallet existe
-      if (referralDoc.referralWallet) {
-        const shortAddr = referralDoc.referralWallet.length > 8
-          ? referralDoc.referralWallet.slice(0,4) + '...' + referralDoc.referralWallet.slice(-4)
-          : referralDoc.referralWallet;
-        message += `(Deposit Address: ${shortAddr})`;
-      }
+        const message = await this.formatReferralMessage(referralDoc, referralLink);
 
-      // Inline keyboard
-      const inlineKeyboard = [];
-      if (!referralDoc.referralWallet) {
-        // S'il n'y a pas d'adresse => "Set Address"
-        inlineKeyboard.push([
-          { text: "Set Address", callback_data: "referral:setAddress" }
-        ]);
-      } else {
-        // Sinon "Change Address"
-        inlineKeyboard.push([
-          { text: "Change Address", callback_data: "referral:changeAddress" }
-        ]);
-      }
+        // Inline keyboard setup
+        const inlineKeyboard = [[
+          !referralDoc.referralWallet 
+            ? { text: "Set Address", callback_data: "referral:setAddress" }
+            : { text: "Change Address", callback_data: "referral:changeAddress" }
+        ]];
 
-      await bot.sendMessage(chatId, message, {
-        parse_mode: 'HTML',
-        reply_markup: { inline_keyboard: inlineKeyboard }
-      });
+        await bot.sendMessage(chatId, message, {
+            parse_mode: 'HTML',
+            reply_markup: { inline_keyboard: inlineKeyboard }
+        });
 
     } catch (err) {
-      logger.error("Error in /referral handleCommand:", err);
-      await bot.sendMessage(chatId, 
-        "An error occurred while processing your referral request. Please try again later."
-      );
+        logger.error("Error in /referral handleCommand:", err);
+        await bot.sendMessage(chatId, 
+            "An error occurred while processing your referral request. Please try again later."
+        );
     }
   }
 
@@ -103,7 +129,7 @@ class ReferralHandler {
    * quand l'utilisateur est censé saisir son wallet
    */
   async handleAddressInput(bot, msg) {
-    const chatId = msg.chat.id;
+    const chatId = msg.chat.id.toString();
     const userId = msg.from.id;
     const username = (msg.from.username || '').toLowerCase();
     const text = msg.text.trim();
@@ -116,32 +142,32 @@ class ReferralHandler {
     }
 
     try {
-        // Update the wallet
-        await UserService.setReferralWallet(username, text);
+        // Update the wallet using chatId
+        await UserService.setReferralWallet(chatId, text);
 
-        // Construct the message
-        let message = "💰 <b>Invite your friends and earn 10% of revenue share</b>\n\n";
-        message += "Total Rewards Paid: 0 SOL\n\n";
-        
-        const referralLink = `https://t.me/Noesis_local_bot?start=r-${username}`;
-        message += `Your Referral Link:\n${referralLink}\n\n`;
-        message += `Registered Wallet:\n${text}\n\n`;
+        // Get the updated user data
+        const userData = await UserService.getUserByChatId(chatId);
+        const referralLink = userData?.referralLink || 
+            await UserService.saveReferralLink(chatId, username);
+
+        // Format the message using the existing method
+        const message = await this.formatReferralMessage(userData, referralLink);
 
         // Remove the state
         this.stateManager.deleteUserState(userId);
 
         // Send confirmation with updated info
         await bot.sendMessage(chatId, 
-          message,
-          { 
-              parse_mode: 'HTML',
-              reply_markup: {
-                  inline_keyboard: [[
-                      { text: "Change Address", callback_data: "referral:changeAddress" }
-                  ]]
-              }
-          }
-      );
+            message,
+            { 
+                parse_mode: 'HTML',
+                reply_markup: {
+                    inline_keyboard: [[
+                        { text: "Change Address", callback_data: "referral:changeAddress" }
+                    ]]
+                }
+            }
+        );
     } catch (err) {
         logger.error("Error setting referral wallet for user:", err);
         await bot.sendMessage(chatId, 

@@ -1,4 +1,5 @@
 const logger = require('../../utils/logger');
+const { UserService, SubscriptionService } = require('../../database');
 
 class SubscriptionCommandHandler {
     constructor(accessControl, paymentHandler) {
@@ -14,12 +15,31 @@ class SubscriptionCommandHandler {
         return callbackData;
     }
 
-    formatPaymentMessage(session) {
-        return `💳 <b>Payment Details</b>\n\n` +
-               `Amount: 0.5 SOL\n` +
-               `Duration: 1 month\n\n` +
-               `Please send exactly this amount in SOL to:\n<code>${session.paymentAddress}</code>\n\n` +
-               `Then click "Check Payment".\n\n`
+    async formatPaymentMessage(session, referrerUsername) {
+        let message = `💳 <b>Payment Details</b>\n\n`;
+        
+        if (session.referralLinkUsed) {
+            message += `Amount: ${session.finalAmount} SOL (10% referral discount applied)\n`;
+        } else {
+            message += `Amount: ${session.finalAmount} SOL\n`;
+        }
+        
+        message += `Duration: 1 month\n\n`;
+    
+        if (referrerUsername) {
+            message += `🔗 Referred by: @${referrerUsername}\n\n`;
+        }
+    
+        if (!session.paymentAddress) {
+            logger.error('Payment address is undefined in session:', session);
+            message += `⚠️ Error: Payment address is not available.\n`;
+        } else {
+            message += `Please send exactly this amount in SOL to:\n<code>${session.paymentAddress}</code>\n\n`;
+        }
+    
+        message += `Then click "Check Payment".\n\n`;
+    
+        return message;
     }
 
     createPaymentCheckButton(sessionId) {
@@ -42,10 +62,19 @@ class SubscriptionCommandHandler {
     
         try {
             const subscription = await this.accessControl.subscriptionService.getSubscription(String(chatId));
+
+            const user = await UserService.getUserByChatId(String(chatId));
+            let referrerUsername = null;
+
+            let referralLink = null;
+            if (user && user.referredBy) {
+                referrerUsername = await UserService.getUsernameFromChatId(user.referredBy);
+                referralLink = await UserService.getReferralLink(user.referredBy);
+            }
     
             if (subscription?.active && subscription.expiresAt > new Date()) {
                 const daysLeft = Math.ceil((new Date(subscription.expiresAt) - new Date()) / (1000 * 60 * 60 * 24));
-                let message = this.formatSubscriptionStatus(subscription, daysLeft, username);
+                let message = this.formatSubscriptionStatus(subscription, daysLeft, referrerUsername);
     
                 const opts = {
                     parse_mode: 'HTML',
@@ -61,9 +90,14 @@ class SubscriptionCommandHandler {
                 return;
             }
     
-            const session = await this.paymentHandler.createPaymentSession(chatId, username);
+            const session = await this.paymentHandler.createPaymentSession(
+                String(chatId),
+                username,
+                '1month',
+                referralLink
+            );
 
-            const message = this.formatPaymentMessage(session);
+            const message = await this.formatPaymentMessage(session, referrerUsername);
     
             await bot.sendMessage(chatId, message, {
                 parse_mode: 'HTML',
@@ -82,17 +116,22 @@ class SubscriptionCommandHandler {
         }
     }
 
-    formatSubscriptionStatus(subscription, daysLeft) {
+    formatSubscriptionStatus(subscription, daysLeft, referrerUsername) {
         let message = 
             `📊 Subscription Status\n\n` +
             `👤 Username: @${subscription.username}\n` +
-            `⚡ Days remaining: ${daysLeft}\n` +
-            `💳 Payment History:\n`;
-
+            `⚡ Days remaining: ${daysLeft}\n`;
+    
+        if (referrerUsername) {
+            message += `🔗 Referred by: @${referrerUsername}\n`;
+        }
+    
+        message += `\n💳 Payment History:\n`;
+    
         const sortedPayments = [...subscription.paymentHistory].sort((a, b) => 
             new Date(b.paymentDate) - new Date(a.paymentDate)
         );
-
+    
         for (const payment of sortedPayments) {
             const date = new Date(payment.paymentDate).toLocaleDateString();
             message += `• ${date}: (ID: ${payment.paymentId}`;
@@ -105,7 +144,7 @@ class SubscriptionCommandHandler {
             
             message += ")\n";
         }
-
+    
         message += `\n${'─'.repeat(30)}\n`;
         return message;
     }
@@ -113,16 +152,24 @@ class SubscriptionCommandHandler {
     async handlePaymentProcess(bot, query) {
         const chatId = query.message.chat.id;
         const username = (query.from.username || '').toLowerCase().replace(/^@/, '');
-        const session = await this.paymentHandler.createPaymentSession(chatId, username);
-
-        const message =
-            `💳 <b>Payment Details</b>\n\n` +
-            `Amount: 0.5 SOL\n` +
-            `Duration: 1 month\n\n` +
-            `Please send exactly this amount to:\n<code>${session.paymentAddress}</code>\n\n` +
-            `Then click "Check Payment" once done.\n\n` +
-            `Session expires in 30 minutes.\n\n` +
-            `If you're encountering issues, please DM @rengon0x`;
+    
+        // Récupérer les informations de parrainage
+        const user = await UserService.getUserByChatId(String(chatId));
+        let referrerUsername = null;
+        let referralLink = null;
+        if (user && user.referredBy) {
+            referrerUsername = await UserService.getUsernameFromChatId(user.referredBy);
+            referralLink = await UserService.getReferralLink(user.referredBy);
+        }
+    
+        const session = await this.paymentHandler.createPaymentSession(
+            String(chatId),
+            username,
+            '1month',
+            referralLink
+        );
+    
+        const message = await this.formatPaymentMessage(session, referrerUsername);
 
         await bot.editMessageText(message, {
             chat_id: chatId,
@@ -154,8 +201,11 @@ class SubscriptionCommandHandler {
 
     async processSuccessfulPayment(bot, chatId, sessionId, username, result) {
         await bot.sendMessage(chatId, "✅ Payment confirmed! Your subscription is being activated...");
-        await this.accessControl.paymentService.updatePaymentAddressStatus(sessionId, 'completed');
 
+        logger.debug(`Calling updatePaymentAddressStatus with sessionId: ${sessionId} and status: 'completed'`);
+
+        await this.accessControl.paymentService.updatePaymentAddressStatus(sessionId, 'completed');
+    
         let transferResult = {};
         try {
             transferResult = await this.paymentHandler.transferFunds(sessionId);
@@ -163,22 +213,43 @@ class SubscriptionCommandHandler {
         } catch (err) {
             logger.error(`Error transferring funds for session ${sessionId}:`, err);
         }
-
+    
         const sessionData = this.paymentHandler.getPaymentSession(sessionId);
+
+        logger.debug('Session data for rewards calculation:', {
+            finalAmount: sessionData.finalAmount,
+            baseAmount: sessionData.baseAmount
+        });
+
         const paymentId = `sol_payment_${Date.now()}`;
         const transactionHashes = {
-          transactionHash: result.transactionHash,
-          transferHash: transferResult?.signature
+            transactionHash: result.transactionHash,
+            transferHash: transferResult?.signature
         };
-
+    
         await this.accessControl.subscriptionService.createOrUpdateSubscription(
-          String(chatId), 
-          username, 
-          paymentId,
-          sessionData.amount,
-          transactionHashes
+            String(chatId), 
+            username, 
+            paymentId,
+            sessionData.finalAmount,
+            transactionHashes
         );
-
+    
+        // Ajout de la logique de récompense du parrain
+        const user = await UserService.getUserByChatId(String(chatId));
+        if (user && user.referredBy) {
+            // S'assurer que le montant est un nombre valide
+            const rewardAmount = Number(sessionData.baseAmount);
+            if (!isNaN(rewardAmount)) {
+                logger.debug('Updating referrer rewards with amount:', rewardAmount);
+                await this.accessControl.subscriptionService.updateReferrerRewards(user.referredBy, rewardAmount);
+                await UserService.recordReferralConversion(String(chatId));
+            } else {
+                logger.error('Invalid amount for referral reward:', sessionData.finalAmount);
+            }
+        }
+    
+    
         const subscription = await this.accessControl.subscriptionService.getSubscription(String(chatId));
         if (subscription) {
             await this.sendSuccessMessage(bot, chatId, subscription);
@@ -191,11 +262,11 @@ class SubscriptionCommandHandler {
         } else if (result.reason === 'Payment not detected yet') {
             const partialBalance = result.partialBalance ?? 0;
             const sessionData = this.paymentHandler.getPaymentSession(sessionId);
-            const shortfall = (sessionData.amount - partialBalance).toFixed(3);
+            const shortfall = (sessionData.finalAmount - partialBalance).toFixed(3);
 
             if (partialBalance > 0) {
                 await bot.sendMessage(chatId,
-                    `🚫 You sent ${partialBalance} SOL, but you need ${sessionData.amount} SOL.\n` +
+                    `🚫 You sent ${partialBalance} SOL, but you need ${sessionData.finalAmount} SOL.\n` +
                     `You are short by ${shortfall} SOL. Please send the remaining amount.`
                 );
             } else {

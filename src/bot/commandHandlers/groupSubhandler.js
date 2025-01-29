@@ -1,4 +1,5 @@
 const logger = require('../../utils/logger');
+const { UserService } = require('../../database'); 
 
 class GroupSubscriptionHandler {
     constructor(accessControl, paymentHandler) {
@@ -288,7 +289,12 @@ class GroupSubscriptionHandler {
 
         await this.accessControl.subscriptionService.createOrUpdateGroupSubscription(sessionData.chatId, sessionData.groupName, payerInfo, paymentId, transactionHashes);
 
-        await this.sendSuccessMessage(bot, chatId, sessionData);
+        await UserService.recordReferralConversion(String(chatId));
+
+        const subscription = await this.accessControl.subscriptionService.getGroupSubscription(String(chatId));
+        if (subscription) {
+            await this.sendSuccessMessage(bot, chatId, subscription);
+        }
     }
 
     async handleFailedPayment(bot, chatId, sessionData, result) {

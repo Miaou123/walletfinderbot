@@ -9,7 +9,7 @@ const {
 
 const { v4: uuidv4 } = require('uuid');
 const logger = require('../utils/logger');
-const { PaymentService } = require('../database');
+const { PaymentService, SubscriptionService  } = require('../database');
 const { SubscriptionConfig: { SUBSCRIPTION_TYPES, calculateSubscriptionPrice } } = require('../database');
 require('dotenv').config();
 
@@ -55,7 +55,7 @@ class SolanaPaymentHandler {
         // Use centralized configuration
         this.price = SUBSCRIPTION_TYPES.USER.price;
         this.groupPrice = SUBSCRIPTION_TYPES.GROUP.price;
-        this.sessionValidityMs = SUBSCRIPTION_TYPES.USER.duration;
+        this.sessionValidityMs = 30 * 60 * 1000;
 
         this.mainWalletAddress = process.env.MAIN_WALLET_ADDRESS;
 
@@ -92,42 +92,50 @@ class SolanaPaymentHandler {
         logger.debug('Sessions after cleanup:', Array.from(this.sessions.keys()));
     }
 
-    async createPaymentSession(username, duration, referralCode = null) {
+    async createPaymentSession (chatId, username, duration, referralLink = null) {
 
-        const amount = calculateSubscriptionPrice('USER', referralCode);
+        const baseAmount = SUBSCRIPTION_TYPES.USER.price;
+        const finalAmount = await SubscriptionService.calculateSubscriptionPrice('USER', referralLink);
+        const referralLinkUsed = referralLink != null && finalAmount < baseAmount;
         const sessionId = uuidv4();
         const paymentKeypair = Keypair.generate();
         const base64Key = Buffer.from(paymentKeypair.secretKey).toString('base64');
-
+        
         // Log (débug) pour local
         logger.debug(`TEST INFO - Payment Address: ${paymentKeypair.publicKey.toString()}`);
         logger.debug(`TEST INFO - Private Key (base64): ${base64Key}`);
 
         const paymentData = {
             sessionId,
+            chatId,
             username,
-            type: 'private',
-            duration: '1month',
-            amount,
             paymentAddress: paymentKeypair.publicKey.toString(),
             privateKey: base64Key,
+            baseAmount,
+            finalAmount,
+            referralLinkUsed,
+            duration: '1month',
             createdAt: new Date(),
             expiresAt: new Date(Date.now() + this.sessionValidityMs),
-            paid: false
+            status: 'pending',
+            lastUpdated: new Date(),
         };
+        
+        logger.debug('Payment session data being saved:', paymentData);
 
         try {
             await PaymentService.savePaymentAddress(paymentData);
             this.sessions.set(sessionId, paymentData);
+            logger.debug('Session saved to Map:', this.sessions.get(sessionId));
 
             logger.debug(
-                `Created payment session ${sessionId} for user "${username}" (duration: ${duration}, amount: ${amount} SOL)`
+                `Created payment session ${sessionId} for user "${username}" (duration: ${duration}, amount: ${finalAmount} SOL)`
             );
 
             return {
                 sessionId,
                 paymentAddress: paymentData.paymentAddress,
-                amount: this.price,
+                finalAmount: finalAmount,
                 duration: '1month',
                 expires: paymentData.expiresAt
             };
@@ -214,11 +222,11 @@ class SolanaPaymentHandler {
             let balanceSol = balanceLamports / 1e9;
     
             logger.info(
-                `Balance of address ${session.paymentAddress}: ${balanceSol} SOL (expected: ${session.amount})`
+                `Balance of address ${session.paymentAddress}: ${balanceSol} SOL (expected: ${session.finalAmount})`
             );
     
-            // Si le solde est >= session.amount, on considère qu'il y a un paiement
-            if (balanceSol >= session.amount) {
+            // Si le solde est >= session.finalAmount, on considère qu'il y a un paiement
+            if (balanceSol >= session.finalAmount) {
                 // Vérif signatures
                 if (!signatures || signatures.length === 0) {
                     logger.warn(`No transaction signatures found on first attempt. Retrying in 2s...`);
@@ -372,11 +380,11 @@ class SolanaPaymentHandler {
             let balanceSol = balanceLamports / 1e9;
     
             logger.info(
-                `Balance of group address ${session.paymentAddress}: ${balanceSol} SOL (expected: ${session.amount})`
+                `Balance of group address ${session.paymentAddress}: ${balanceSol} SOL (expected: ${session.finalAmount})`
             );
     
-            // Si le solde est >= session.amount, on s'attend à voir au moins une signature
-            if (balanceSol >= session.amount) {
+            // Si le solde est >= session.finalAmount, on s'attend à voir au moins une signature
+            if (balanceSol >= session.finalAmount) {
                 // On parcourt toutes les signatures qu'on vient d'obtenir
                 let foundSignatures = [];
                 if (signatures && signatures.length > 0) {
@@ -575,16 +583,6 @@ class SolanaPaymentHandler {
             }
         });
     }
-
-    async calculateSubscriptionPrice(type, referralCode = null) {
-        const config = SUBSCRIPTION_TYPES[type.toUpperCase()];
-        
-        if (!config) {
-            throw new Error(`Invalid subscription type: ${type}`);
-        }
-     
-        return config.price;
-     }
 
     // Méthode utilitaire pour les tests
     getPrivateKey(sessionId) {

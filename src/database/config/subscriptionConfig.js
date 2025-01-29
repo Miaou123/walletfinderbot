@@ -65,24 +65,6 @@ const groupSubscriptionSchema = Joi.object({
     paymentHistory: Joi.array().items(groupPaymentRecordSchema).default([])
 });
 
-function calculateSubscriptionPrice(type, referralCode = null) {
-    const config = SUBSCRIPTION_TYPES[type.toUpperCase()];
-    const referralConfig = SUBSCRIPTION_TYPES.REFERRAL;
-    
-    if (!config) {
-        throw new Error(`Invalid subscription type: ${type}`);
-    }
-
-    let price = config.price;
-    
-    // Apply referral discount if applicable
-    if (referralCode) {
-        price *= (1 - referralConfig.discountPercent / 100);
-    }
-
-    return price;
-}
-
 function validateSubscription(subscription, type) {
     const schemas = {
         user: userSubscriptionSchema,
@@ -103,7 +85,6 @@ function validateSubscription(subscription, type) {
 
 module.exports = {
     SUBSCRIPTION_TYPES,
-    calculateSubscriptionPrice,
     validateSubscription,
     schemas: {
         user: {

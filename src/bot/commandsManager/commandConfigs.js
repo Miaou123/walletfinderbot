@@ -6,12 +6,12 @@ const validateSolanaAddress = (address) => {
     'start': { 
       aliases: [], 
       minArgs: 0, 
-      maxArgs: 0, 
+      maxArgs: 1,  // Allow one optional argument for the referral link
       requiresAuth: false, 
-      description: 'Start the bot', 
+      description: 'Start the bot or use a referral link', 
       dailyLimit: Infinity,
-      usage: '/start',
-      helpMessage: ''
+      usage: '/start [referral_link]',
+      helpMessage: 'Use /start to begin using the bot. You can also use a referral link like /start r-username'
     },
     'help': { 
       aliases: [], 
@@ -325,8 +325,18 @@ const validateSolanaAddress = (address) => {
       requiresAuth: true,
       description: 'Add a subscription for a user (Admin only)',
       dailyLimit: Infinity,
-      usage: '/addsub [username/userID] [time]',
+      usage: '/addsub [username/userID] [duration]',
       helpMessage: 'Add a subscription for a user (Admin only)'
+    },
+    'addgroupsub': {
+      aliases: [],
+      minArgs: 2,
+      maxArgs: 2,
+      requiresAuth: true,
+      description: 'Add a subscription for a group (Admin only)',
+      dailyLimit: Infinity,
+      usage: '/addgroupsub [duration]',
+      helpMessage: 'Add a subscription for a group (Admin only)'
     },
     'removesub': {
       aliases: [],
@@ -337,6 +347,16 @@ const validateSolanaAddress = (address) => {
       dailyLimit: Infinity,
       usage: '/removesub [username/userID]',
       helpMessage: 'Remove a user from the subscription list'
+    },
+    'removegroupsub': {
+      aliases: [],
+      minArgs: 1,
+      maxArgs: 1,
+      requiresAuth: true,
+      description: 'Remove a group from the group subscription list',
+      dailyLimit: Infinity,
+      usage: '/removegroupsub [groupName/groupID]',
+      helpMessage: 'Remove a group from the group subscription list'
     },
     'checksub': {
       aliases: [],
@@ -357,6 +377,16 @@ const validateSolanaAddress = (address) => {
       dailyLimit: Infinity,
       usage: '/listsubs',
       helpMessage: 'list of all the users currently subscribed and their subscription time'
+    },
+    'listgroupsubs': {
+      aliases: [],
+      minArgs: 0,
+      maxArgs: 0,
+      requiresAuth: true,
+      description: 'list of all the currently subscribed groups',
+      dailyLimit: Infinity,
+      usage: '/listsubs',
+      helpMessage: 'list of all the groups currently subscribed and their subscription time'
     },
     'listgroups': {
       aliases: [],
