@@ -61,7 +61,7 @@ async function updateIndexes(db) {
                 indexes: [
                     { key: { chatId: 1 }, options: { unique: true } },
                     { key: { username: 1 }, options: {} },
-                    { key: { referralCode: 1 }, options: { unique: true } }
+                    { key: { referralLink: 1 }, options: { unique: true } }
                 ]
             },
             subscriptions: {
@@ -81,14 +81,13 @@ async function updateIndexes(db) {
                     { key: { active: 1 }, options: {} }
                 ]
             },
-            payment_addresses: {
-                collection: db.collection("payment_addresses"),
+            paymentReceipt: {
+                collection: db.collection("paymentReceipt"),
                 indexes: [
                     { key: { sessionId: 1 }, options: { unique: true } },
                     { key: { chatId: 1 }, options: {} },
                     { key: { username: 1 }, options: {} },
-                    { key: { expires: 1 }, options: {} },
-                    { key: { publicKey: 1 }, options: { unique: true } }
+                    { key: { expiresAt: 1 }, options: {} },
                 ]
             },
         };

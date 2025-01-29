@@ -40,14 +40,14 @@ class AccessControlDB {
        return username?.replace(/^@/, '').toLowerCase();
    }
 
-   async isAdmin(chatId) {
-       try {
-           return this.config.adminIds.includes(Number(chatId));
-       } catch (error) {
-           logger.error(`Error checking admin status for "${chatId}":`, error);
-           return false;
-       }
-   }
+   async isAdmin(userId) {
+        try {
+            return this.config.adminIds.includes(Number(userId));
+        } catch (error) {
+            logger.error(`Error checking admin status for user "${userId}":`, error);
+            return false;
+        }
+    }
 
    async addUser(chatId, username, role = 'user') {
        const normalizedUsername = this.normalizeUsername(username);

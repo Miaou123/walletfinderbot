@@ -164,21 +164,20 @@ class TelegramBotService {
 
         // 3. Taux/limites + Usage tracking
         this.rateLimiter = new RateLimiter(path.join(this.configPath, 'rate_limits.json'));
-        this.usageTracker = new CommandUsageTracker(path.join(this.configPath, 'command_usage.json'));
         this.logger.info('Rate limiter and usage tracker initialized');
 
         // 4. Créer une seule instance de SolanaPaymentHandler
         this.paymentHandler = new SolanaPaymentHandler(config.HELIUS_RPC_URL);
         this.logger.info('Payment handler initialized');
 
-        // 5. Instancier les handlers
-        //    -> On y passe le userManager, l'accessControl, et le bot 
+        // 5. Instancier et initialiser les handlers
         this.commandHandlers = new CommandHandlers(
-            this.userManager,
             this.accessControl,
             this.bot,
             this.paymentHandler 
         );
+
+        await this.commandHandlers.initialize();
 
         // 6. Initialiser le groupMessageLogger si nécessaire
         groupMessageLogger.initialize();
@@ -194,7 +193,6 @@ class TelegramBotService {
             commandHandlers: this.commandHandlers,
             accessControl: this.accessControl,
             rateLimiter: this.rateLimiter,
-            usageTracker: this.usageTracker,
             config,
             logger: this.logger,
             ActiveCommandsTracker,
@@ -225,9 +223,6 @@ class TelegramBotService {
                 }
             }
         });
-
-        // 2) Plus besoin de this.bot.on('callback_query', ...) ici,
-        //    car c'est fait dans le constructor de CommandHandlers
 
         // 3) Polling error
         this.bot.on('polling_error', (error) => {

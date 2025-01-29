@@ -1,23 +1,45 @@
 const { getDatabase } = require('../config/connection');
 const { validateSubscription, subscriptionDuration, subscriptionPrice } = require('../models/subscription');
 const { validateGroupSubscription, groupSubscriptionDuration, groupSubscriptionPrice } = require('../models/group_subscription');
+const { SUBSCRIPTION_TYPES } = require('../config/subscriptionConfig'); // Assurez-vous d'importer cela
+const UserService = require('./userService'); // Assurez-vous que le chemin est correct
 const logger = require('../../utils/logger');
 
+const REFERRAL_DISCOUNT = 0.9;
+
 class SubscriptionService {
+
+    static SUBSCRIPTION_TYPES = SUBSCRIPTION_TYPES;
+
+    static async calculateSubscriptionPrice(type, referralLink = null) {
+        const config = SUBSCRIPTION_TYPES[type.toUpperCase()];
+        
+        if (!config) {
+            throw new Error(`Invalid subscription type: ${type}`);
+        }
+    
+        let price = config.price;
+    
+        if (referralLink) {
+            const isValidReferral = await UserService.isValidReferralLink(referralLink);
+            if (isValidReferral) {
+                price *= REFERRAL_DISCOUNT; // 10% de réduction
+            }
+        }
+    
+        return price;
+    }
     static async createOrUpdateSubscription(chatId, username, paymentId, amount, transactionHashes = {}) {
         const database = await getDatabase();
         const collection = database.collection("subscriptions");
         
-        // Convertir chatId en string si ce n'est pas déjà le cas
-        const normalizedChatId = String(chatId);
-        
         try {
             const now = new Date();
-            const existingSubscription = await collection.findOne({ chatId: normalizedChatId });
+            const existingSubscription = await collection.findOne({ chatId: chatId });
     
             if (existingSubscription) {
                 return this.updateExistingSubscription(collection, existingSubscription, {
-                    chatId: normalizedChatId, 
+                    chatId: chatId, 
                     username, 
                     paymentId, 
                     amount, 
@@ -27,7 +49,7 @@ class SubscriptionService {
             }
     
             return this.createNewSubscription(collection, {
-                chatId: normalizedChatId, 
+                chatId: chatId, 
                 username, 
                 paymentId, 
                 amount, 
@@ -215,6 +237,33 @@ class SubscriptionService {
         });
     }
 
+    static async getSubscriptionByUsername(username) {
+        const database = await getDatabase();
+        const normalizedUsername = username.replace(/^@/, '').toLowerCase();
+    
+        return await database.collection("subscriptions").findOne({ username: normalizedUsername });
+    }
+
+    static async getGroupSubscriptionByName(groupName) {
+        const database = await getDatabase();
+        return await database.collection("group_subscriptions").findOne({ groupName });
+    }
+    
+
+    static async removeSubscriptionByUsername(username) {
+        const database = await getDatabase();
+        const result = await database.collection("subscriptions").deleteOne({ username });
+        console.log("🗑️ Deleting subscription for:", username, "Result:", result);
+        return result;
+    }
+
+    static async removeGroupSubscriptionByChatId(chatId) {
+        const database = await getDatabase();
+        const result = await database.collection("group_subscriptions").deleteOne({ chatId });
+        console.log("🗑️ Deleting group subscription for:", chatId, "Result:", result);
+        return result;
+    }    
+
     static async getSubscription(chatId) {
         const database = await getDatabase();
         const subscription = await database.collection("subscriptions").findOne({ chatId });
@@ -232,6 +281,79 @@ class SubscriptionService {
        subscription.active = subscription.expiresAt > new Date();
        return subscription;
    }
+
+   static async hasActiveSubscription(chatId) {
+    const subscription = await this.getSubscription(chatId);
+    return subscription && subscription.active;
+   }
+
+   static async getSubscriptionList() {
+    const database = await getDatabase();
+    return await database.collection("subscriptions").find().toArray();
+    }
+
+    static async getGroupSubscriptionList() {
+        const database = await getDatabase();
+        return await database.collection("group_subscriptions").find().toArray();
+    }    
+
+
+    static async updateReferrerRewards(referrerChatId, subscriptionAmount) {
+        const database = await getDatabase();
+        const collection = database.collection("users");
+        
+        try {
+            // S'assurer que le montant est un nombre
+            const amount = Number(subscriptionAmount);
+            if (isNaN(amount)) {
+                throw new Error(`Invalid subscription amount: ${subscriptionAmount}`);
+            }
+    
+            // Calculer la récompense (10% du montant de la souscription)
+            const rewardAmount = parseFloat((amount * 0.1).toFixed(9)); // Éviter les problèmes de précision
+            
+            logger.debug('Calculating referral reward:', {
+                originalAmount: amount,
+                rewardAmount: rewardAmount
+            });
+    
+            // Récupérer d'abord l'utilisateur pour vérifier les valeurs actuelles
+            const user = await collection.findOne({ chatId: referrerChatId });
+            if (!user) {
+                throw new Error(`User not found: ${referrerChatId}`);
+            }
+    
+            // Calculer les nouvelles valeurs
+            const currentUnclaimed = parseFloat(user.unclaimedRewards || 0);
+            const currentTotal = parseFloat(user.totalRewards || 0);
+            const newUnclaimed = parseFloat((currentUnclaimed + rewardAmount).toFixed(9));
+            const newTotal = parseFloat((currentTotal + rewardAmount).toFixed(9));
+    
+            // Mettre à jour avec les nouvelles valeurs
+            const result = await collection.updateOne(
+                { chatId: referrerChatId },
+                { 
+                    $set: { 
+                        unclaimedRewards: newUnclaimed,
+                        totalRewards: newTotal,
+                        lastUpdated: new Date()
+                    }
+                }
+            );
+    
+            logger.info(`Updated rewards for referrer ${referrerChatId}:`, {
+                rewardAmount,
+                newUnclaimed,
+                newTotal
+            });
+    
+            return result;
+        } catch (error) {
+            logger.error(`Error updating referrer rewards for ${referrerChatId}:`, error);
+            throw error;
+        }
+    }
+
 }
 
 module.exports = SubscriptionService;

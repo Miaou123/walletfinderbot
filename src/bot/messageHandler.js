@@ -9,7 +9,6 @@ class MessageHandler {
         this.commandHandlers = {}; 
         this.accessControl = dependencies.accessControl;
         this.rateLimiter = dependencies.rateLimiter;
-        this.usageTracker = dependencies.usageTracker;
         this.config = dependencies.config;
         this.logger = dependencies.logger;
         this.ActiveCommandsTracker = dependencies.ActiveCommandsTracker;
@@ -70,6 +69,7 @@ class MessageHandler {
         const messageThreadId = msg.message_thread_id;
         const username = msg.from.username;
         const chatId = String(msg.chat.id);
+        const userId = msg.from?.id; 
     
         // Vérification de l'ancienneté du message
         const currentTimestamp = Math.floor(Date.now() / 1000);
@@ -97,10 +97,9 @@ class MessageHandler {
         
             let allowed;
             if (isAdmin) {
-                // Vérifier les droits admin en premier
-                allowed = await this.accessControl.isAllowed(chatId, 'admin');
+                allowed = await this.accessControl.isAdmin(userId);
                 if (!allowed) {
-                    this.logger.warn(`Non-admin user ${username}, with chatId ${chatId}, tried to use admin command: ${command}`);
+                    this.logger.warn(`Non-admin user ${username} (ID: ${userId}) tried to use admin command: ${command}`);
                     return;
                 }
             } else if (isGroup) {
@@ -174,20 +173,6 @@ class MessageHandler {
 
         // Gestion des commandes admin
         if (isAdmin) {
-            if (!await this.accessControl.isAllowed(chatId, 'admin')) {
-                this.logger.warn(`Non-admin user ${username} tried to use admin command: ${command}`);
-                return;
-            }
-            
-            // Validation avec les arguments
-            const validationErrors = this.commandParser.validateArgs(command, args, true);
-            if (validationErrors.length > 0) {
-                if (!isGroup) {
-                    await this.bot.sendLongMessage(msg.chat.id, validationErrors.join('\n\n'), { message_thread_id: messageThreadId });
-                }
-                return;
-            }
-            
             await this.handleAdminCommand(command, msg, args, messageThreadId);
             return;
         }
@@ -270,7 +255,6 @@ class MessageHandler {
             } finally {
                 // 7. Nettoyage et tracking
                 this.ActiveCommandsTracker.removeCommand(userId, command);
-                this.usageTracker.trackUsage(username, command);
             }
 
         } catch (error) {
@@ -287,16 +271,39 @@ class MessageHandler {
     }
 
     async handleAdminCommand(command, msg, args, messageThreadId) {
-        const handler = this.commandHandlers[command];
-        if (typeof handler === 'function') {
-            try {
-                await handler(this.bot, msg, args, messageThreadId);
-            } catch (error) {
-                this.logger.error(`Error executing admin command ${command}:`, error);
-                await this.bot.sendMessage(msg.chat.id, "An error occurred while processing the admin command.", { message_thread_id: messageThreadId });
+        try {
+            // On vérifie que msg contient toutes les propriétés nécessaires
+            if (!msg?.chat?.id || !msg?.from?.id) {
+                this.logger.error('Invalid message format in handleAdminCommand');
+                return;
             }
-        } else {
-            await this.bot.sendMessage(msg.chat.id, "No handler implemented for this admin command.", { message_thread_id: messageThreadId });
+    
+            // On s'assure que c'est bien un admin
+            const userId = msg.from.id;
+            const chatId = String(msg.chat.id);
+            
+            if (!await this.accessControl.isAdmin(userId)) {
+                this.logger.warn(`Non-admin user ${msg.from.username} tried to use admin command: ${command}`);
+                await this.bot.sendMessage(chatId, "You are not authorized to use this command.");
+                return;
+            }
+    
+            // On utilise notre nouveau AdminCommandManager à travers commandHandlersInstance
+            if (this.commandHandlersInstance.adminCommands) {
+                await this.commandHandlersInstance.adminCommands.handleCommand(command, msg, args);
+            } else {
+                throw new Error('AdminCommandManager not initialized');
+            }
+    
+        } catch (error) {
+            this.logger.error(`Error executing admin command ${command}:`, error);
+            if (msg?.chat?.id) {
+                await this.bot.sendMessage(
+                    msg.chat.id, 
+                    "An error occurred while processing the admin command.",
+                    { message_thread_id: messageThreadId }
+                );
+            }
         }
     }
     
