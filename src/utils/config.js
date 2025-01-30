@@ -8,6 +8,7 @@ const sensitiveConfig = {
   MONGODB_URI: process.env.MONGODB_URI,
   DEFINED_API_KEY: process.env.DEFINED_API_KEY,
   adminIds: process.env.ADMIN_IDS,
+  REWARD_WALLET_PRIVATE_KEY: process.env.REWARD_WALLET_PRIVATE_KEY,
 };
 
 const nonSensitiveConfig = {

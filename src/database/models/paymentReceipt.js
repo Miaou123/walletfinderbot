@@ -3,6 +3,7 @@ const Joi = require('joi');
 // Schéma de validation pour les adresses de paiement
 const paymentReceiptSchema = Joi.object({
     sessionId: Joi.string().required(),
+    userId: Joi.string().required(), 
     chatId: Joi.string().required(),
     username: Joi.string().required(),
     paymentAddress: Joi.string().required(),

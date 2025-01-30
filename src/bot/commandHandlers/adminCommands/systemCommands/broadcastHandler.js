@@ -64,10 +64,11 @@ class BroadcastHandler extends BaseAdminHandler {
                 if (user.chatId && Number(user.chatId) > 0) {
                     try {
                         logger.info(`Attempting to send message to user ${user.username} (${user.chatId})`);
-                        await this.bot.sendMessage(user.chatId, message, {
+                        await this.bot.sendMessage(user.chatId, message.replace(/\n/g, '<br>'), {
                             parse_mode: 'HTML',
                             disable_web_page_preview: true
                         });
+                        
                         successCount++;
                         logger.info(`Successfully sent broadcast to user ${user.username}`);
                         

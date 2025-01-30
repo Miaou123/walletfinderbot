@@ -8,13 +8,16 @@ class UserService {
         return db.collection('users');
     }
 
-    static async createOrUpdateUser(chatId, username) {
+    static async createOrUpdateUser(msg) {
         const collection = await this.getCollection();
-
+        const userId = msg.from.id.toString();
+        const chatId = msg.chat.id.toString();
+        const username = (msg.from.username || '').toLowerCase();
         const referralLink = this.generateReferralLink(username);
     
         const userData = {
-            chatId,
+            userId,                  // Nouvel identifiant principal
+            chatId,                  // Gardé pour la communication
             username,
             referralLink,
             referralWallet: '',
@@ -35,26 +38,25 @@ class UserService {
     
         try {
             const result = await collection.findOneAndUpdate(
-                { chatId },
+                { userId },          // Recherche par userId
                 { $set: value },
                 { upsert: true, returnDocument: 'after' }
             );
     
             return result.value || value;
         } catch (err) {
-            // Gestion spécifique des erreurs de duplicate key
             if (err.code === 11000) {
-                logger.warn(`Duplicate key error for user with chatId ${chatId}`);
-                // Récupérer l'utilisateur existant
-                return await this.getUserByChatId(chatId);
+                logger.warn(`Duplicate key error for user with userId ${userId}`);
+                return await this.getUserById(userId);
             }
             throw err;
         }
     }
 
-    static async getUser(username) {
+    // Nouvelles méthodes de recherche
+    static async getUserById(userId) {
         const collection = await this.getCollection();
-        return collection.findOne({ username });
+        return collection.findOne({ userId });
     }
 
     static async getUserByChatId(chatId) {
@@ -62,19 +64,26 @@ class UserService {
         return collection.findOne({ chatId });
     }
 
+    static async getUser(username) {
+        const collection = await this.getCollection();
+        return collection.findOne({ username });
+    }
+
     static generateReferralLink(username) {
         return `https://t.me/Noesis_local_bot?start=r-${username}`;
     }
 
-    static async saveReferralLink(chatId, username) {
+    static async saveReferralLink(msg) {
         const collection = await this.getCollection();
+        const userId = msg.from.id.toString();
+        const username = (msg.from.username || '').toLowerCase();
         const referralLink = this.generateReferralLink(username);
     
         await collection.updateOne(
-            { chatId },  // Utiliser chatId au lieu de username
+            { userId },
             { 
                 $set: { 
-                    referralLink: referralLink,
+                    referralLink,
                     lastUpdated: new Date() 
                 }
             },
@@ -84,16 +93,16 @@ class UserService {
         return referralLink;
     }
 
-    static async getUsernameFromChatId(chatId) {
+    static async getUsernameFromUserId(userId) {
         const collection = await this.getCollection();
-        const user = await collection.findOne({ chatId }, { projection: { username: 1 } });
+        const user = await collection.findOne({ userId }, { projection: { username: 1 } });
         return user ? user.username : null;
     }
 
-    static async addUnclaimedRewards(chatId, amount) {
+    static async addUnclaimedRewards(userId, amount) {
         const collection = await this.getCollection();
         await collection.updateOne(
-            { chatId },
+            { userId },
             { 
                 $inc: { unclaimedRewards: amount },
                 $set: { lastUpdated: new Date() }
@@ -103,24 +112,27 @@ class UserService {
 
     static async isValidReferralLink(referralLink) {
         const collection = await this.getCollection();
-        const user = await collection.findOne({ referralLink: referralLink });
+        const user = await collection.findOne({ referralLink });
         return !!user;
     }
 
-    static async getReferralLink(chatId, username) {
+    static async getReferralLink(msg) {
         const collection = await this.getCollection();
+        const userId = msg.from.id.toString();
+        const username = (msg.from.username || '').toLowerCase();
+        
         const user = await collection.findOne(
-            { chatId },
+            { userId },
             { projection: { referralLink: 1 } }
         );
     
         return user?.referralLink || this.generateReferralLink(username);
     }
 
-    static async setReferralWallet(chatId, wallet) {
+    static async setReferralWallet(userId, wallet) {
         const collection = await this.getCollection();
         const result = await collection.updateOne(
-            { chatId },
+            { userId },
             { 
                 $set: { 
                     referralWallet: wallet, 
@@ -130,45 +142,47 @@ class UserService {
         );
         
         if (result.modifiedCount === 0) {
-            logger.warn(`No user found with chatId: ${chatId}`);
+            logger.warn(`No user found with userId: ${userId}`);
             throw new Error('User not found');
         }
         
         return true;
     }
 
-    static async addRewards(username, amount) {
-        const collection = await this.getCollection();
-        const result = await collection.updateOne(
-            { username },
-            { 
-                $inc: { unclaimedRewards: amount },
-                $set: { lastUpdated: new Date() }
-            }
-        );
-        logger.info(`Added ${amount} SOL to unclaimedRewards for ${username}`);
-        return result.modifiedCount > 0;
-    }
+    static async storeReferralUsage(newUser, referrerUserId) {
+        // Vérification anti-auto-référencement
+        if (newUser.from.id.toString() === referrerUserId) {
+            logger.warn(`Self-referral attempt detected for userId: ${referrerUserId}`);
+            throw new Error('Self-referral is not allowed');
+        }
 
-    static async storeReferralUsage(newChatId, newUsername, referrerChatId) {
         const collection = await this.getCollection();
+        const newUserId = newUser.from.id.toString();
+        
+        // Vérifier si l'utilisateur existe déjà avec un parrain
+        const existingUser = await collection.findOne({ userId: newUserId });
+        if (existingUser && existingUser.referredBy) {
+            logger.warn(`User ${newUserId} already has a referrer: ${existingUser.referredBy}`);
+            throw new Error('User already has a referrer');
+        }
     
         // Mettre à jour les informations de l'utilisateur
         await collection.updateOne(
-            { chatId: newChatId },
+            { userId: newUserId },
             { 
                 $set: { 
-                    referredBy: referrerChatId,
-                    username: newUsername,
+                    referredBy: referrerUserId,
+                    username: (newUser.from.username || '').toLowerCase(),
+                    chatId: newUser.chat.id.toString(),
                     lastUpdated: new Date()
                 }
             },
             { upsert: true }
         );
     
-        // Incrémenter seulement le nombre de clics pour le parrain
+        // Incrémenter le nombre de clics pour le parrain
         await collection.updateOne(
-            { chatId: referrerChatId },
+            { userId: referrerUserId },
             { 
                 $inc: { referralClicks: 1 },
                 $set: { lastUpdated: new Date() }
@@ -176,13 +190,13 @@ class UserService {
         );
     }
 
-    static async recordReferralConversion(chatId) {
+    static async recordReferralConversion(userId) {
         const collection = await this.getCollection();
-        const user = await collection.findOne({ chatId });
+        const user = await collection.findOne({ userId });
     
         if (user && user.referredBy) {
             await collection.updateOne(
-                { chatId: user.referredBy },
+                { userId: user.referredBy },
                 { 
                     $inc: { referralConversions: 1 },
                     $addToSet: { referredUsers: user.username },
@@ -192,12 +206,11 @@ class UserService {
         }
     }
 
-    // Method to get referred users for a specific user
-    static async getReferredUsers(chatId) {
+    static async getReferredUsers(userId) {
         const collection = await this.getCollection();
         
         const user = await collection.findOne(
-            { chatId },
+            { userId },
             { projection: { referredUsers: 1, referralConversions: 1 } }
         );
 
@@ -207,20 +220,24 @@ class UserService {
         };
     }
 
-    // Method to process referral reward with additional tracking
-    static async processReferralReward(newChatId, amount) {
+    static async processReferralReward(userId, amount) {
         const collection = await this.getCollection();
         
-        const user = await collection.findOne({ chatId: newChatId });
+        const user = await collection.findOne({ userId });
         
         if (user && user.referredBy) {
-            const referrer = await collection.findOne({ chatId: user.referredBy });
+            if (user.referredBy === userId) {
+                logger.error(`Self-referral reward attempt detected for userId: ${userId}`);
+                return null;
+            }
+
+            const referrer = await collection.findOne({ userId: user.referredBy });
             
             if (referrer) {
                 const referralReward = amount * 0.1;
 
                 await collection.updateOne(
-                    { chatId: user.referredBy },
+                    { userId: user.referredBy },
                     { 
                         $inc: { 
                             unclaimedRewards: referralReward
@@ -229,10 +246,10 @@ class UserService {
                     }
                 );
 
-                logger.info(`Referral reward processed: ${referralReward} SOL for ${referrer.chatId}`);
+                logger.info(`Referral reward processed: ${referralReward} SOL for user ${referrer.userId}`);
                 
                 return {
-                    referrerChatId: referrer.chatId,
+                    referrerUserId: referrer.userId,
                     referralReward
                 };
             }
@@ -241,12 +258,11 @@ class UserService {
         return null;
     }
 
-     // Method to get detailed referral stats
-     static async getDetailedReferralStats(chatId) {
+    static async getDetailedReferralStats(userId) {
         const collection = await this.getCollection();
         
         const user = await collection.findOne(
-            { chatId },
+            { userId },
             { 
                 projection: { 
                     referralClicks: 1,
@@ -255,7 +271,8 @@ class UserService {
                     unclaimedRewards: 1,
                     claimedRewards: 1,
                     referralWallet: 1,
-                    username: 1
+                    username: 1,
+                    chatId: 1
                 }
             }
         );
@@ -263,6 +280,7 @@ class UserService {
         if (!user) return null;
 
         return {
+            userId: user.userId,
             chatId: user.chatId,
             username: user.username,
             totalClicks: user.referralClicks,
@@ -274,17 +292,14 @@ class UserService {
         };
     }
 
-
-    // Add a method to validate and count successful referrals
-    static async validateReferral(chatId) {
+    static async validateReferral(userId) {
         const collection = await this.getCollection();
         
-        const user = await collection.findOne({ chatId });
+        const user = await collection.findOne({ userId });
         
         if (user && user.referredBy && !user.referralUsed) {
-            // Mark this referral as used
             await collection.updateOne(
-                { chatId },
+                { userId },
                 { 
                     $set: { 
                         referralUsed: true,
@@ -293,9 +308,8 @@ class UserService {
                 }
             );
     
-            // Increment referral count for the referrer
             await collection.updateOne(
-                { chatId: user.referredBy },
+                { userId: user.referredBy },
                 { 
                     $inc: { referralCount: 1 },
                     $set: { lastUpdated: new Date() }
@@ -308,41 +322,9 @@ class UserService {
         return null;
     }
 
-    static async validateReferral(chatId) {
+    static async claimRewards(userId) {
         const collection = await this.getCollection();
-        
-        const user = await collection.findOne({ chatId });
-        
-        if (user && user.referredBy && !user.referralUsed) {
-            // Mark this referral as used
-            await collection.updateOne(
-                { chatId },
-                { 
-                    $set: { 
-                        referralUsed: true,
-                        lastUpdated: new Date()
-                    }
-                }
-            );
-    
-            // Increment referral count for the referrer
-            await collection.updateOne(
-                { chatId: user.referredBy },
-                { 
-                    $inc: { referralCount: 1 },
-                    $set: { lastUpdated: new Date() }
-                }
-            );
-    
-            return user.referredBy;
-        }
-    
-        return null;
-    }
-
-    static async claimRewards(chatId) {
-        const collection = await this.getCollection();
-        const user = await collection.findOne({ chatId });
+        const user = await collection.findOne({ userId });
     
         if (!user) {
             return { success: false, reason: "User not found" };
@@ -357,7 +339,7 @@ class UserService {
         const claimedAmount = user.unclaimedRewards;
     
         await collection.updateOne(
-            { chatId },
+            { userId },
             {
                 $inc: { claimedRewards: claimedAmount },
                 $set: { 
@@ -367,34 +349,17 @@ class UserService {
             }
         );
     
-        logger.info(`User with chatId ${chatId} claimed ${claimedAmount} SOL from referrals`);
+        logger.info(`User ${userId} claimed ${claimedAmount} SOL from referrals`);
         return { success: true, claimedAmount };
     }
 
-    static async getReferralStats(username) {
-        const collection = await this.getCollection();
-        const user = await collection.findOne(
-            { username },
-            { 
-                projection: { 
-                    referralCount: 1,
-                    referralClicks: 1,
-                    unclaimedRewards: 1,
-                    claimedRewards: 1,
-                    referralWallet: 1 
-                }
-            }
-        );
-        return user;
-    }
-
-    // Update getAllReferrers to include more details
     static async getAllReferrers() {
         const collection = await this.getCollection();
         return await collection.find(
             { referralConversions: { $gt: 0 } },
             { 
                 projection: { 
+                    userId: 1,
                     username: 1, 
                     referralConversions: 1, 
                     referredUsers: 1,
@@ -404,7 +369,6 @@ class UserService {
         ).toArray();
     }
 
-    // Peut être utile pour des stats admin
     static async getTotalReferralStats() {
         const collection = await this.getCollection();
         const stats = await collection.aggregate([

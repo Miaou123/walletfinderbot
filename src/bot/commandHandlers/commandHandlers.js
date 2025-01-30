@@ -24,7 +24,7 @@ const stateManager = require('../../utils/stateManager');
 const logger = require('../../utils/logger');
 
 class CommandHandlers {
-    constructor(accessControl, bot, paymentHandler) {
+    constructor(accessControl, bot, paymentHandler, claimSystem) {
         if (!accessControl || !bot || !paymentHandler) {
             throw new Error('Required dependencies missing');
         }
@@ -32,6 +32,7 @@ class CommandHandlers {
         this.bot = bot;
         this.paymentHandler = paymentHandler;
         this.stateManager = stateManager;
+        this.claimSystem = claimSystem;
     }
 
     async initialize() {
@@ -69,7 +70,7 @@ class CommandHandlers {
         this.groupSubscriptionHandler = new GroupSubscriptionHandler(this.accessControl, this.paymentHandler);
         this.startHandler = new StartHandler();
         this.scanHandler = new ScanHandler(this.stateManager);
-        this.referralHandler = new ReferralHandler(this.stateManager);
+        this.referralHandler = new ReferralHandler(this.stateManager, this.claimSystem);
         this.bundleHandler = new BundleHandler();
         this.crossBtHandler = new CrossBtHandler();
         this.freshRatioHandler = new FreshRatioHandler();

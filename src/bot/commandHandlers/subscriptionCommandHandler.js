@@ -57,19 +57,21 @@ class SubscriptionCommandHandler {
     }
 
     async handleCommand(bot, msg, args) {
+        const userId = msg.from.id.toString();
         const chatId = msg.chat.id;
         const username = (msg.from.username || '').toLowerCase().replace(/^@/, '');
     
         try {
-            const subscription = await this.accessControl.subscriptionService.getSubscription(String(chatId));
+            const subscription = await this.accessControl.subscriptionService.getUserSubscription(userId);
 
-            const user = await UserService.getUserByChatId(String(chatId));
+            const user = await UserService.getUserById(userId);
             let referrerUsername = null;
-
             let referralLink = null;
+
             if (user && user.referredBy) {
-                referrerUsername = await UserService.getUsernameFromChatId(user.referredBy);
-                referralLink = await UserService.getReferralLink(user.referredBy);
+                const referrer = await UserService.getUserById(user.referredBy);
+                referrerUsername = referrer?.username;
+                referralLink = await UserService.getReferralLink({ from: { id: user.referredBy } });
             }
     
             if (subscription?.active && subscription.expiresAt > new Date()) {
@@ -80,9 +82,7 @@ class SubscriptionCommandHandler {
                     parse_mode: 'HTML',
                     disable_web_page_preview: true,
                     reply_markup: {
-                        inline_keyboard: [
-                            [this.createExtendButton()]
-                        ]
+                        inline_keyboard: [[this.createExtendButton()]]
                     }
                 };
     
@@ -91,7 +91,7 @@ class SubscriptionCommandHandler {
             }
     
             const session = await this.paymentHandler.createPaymentSession(
-                String(chatId),
+                userId,
                 username,
                 '1month',
                 referralLink
@@ -102,14 +102,12 @@ class SubscriptionCommandHandler {
             await bot.sendMessage(chatId, message, {
                 parse_mode: 'HTML',
                 reply_markup: {
-                    inline_keyboard: [
-                        [this.createPaymentCheckButton(session.sessionId)]
-                    ]
+                    inline_keyboard: [[this.createPaymentCheckButton(session.sessionId)]]
                 }
             });
     
         } catch (error) {
-            logger.error('Error in /subscribe handleCommand:', error);
+            logger.error(`Error in /subscribe handleCommand for user ${userId}:`, error);
             await bot.sendMessage(chatId,
                 'An error occurred while processing your request. Please try again later.'
             );
@@ -150,20 +148,22 @@ class SubscriptionCommandHandler {
     }
 
     async handlePaymentProcess(bot, query) {
+        const userId = query.from.id.toString();
         const chatId = query.message.chat.id;
         const username = (query.from.username || '').toLowerCase().replace(/^@/, '');
     
-        // Récupérer les informations de parrainage
-        const user = await UserService.getUserByChatId(String(chatId));
+        const user = await UserService.getUserById(userId);
         let referrerUsername = null;
         let referralLink = null;
+
         if (user && user.referredBy) {
-            referrerUsername = await UserService.getUsernameFromChatId(user.referredBy);
-            referralLink = await UserService.getReferralLink(user.referredBy);
+            const referrer = await UserService.getUserById(user.referredBy);
+            referrerUsername = referrer?.username;
+            referralLink = await UserService.getReferralLink({ from: { id: user.referredBy } });
         }
     
         const session = await this.paymentHandler.createPaymentSession(
-            String(chatId),
+            userId,
             username,
             '1month',
             referralLink
@@ -176,14 +176,13 @@ class SubscriptionCommandHandler {
             message_id: query.message.message_id,
             parse_mode: 'HTML',
             reply_markup: {
-                inline_keyboard: [
-                    [this.createPaymentCheckButton(session.sessionId)]
-                ]
+                inline_keyboard: [[this.createPaymentCheckButton(session.sessionId)]]
             }
         });
     }
 
     async handlePaymentCheck(bot, query, sessionId) {
+        const userId = query.from.id.toString();
         const chatId = query.message.chat.id;
         const username = (query.from.username || '').toLowerCase().replace(/^@/, '');
         const result = await this.paymentHandler.checkPayment(sessionId);
@@ -192,19 +191,21 @@ class SubscriptionCommandHandler {
             if (result.alreadyPaid) {
                 await bot.sendMessage(chatId, "✅ Payment was already confirmed. Subscription is active!");
             } else {
-                await this.processSuccessfulPayment(bot, chatId, sessionId, username, result);
+                await this.processSuccessfulPayment(bot, query, sessionId, result);
             }
         } else {
             await this.handleFailedPayment(bot, chatId, sessionId, result);
         }
     }
 
-    async processSuccessfulPayment(bot, chatId, sessionId, username, result) {
+    async processSuccessfulPayment(bot, query, sessionId, result) {
+        const userId = query.from.id.toString();
+        const chatId = query.message.chat.id;
+        const username = (query.from.username || '').toLowerCase().replace(/^@/, '');
+
         await bot.sendMessage(chatId, "✅ Payment confirmed! Your subscription is being activated...");
 
-        logger.debug(`Calling updatePaymentAddressStatus with sessionId: ${sessionId} and status: 'completed'`);
-
-        await this.accessControl.paymentService.updatePaymentAddressStatus(sessionId, 'completed');
+        await this.accessControl.paymentService.updatePaymentAddressStatus(sessionId, 'completed', userId);
     
         let transferResult = {};
         try {
@@ -215,12 +216,6 @@ class SubscriptionCommandHandler {
         }
     
         const sessionData = this.paymentHandler.getPaymentSession(sessionId);
-
-        logger.debug('Session data for rewards calculation:', {
-            finalAmount: sessionData.finalAmount,
-            baseAmount: sessionData.baseAmount
-        });
-
         const paymentId = `sol_payment_${Date.now()}`;
         const transactionHashes = {
             transactionHash: result.transactionHash,
@@ -228,29 +223,26 @@ class SubscriptionCommandHandler {
         };
     
         await this.accessControl.subscriptionService.createOrUpdateSubscription(
-            String(chatId), 
-            username, 
+            query,
             paymentId,
             sessionData.finalAmount,
             transactionHashes
         );
     
-        // Ajout de la logique de récompense du parrain
-        const user = await UserService.getUserByChatId(String(chatId));
+        // Gestion des récompenses de parrainage
+        const user = await UserService.getUserById(userId);
         if (user && user.referredBy) {
-            // S'assurer que le montant est un nombre valide
             const rewardAmount = Number(sessionData.baseAmount);
             if (!isNaN(rewardAmount)) {
                 logger.debug('Updating referrer rewards with amount:', rewardAmount);
                 await this.accessControl.subscriptionService.updateReferrerRewards(user.referredBy, rewardAmount);
-                await UserService.recordReferralConversion(String(chatId));
+                await UserService.recordReferralConversion(userId);
             } else {
                 logger.error('Invalid amount for referral reward:', sessionData.finalAmount);
             }
         }
     
-    
-        const subscription = await this.accessControl.subscriptionService.getSubscription(String(chatId));
+        const subscription = await this.accessControl.subscriptionService.getUserSubscription(userId);
         if (subscription) {
             await this.sendSuccessMessage(bot, chatId, subscription);
         }

@@ -2,15 +2,13 @@
 const path = require('path');
 const TelegramBot = require('node-telegram-bot-api');
 const winston = require('winston');
-const fs = require('fs').promises;
 const config = require('../utils/config');
 const CommandHandlers = require('./commandHandlers/commandHandlers');
+const ClaimSystem = require('../tools/claimSystem.js');
 const ActiveCommandsTracker = require('./commandsManager/activeCommandsTracker');
 const { commandConfigs, adminCommandConfigs } = require('./commandsManager/commandConfigs');
 const AccessControlDB = require('./accessManager/accessControlDB');
-const RateLimiter = require('./commandsManager/commandRateLimiter');
-const CommandUsageTracker = require('./commandsManager/commandUsageTracker');
-const SolanaPaymentHandler = require('../solanaPaymentHandler/solanaPaymentHandler.js');
+const SolanaPaymentHandler = require('../tools/solanaPaymentHandler.js');
 const groupMessageLogger = require('./messageDataManager/groupMessageLogger');
 const MessageHandler = require('./messageHandler');
 const { getDatabase } = require('../database');
@@ -58,7 +56,6 @@ class TelegramBotService {
     async start() {
         try {
             await this.initializeDatabase();
-            await this.ensureFilesExist();
             await this.initializeBot();
             await this.initializeManagers();
             await this.setupMessageHandler();
@@ -80,40 +77,6 @@ class TelegramBotService {
             this.logger.info('Database connection established successfully');
         } catch (error) {
             this.logger.error('Failed to connect to database:', error);
-            throw error;
-        }
-    }
-
-    async ensureFilesExist() {
-        try {
-            await fs.mkdir(this.dataPath, { recursive: true });
-            await fs.mkdir(this.configPath, { recursive: true });
-
-            const defaultFiles = [
-                {
-                    path: this.userFilePath,
-                    content: '[]'
-                },
-                {
-                    path: path.join(this.configPath, 'rate_limits.json'),
-                    content: '{}'
-                },
-                {
-                    path: path.join(this.configPath, 'command_usage.json'),
-                    content: '{}'
-                }
-            ];
-
-            for (const file of defaultFiles) {
-                try {
-                    await fs.access(file.path);
-                } catch {
-                    await fs.writeFile(file.path, file.content);
-                    this.logger.info(`Created default file: ${file.path}`);
-                }
-            }
-        } catch (error) {
-            this.logger.error('Error ensuring files exist:', error);
             throw error;
         }
     }
@@ -162,19 +125,23 @@ class TelegramBotService {
         await this.accessControl.ensureIndexes();
         this.logger.info('Access control system initialized');
 
-        // 3. Taux/limites + Usage tracking
-        this.rateLimiter = new RateLimiter(path.join(this.configPath, 'rate_limits.json'));
-        this.logger.info('Rate limiter and usage tracker initialized');
-
-        // 4. Créer une seule instance de SolanaPaymentHandler
+        // 3. Créer une seule instance de SolanaPaymentHandler
         this.paymentHandler = new SolanaPaymentHandler(config.HELIUS_RPC_URL);
         this.logger.info('Payment handler initialized');
+
+        // 4. Initialiser le ClaimSystem
+        this.claimSystem = new ClaimSystem(
+            this.paymentHandler.connection, // Réutiliser la même connexion Solana
+            config.REWARD_WALLET_PRIVATE_KEY
+        );
+        this.logger.info('Claim system initialized');
 
         // 5. Instancier et initialiser les handlers
         this.commandHandlers = new CommandHandlers(
             this.accessControl,
             this.bot,
-            this.paymentHandler 
+            this.paymentHandler,
+            this.claimSystem
         );
 
         await this.commandHandlers.initialize();

@@ -66,7 +66,7 @@ const validateSolanaAddress = (address) => {
       aliases: ['em'],
       minArgs: 1,
       maxArgs: 2,
-      requiresAuth: false,
+      requiresAuth: true,
       description: 'Analyze entry prices of top holders',
       usage: '/entrymap [contract_address] [number_of_holders=20]',
       helpMessage: 'Analyzes the entry prices of top holders for a given token.\n\n' +
@@ -89,7 +89,7 @@ const validateSolanaAddress = (address) => {
       aliases: ['bt'], 
       minArgs: 1, 
       maxArgs: 4, 
-      requiresAuth: false, 
+      requiresAuth: true, 
       description: 'Analyze best traders', 
       dailyLimit: 5,
       usage: '/bt [contract_address] [winrate_threshold](50%)* [portfolio_threshold]($10000)* [sort_option](port)*',
@@ -99,7 +99,7 @@ const validateSolanaAddress = (address) => {
       aliases: ['th'], 
       minArgs: 1, 
       maxArgs: 2, 
-      requiresAuth: false, 
+      requiresAuth: true, 
       description: 'Analyze top holders', 
       dailyLimit: 5,
       usage: '/th [contract_address] [number_of_holders](20)*',
@@ -109,7 +109,7 @@ const validateSolanaAddress = (address) => {
       aliases: ['c'], 
       minArgs: 2, 
       maxArgs: 6, 
-      requiresAuth: false, 
+      requiresAuth: true, 
       description: 'Cross-analyze multiple tokens', 
       dailyLimit: 20,
       usage: '/cross [contract_address1] [contract_address2] ... [Combined_value_min]($10000)*',
@@ -119,7 +119,7 @@ const validateSolanaAddress = (address) => {
       aliases: ['cbt'], 
       minArgs: 2, 
       maxArgs: 3, 
-      requiresAuth: false, 
+      requiresAuth: true, 
       description: 'Cross-analyze top traders of multiple tokens', 
       dailyLimit: 20,
       usage: '/crossbt [contract_address1] [contract_address2] [contract_address3]*',
@@ -129,7 +129,7 @@ const validateSolanaAddress = (address) => {
       aliases: ['t'], 
       minArgs: 1, 
       maxArgs: 1, 
-      requiresAuth: false, 
+      requiresAuth: true, 
       description: 'Analyze team supply', 
       dailyLimit: 5,
       usage: '/team [contract_address]',
@@ -139,7 +139,7 @@ const validateSolanaAddress = (address) => {
       aliases: ['sh'], 
       minArgs: 2, 
       maxArgs: Infinity, 
-      requiresAuth: false, 
+      requiresAuth: true, 
       description: 'Search for specific wallets', 
       dailyLimit: 5,
       usage: '/search [contract_address] [partial_address1] [partial_address2]*',
@@ -149,7 +149,7 @@ const validateSolanaAddress = (address) => {
       aliases: ['eb'], 
       minArgs: 1, 
       maxArgs: 4, 
-      requiresAuth: false, 
+      requiresAuth: true, 
       description: 'Analyze early buyers', 
       dailyLimit: 5,
       usage: '/eb [coin_address] [time_frame](1h)* [min buy amount](1%)* [pump or nopump]*',
@@ -159,7 +159,7 @@ const validateSolanaAddress = (address) => {
       aliases: ['d'], 
       minArgs: 1,
       maxArgs: 1,
-      requiresAuth: false,
+      requiresAuth: true,
       description: 'Analyze pumpfun developer profile and previous coins',
       dailyLimit: 10,
       usage: '/dev [contract_address]',
@@ -169,7 +169,7 @@ const validateSolanaAddress = (address) => {
       aliases: ['fr'],
       minArgs: 1,
       maxArgs: 3,
-      requiresAuth: false,
+      requiresAuth: true,
       description: 'Analyze fresh wallet ratio',
       dailyLimit: 10,
       usage: '/freshratio [contract_address] [time_frame](1h)* [min buy amount](0.005%)*',
@@ -185,21 +185,11 @@ const validateSolanaAddress = (address) => {
       aliases: ['tr'], 
       minArgs: 0, 
       maxArgs: 0, 
-      requiresAuth: false, 
+      requiresAuth: true, 
       description: 'Show tracked supplies', 
       dailyLimit: Infinity,
       usage: '/tracker',
       helpMessage: 'Display a list of all your currently tracked supplies.\n\nUse this command to view and manage your active supply tracking sessions.'
-    },
-    'cancel': { 
-      aliases: [], 
-      minArgs: 0, 
-      maxArgs: 0, 
-      requiresAuth: false, 
-      description: 'Cancel the current active command', 
-      dailyLimit: Infinity,
-      usage: '/cancel',
-      helpMessage: 'Cancel the currently running command.\n\nUse this to stop a long-running analysis or if you made a mistake in your command input.'
     },
     'subscribe': {
       aliases: ['sub'],
@@ -215,21 +205,6 @@ const validateSolanaAddress = (address) => {
                    '• 3 Months (1.2 SOL)\n' +
                    '• 6 Months (2.0 SOL)\n\n' +
                    'After selecting your plan, follow the payment instructions to complete your subscription.'
-    },
-    'confirm': {
-      aliases: [],
-      minArgs: 2,
-      maxArgs: 2,
-      requiresAuth: false,
-      description: 'Confirm your subscription payment',
-      dailyLimit: Infinity,
-      usage: '/confirm [SESSION_ID] [TRANSACTION_SIGNATURE]',
-      helpMessage: 'Confirm your subscription payment by providing the session ID and transaction signature.\n\n' +
-                   'Example:\n' +
-                   '/confirm abc123 5xR8sY9...\n\n' +
-                   'Make sure to:\n' +
-                   '• Use the exact session ID provided during subscription\n' +
-                   '• Copy the complete transaction signature from Solana'
     },
     'subscribe_group': {
       aliases: ['subgroup'],

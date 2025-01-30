@@ -1,39 +1,47 @@
 const { getDatabase } = require('../config/connection');
-const { validatePaymentData, validateStatusUpdate } = require('../models/paymentReceipt'); // Validation avec Joi
+const { validatePaymentData, validateStatusUpdate } = require('../models/paymentReceipt');
 const logger = require('../../utils/logger');
 
 const COLLECTION_NAME = 'paymentReceipt';
 
 class PaymentService {
-
     static async getCollection() {
         const db = await getDatabase();
         return db.collection(COLLECTION_NAME);
     }
-    // Sauvegarder une nouvelle adresse de paiement
+
     static async savePaymentAddress(paymentData) {
         try {
             const collection = await this.getCollection();
             
-            // Étape 1 : Validation des données avec Joi
-            const validatedData = validatePaymentData(paymentData);
+            // S'assurer que userId est présent dans les données
+            if (!paymentData.userId) {
+                throw new Error('userId is required in payment data');
+            }
 
-            // Étape 2 : Sauvegarder les données validées dans la collection MongoDB
+            // Ajout du userId aux données de paiement
+            const paymentDataWithUser = {
+                ...paymentData,
+                lastUpdated: new Date()
+            };
+            
+            // Étape 1 : Validation des données avec Joi
+            const validatedData = validatePaymentData(paymentDataWithUser);
+
+            // Étape 2 : Sauvegarder les données validées
             const result = await collection.insertOne(validatedData);
 
             return result;
         } catch (error) {
-            logger.error(`Error saving payment address for session ${paymentData.sessionId}:`, error);
+            logger.error(`Error saving payment address for user ${paymentData.userId}, session ${paymentData.sessionId}:`, error);
             throw error;
         }
     }
 
-    // Récupérer une adresse de paiement par sessionId
     static async getPaymentAddress(sessionId) {
         try {
-            const db = getDatabase(); // Obtenez l'instance MongoDB
-            
-            const paymentAddress = await db.collection(collectionName).findOne({ sessionId });
+            const collection = await this.getCollection();
+            const paymentAddress = await collection.findOne({ sessionId });
             return paymentAddress;
         } catch (error) {
             logger.error(`Error retrieving payment for session ${sessionId}:`, error);
@@ -41,61 +49,80 @@ class PaymentService {
         }
     }
 
-    // Mettre à jour le statut d'une adresse de paiement
-    static async updatePaymentAddressStatus(sessionId, status) {
+    static async getPaymentsByUserId(userId) {
+        try {
+            const collection = await this.getCollection();
+            return await collection.find({ userId }).toArray();
+        } catch (error) {
+            logger.error(`Error retrieving payments for user ${userId}:`, error);
+            return [];
+        }
+    }
+
+    static async updatePaymentAddressStatus(sessionId, status, userId) {
         try {
             const collection = await this.getCollection();
     
-            // Construisez les données de mise à jour en validant les champs nécessaires
+            if (!status) {
+                throw new Error('Status is required for updating payment address');
+            }
+    
             const updateData = {
                 status, 
                 lastUpdated: new Date()
             };
     
-            // Vérifiez que `status` est bien défini et valide avant de faire l'update
-            if (!status) {
-                throw new Error('Status is required for updating payment address');
-            }
-    
-            // Effectuez la mise à jour
             const result = await collection.updateOne(
-                { sessionId },
+                { sessionId, userId },  // Ajouter userId dans la condition
                 { $set: updateData }
             );
     
             if (result.matchedCount === 0) {
-                logger.warn(`No document found with sessionId: ${sessionId}`);
+                logger.warn(`No document found with sessionId: ${sessionId} for user: ${userId}`);
                 return false;
             }
     
             if (result.modifiedCount === 0) {
-                logger.warn(`Document with sessionId: ${sessionId} was not updated (possibly no changes).`);
+                logger.warn(`Document with sessionId: ${sessionId} for user: ${userId} was not updated (possibly no changes).`);
                 return false;
             }
     
-            logger.info(`Successfully updated status for sessionId: ${sessionId} to '${status}'.`);
+            logger.info(`Successfully updated status for sessionId: ${sessionId}, user: ${userId} to '${status}'.`);
             return true;
         } catch (error) {
-            logger.error(`Error updating payment status for session ${sessionId}:`, error);
-            throw error; // Renvoyer l'erreur pour un meilleur diagnostic
+            logger.error(`Error updating payment status for session ${sessionId}, user ${userId}:`, error);
+            throw error;
         }
     }
     
-    
-    // Nettoyer les adresses de paiement expirées
     static async cleanupExpiredPaymentAddresses() {
         try {
-            const db = getDatabase(); // Obtenez l'instance MongoDB
+            const collection = await this.getCollection();
             
-            const result = await db.collection(collectionName).updateMany(
+            const result = await collection.updateMany(
                 { expiresAt: { $lt: new Date() }, status: 'pending' },
                 { $set: { status: 'expired', lastUpdated: new Date() } }
             );
 
+            logger.info(`Cleaned up ${result.modifiedCount} expired payment addresses`);
             return result;
         } catch (error) {
             logger.error('Error cleaning up expired payment addresses:', error);
             return 0;
+        }
+    }
+
+    static async getPendingPayments(userId) {
+        try {
+            const collection = await this.getCollection();
+            return await collection.find({
+                userId,
+                status: 'pending',
+                expiresAt: { $gt: new Date() }
+            }).toArray();
+        } catch (error) {
+            logger.error(`Error retrieving pending payments for user ${userId}:`, error);
+            return [];
         }
     }
 }
