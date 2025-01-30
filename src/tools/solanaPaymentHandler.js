@@ -9,7 +9,7 @@ const {
 
 const { v4: uuidv4 } = require('uuid');
 const logger = require('../utils/logger');
-const { PaymentService, SubscriptionService  } = require('../database');
+const { PaymentService, UserService  } = require('../database');
 const { SubscriptionConfig: { SUBSCRIPTION_TYPES, calculateSubscriptionPrice } } = require('../database');
 require('dotenv').config();
 
@@ -92,35 +92,38 @@ class SolanaPaymentHandler {
         logger.debug('Sessions after cleanup:', Array.from(this.sessions.keys()));
     }
 
-    async createPaymentSession (userId, chatId, username, duration, referralLink = null) {
-
+    async createPaymentSession(userId, chatId, username, duration, referralLink = null) {
         const baseAmount = SUBSCRIPTION_TYPES.USER.price;
-        const finalAmount = await SubscriptionService.calculateSubscriptionPrice('USER', referralLink);
-        const referralLinkUsed = referralLink != null && finalAmount < baseAmount;
+        
+        // Vérifier si l'utilisateur a un parrain
+        const user = await UserService.getUserById(userId);
+        const hasReferrer = user && user.referredBy;
+        
+        // Calculer le prix final avec la réduction si applicable
+        const finalAmount = hasReferrer ? baseAmount * 0.9 : baseAmount;
+        
         const sessionId = uuidv4();
         const paymentKeypair = Keypair.generate();
         const base64Key = Buffer.from(paymentKeypair.secretKey).toString('base64');
-        
-        // Log (débug) pour local
-        logger.debug(`TEST INFO - Payment Address: ${paymentKeypair.publicKey.toString()}`);
-        logger.debug(`TEST INFO - Private Key (base64): ${base64Key}`);
 
         const paymentData = {
             sessionId,
+            type: 'private',
             userId,
-            chatId,
-            username,
+            chatId,         // Utiliser le vrai chatId
+            username,       // Utiliser le vrai username
             paymentAddress: paymentKeypair.publicKey.toString(),
             privateKey: base64Key,
             baseAmount,
             finalAmount,
-            referralLinkUsed,
-            duration: '1month',
+            referralLinkUsed: referralLink,
+            duration: duration || '1month',
             createdAt: new Date(),
             expiresAt: new Date(Date.now() + this.sessionValidityMs),
             status: 'pending',
             lastUpdated: new Date(),
         };
+
         
         logger.debug('Payment session data being saved:', paymentData);
 
@@ -311,21 +314,23 @@ class SolanaPaymentHandler {
 
         const paymentData = {
             sessionId,
-            chatId,
-            groupName,
             type: 'group',
-            adminInfo: {
-                ...adminInfo,
-                userId: adminInfo.userId
-            },
-            duration,
-            amount,
+            userId: adminInfo.userId,
+            chatId,
+            username: groupName,
             paymentAddress: paymentKeypair.publicKey.toString(),
             privateKey: base64Key,
+            baseAmount: amount,
+            finalAmount: amount,
+            referralLinkUsed: null,
+            duration,
             createdAt: new Date(),
             expiresAt: new Date(Date.now() + this.sessionValidityMs),
-            paid: false
+            status: "pending",
+            lastUpdated: new Date()
         };
+
+        logger.debug('Payment session data being saved:', paymentData);
 
         try {
             PaymentService.savePaymentAddress(paymentData);

@@ -37,8 +37,7 @@ class ReferralHandler {
     } else {
         message += `🔗 <b>Your Referral Link:</b>\n<code>${referralLink}</code>\n\n`;
         const fullAddr = userData.referralWallet;
-        const displayAddr = fullAddr.slice(0,4) + '...' + fullAddr.slice(-4);
-        message += `💰 Rewards Wallet: <code>${fullAddr}</code> (${displayAddr})`; 
+        message += `💰 Rewards Wallet: <code>${fullAddr}</code>`; 
     }
 
     const inlineKeyboard = [];
@@ -220,6 +219,8 @@ class ReferralHandler {
     const chatId = msg.chat.id.toString();
     const text = msg.text.trim();
 
+    logger.debug(`Attempting to set referral wallet for user ${userId}`);
+
     if (!solanaAddressRegex.test(text)) {
         await bot.sendMessage(chatId, 
             "That doesn't look like a valid Solana address. Please try again or /cancel."
@@ -228,8 +229,13 @@ class ReferralHandler {
     }
 
     try {
+        logger.debug(`Setting referral wallet ${text} for user ${userId}`);
         await UserService.setReferralWallet(userId, text);
+        
+        logger.debug(`Getting updated user data for ${userId}`);
         const userData = await UserService.getUserById(userId);
+        logger.debug('Updated user data:', userData);
+        
         const referralLink = userData?.referralLink || 
             await UserService.saveReferralLink(msg);
 
