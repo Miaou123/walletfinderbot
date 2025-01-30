@@ -79,7 +79,13 @@ class GroupSubscriptionHandler {
 
     async validateAdminRights(bot, msg) {
         const chatId = String(msg.chat.id);
-        const adminUserId = msg.from.id.toString();
+        const adminUserId = msg.from?.id ? String(msg.from.id) : null;
+        
+        if (!adminUserId) {
+            logger.error("❌ ERROR: Unable to retrieve adminUserId for group subscription", { msg });
+            await bot.sendMessage(msg.chat.id, "❌ Error: Could not retrieve admin details.");
+            return;
+        }
         
         // Vérifier si l'utilisateur est admin
         const chatMember = await bot.getChatMember(chatId, adminUserId);
@@ -162,27 +168,43 @@ class GroupSubscriptionHandler {
 
     async initiateNewSubscription(bot, msg) {
         const chatId = String(msg.chat.id);
+        const groupName = msg.chat.title;
+        const adminUserId = msg.from?.id ? String(msg.from.id) : null;
+
+        console.log ("admin user id is: " + adminUserId);
+        const adminUsername = msg.from?.username || "unknown";
+    
+        if (!adminUserId) {
+            logger.error("❌ ERROR: Unable to retrieve adminUserId for group subscription", { msg });
+            await bot.sendMessage(chatId, "❌ Error: Could not retrieve admin details.");
+            return;
+        }
+    
         const adminInfo = {
-            userId: msg.from.id.toString(),
-            username: msg.from.username
+            userId: adminUserId,
+            username: adminUsername
         };
+
+        logger.debug("📥 createGroupPaymentSession() received:", {
+            chatId,
+            groupName,
+            adminInfo
+        });        
 
         const session = await this.paymentHandler.createGroupPaymentSession(
             chatId,
-            msg.chat.title,
+            groupName,
             adminInfo
         );
-
+    
         const message = this.formatPaymentMessage(msg.chat.title, session);
         await bot.sendMessage(chatId, message, {
             parse_mode: 'HTML',
             reply_markup: {
-                inline_keyboard: [
-                    [this.createPaymentCheckButton(session.sessionId)]
-                ]
+                inline_keyboard: [[this.createPaymentCheckButton(session.sessionId)]]
             }
         });
-    }
+    }    
 
     formatPaymentMessage(groupTitle, session) {
         return `💳 <b>Group Subscription Payment</b>\n\n` +

@@ -32,7 +32,18 @@ class SubscriptionService {
     static async createOrUpdateSubscription(msg, paymentId, amount, transactionHashes = {}) {
         const database = await getDatabase();
         const collection = database.collection("subscriptions");
-        const userId = msg.from.id.toString();
+        logger.debug("Debugging msg object in createOrUpdateSubscription:", { msg });
+
+        if (!msg || !msg.from || !msg.from.id) {
+            logger.error("Invalid message format: msg.from.id is missing", { msg });
+            throw new Error("Invalid message format: missing user ID.");
+        }
+
+        const userId = msg.from?.id?.toString() || msg.message?.from?.id?.toString();
+        if (!userId) {
+            logger.error("❌ ERROR: Invalid message structure in createOrUpdateSubscription. Missing user ID.", { msg });
+            throw new Error("Invalid message structure: missing user ID.");
+        }
         const chatId = msg.chat.id.toString();
         const username = (msg.from.username || '').toLowerCase();
         
@@ -117,6 +128,7 @@ class SubscriptionService {
         );
 
         const paymentRecord = {
+            userId,
             paymentId,
             duration: '1month',
             amount,
@@ -196,6 +208,7 @@ class SubscriptionService {
             expiresAt: new Date(now.getTime() + SUBSCRIPTION_TYPES.USER.duration),
             lastUpdated: now,
             paymentHistory: [{
+                userId,
                 paymentId,
                 duration: '1month',
                 amount,
@@ -225,6 +238,7 @@ class SubscriptionService {
             expiresAt: new Date(now.getTime() + SUBSCRIPTION_TYPES.GROUP.duration),
             lastUpdated: now,
             paymentHistory: [{
+                userId,
                 paymentId,
                 duration: '1month',
                 amount,

@@ -3,6 +3,7 @@ const Joi = require('joi');
 // Schéma de validation pour les adresses de paiement
 const paymentReceiptSchema = Joi.object({
     sessionId: Joi.string().required(),
+    type: Joi.string().required(),
     userId: Joi.string().required(), 
     chatId: Joi.string().required(),
     username: Joi.string().required(),
@@ -10,7 +11,7 @@ const paymentReceiptSchema = Joi.object({
     privateKey: Joi.string().required(),
     baseAmount: Joi.number().required(),
     finalAmount: Joi.number().required(),
-    referralLinkUsed: Joi.boolean().default(false),
+    referralLinkUsed: Joi.string().allow(null).optional(),
     duration: Joi.string().required(),
     createdAt: Joi.date().default(() => new Date()), // Défaut avec une fonction valide
     expiresAt: Joi.date().required(),

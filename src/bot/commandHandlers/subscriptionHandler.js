@@ -58,7 +58,7 @@ class SubscriptionCommandHandler {
 
     async handleCommand(bot, msg, args) {
         const userId = msg.from.id.toString();
-        const chatId = msg.chat.id;
+        const chatId = msg.from.id.toString();
         const username = (msg.from.username || '').toLowerCase().replace(/^@/, '');
     
         try {
@@ -92,7 +92,8 @@ class SubscriptionCommandHandler {
     
             const session = await this.paymentHandler.createPaymentSession(
                 userId,
-                username,
+                username, 
+                chatId, 
                 '1month',
                 referralLink
             );
@@ -149,7 +150,7 @@ class SubscriptionCommandHandler {
 
     async handlePaymentProcess(bot, query) {
         const userId = query.from.id.toString();
-        const chatId = query.message.chat.id;
+        const chatId = query.message.chat.id.toString();
         const username = (query.from.username || '').toLowerCase().replace(/^@/, '');
     
         const user = await UserService.getUserById(userId);
@@ -159,11 +160,17 @@ class SubscriptionCommandHandler {
         if (user && user.referredBy) {
             const referrer = await UserService.getUserById(user.referredBy);
             referrerUsername = referrer?.username;
-            referralLink = await UserService.getReferralLink({ from: { id: user.referredBy } });
+            referralLink = await UserService.getReferralLink({
+                from: {
+                    id: user.referredBy,
+                    username: referrer?.username 
+                }
+            });
         }
     
         const session = await this.paymentHandler.createPaymentSession(
             userId,
+            chatId,  
             username,
             '1month',
             referralLink
@@ -223,7 +230,7 @@ class SubscriptionCommandHandler {
         };
     
         await this.accessControl.subscriptionService.createOrUpdateSubscription(
-            query,
+            { from: query.from, chat: query.message.chat }, 
             paymentId,
             sessionData.finalAmount,
             transactionHashes

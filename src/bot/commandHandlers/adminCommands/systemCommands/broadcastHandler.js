@@ -18,7 +18,9 @@ class BroadcastHandler extends BaseAdminHandler {
                 return;
             }
 
-            const fullMessage = args.join(' ');
+            const commandLength = '/broadcast '.length;
+            const fullMessage = msg.text.slice(commandLength);
+    
             if (!fullMessage) {
                 await this.bot.sendMessage(
                     chatId,
@@ -64,11 +66,12 @@ class BroadcastHandler extends BaseAdminHandler {
                 if (user.chatId && Number(user.chatId) > 0) {
                     try {
                         logger.info(`Attempting to send message to user ${user.username} (${user.chatId})`);
-                        await this.bot.sendMessage(user.chatId, message.replace(/\n/g, '<br>'), {
+
+                        await this.bot.sendMessage(user.chatId, message, {
                             parse_mode: 'HTML',
                             disable_web_page_preview: true
                         });
-                        
+
                         successCount++;
                         logger.info(`Successfully sent broadcast to user ${user.username}`);
                         
