@@ -29,16 +29,16 @@ class StateManager {
     return data;
   }
 
-  setUserState(chatId, state) {
-    this.userStates.set(chatId, state);
+  setUserState(userId, state) {
+    this.userStates.set(userId.toString(), state);
   }
 
-  getUserState(chatId) {
-    return this.userStates.get(chatId);
+  getUserState(userId) {
+    return this.userStates.get(userId.toString());
   }
 
-  deleteUserState(chatId) {
-    this.userStates.delete(chatId);
+  deleteUserState(userId) {
+    this.userStates.delete(userId.toString());
   }
 
   setMessage(chatId, messageId, data) {

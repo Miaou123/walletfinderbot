@@ -2,35 +2,35 @@ const logger = require('../../utils/logger');
 const UserService = require('../../database/services/userService');
 
 class StartHandler {
- constructor() {
-   this.COMMAND_NAME = 'start';
- }
+  constructor() {
+    this.COMMAND_NAME = 'start';
+  }
 
- async handleCommand(bot, msg, args) {
-   const chatId = String(msg.chat.id);
-   const username = (msg.from.username || '').toLowerCase();
+  async handleCommand(bot, msg, args) {
+    const chatId = String(msg.chat.id);
+    const userId = msg.from.id.toString();
+    const username = (msg.from.username || '').toLowerCase();
 
-   try {
-     // Check if there's a referral link
-     let referrerChatId = null;
-     if (args.length > 0 && args[0].startsWith('r-')) {
-         const referrerUsername = args[0].slice(2).toLowerCase();
-         const referrer = await UserService.getUser(referrerUsername);
-         if (referrer) {
-             referrerChatId = referrer.chatId;
-         }
-     }
+    try {
+      // Check if there's a referral link
+      let referrerUserId = null;
+      if (args.length > 0 && args[0].startsWith('r-')) {
+        const referrerUsername = args[0].slice(2).toLowerCase();
+        const referrer = await UserService.getUser(referrerUsername);
+        if (referrer) {
+          referrerUserId = referrer.userId;
+        }
+      }
 
-     // Create or update user (only once)
-     await UserService.createOrUpdateUser(chatId, username);
+      // Create or update user (only once)
+      await UserService.createOrUpdateUser(msg);
 
-     // Store referral if exists
-     if (referrerChatId) {
-         await UserService.storeReferralUsage(chatId, username, referrerChatId);
-     }
+      // Store referral if exists
+      if (referrerUserId) {
+        await UserService.storeReferralUsage(msg, referrerUserId);
+      }
 
-     // Construire le message avec les propriétés correctes
-     const startMessage = `
+      const startMessage = `
 Welcome to Noesis! 👁️
 
 For more information on the bot and the current beta phase, please check our <a href="https://smp-team.gitbook.io/noesis-bot">documentation</a> and follow us on <a href="https://x.com/NoesisTracker">twitter</a>.
@@ -42,17 +42,17 @@ You can start by using /help for a full list of commands.
 If you have any questions, want to report a bug or have any new feature suggestions feel free to dm @Rengon0x on telegram or twitter!
 
 ⚠️This bot is still in development phase and will probably be subject to many bugs/issues⚠️
-     `;
+      `;
 
-     await bot.sendMessage(chatId, startMessage, { parse_mode: 'HTML' });
+      await bot.sendMessage(chatId, startMessage, { parse_mode: 'HTML' });
 
-   } catch (error) {
-     logger.error(`Error in start command: ${error}`);
-     await bot.sendMessage(chatId, 
-       "An error occurred while processing your start request. Please try again later."
-     );
-   }
- }
+    } catch (error) {
+      logger.error(`Error in start command for user ${userId}: ${error}`);
+      await bot.sendMessage(chatId, 
+        "An error occurred while processing your start request. Please try again later."
+      );
+    }
+  }
 }
 
 module.exports = StartHandler;

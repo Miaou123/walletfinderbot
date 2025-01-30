@@ -59,7 +59,8 @@ async function updateIndexes(db) {
             users: {
                 collection: db.collection("users"),
                 indexes: [
-                    { key: { chatId: 1 }, options: { unique: true } },
+                    { key: { userId: 1 }, options: { unique: true } },  
+                    { key: { chatId: 1 }, options: {} },                
                     { key: { username: 1 }, options: {} },
                     { key: { referralLink: 1 }, options: { unique: true } }
                 ]
@@ -67,7 +68,8 @@ async function updateIndexes(db) {
             subscriptions: {
                 collection: db.collection("subscriptions"),
                 indexes: [
-                    { key: { chatId: 1 }, options: { unique: true } },
+                    { key: { userId: 1 }, options: { unique: true } }, 
+                    { key: { chatId: 1 }, options: {} },             
                     { key: { username: 1 }, options: {} },
                     { key: { expiresAt: 1 }, options: {} },
                     { key: { active: 1 }, options: {} }
@@ -76,7 +78,8 @@ async function updateIndexes(db) {
             group_subscriptions: {
                 collection: db.collection("group_subscriptions"),
                 indexes: [
-                    { key: { chatId: 1 }, options: { unique: true } },
+                    { key: { chatId: 1 }, options: { unique: true } },  
+                    { key: { adminUserId: 1 }, options: {} },  
                     { key: { expiresAt: 1 }, options: {} },
                     { key: { active: 1 }, options: {} }
                 ]
@@ -85,11 +88,12 @@ async function updateIndexes(db) {
                 collection: db.collection("paymentReceipt"),
                 indexes: [
                     { key: { sessionId: 1 }, options: { unique: true } },
+                    { key: { userId: 1 }, options: {} },               
                     { key: { chatId: 1 }, options: {} },
                     { key: { username: 1 }, options: {} },
                     { key: { expiresAt: 1 }, options: {} },
                 ]
-            },
+            }
         };
 
         await createCollections(db, collections);

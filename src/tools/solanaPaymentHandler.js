@@ -92,7 +92,7 @@ class SolanaPaymentHandler {
         logger.debug('Sessions after cleanup:', Array.from(this.sessions.keys()));
     }
 
-    async createPaymentSession (chatId, username, duration, referralLink = null) {
+    async createPaymentSession (userId, chatId, username, duration, referralLink = null) {
 
         const baseAmount = SUBSCRIPTION_TYPES.USER.price;
         const finalAmount = await SubscriptionService.calculateSubscriptionPrice('USER', referralLink);
@@ -107,6 +107,7 @@ class SolanaPaymentHandler {
 
         const paymentData = {
             sessionId,
+            userId,
             chatId,
             username,
             paymentAddress: paymentKeypair.publicKey.toString(),
@@ -175,7 +176,9 @@ class SolanaPaymentHandler {
         logger.debug(`Retrieved session:
             ID: ${session.sessionId},
             Type: ${session.type},
-            ${session.groupName ? `Group: ${session.groupName}` : `User: ${session.username}`},
+            ${session.groupName ? 
+                `Group: ${session.groupName}, Admin: ${session.adminInfo.userId}` : 
+                `User: ${session.username} (${session.userId})`},
             Paid: ${session.paid}
         `);
 
@@ -311,7 +314,10 @@ class SolanaPaymentHandler {
             chatId,
             groupName,
             type: 'group',
-            adminInfo,
+            adminInfo: {
+                ...adminInfo,
+                userId: adminInfo.userId
+            },
             duration,
             amount,
             paymentAddress: paymentKeypair.publicKey.toString(),

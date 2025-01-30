@@ -79,9 +79,10 @@ class GroupSubscriptionHandler {
 
     async validateAdminRights(bot, msg) {
         const chatId = String(msg.chat.id);
+        const adminUserId = msg.from.id.toString();
         
         // Vérifier si l'utilisateur est admin
-        const chatMember = await bot.getChatMember(chatId, msg.from.id);
+        const chatMember = await bot.getChatMember(chatId, adminUserId);
         const isAdmin = ['creator', 'administrator'].includes(chatMember.status);
         
         if (!isAdmin) {
@@ -89,7 +90,7 @@ class GroupSubscriptionHandler {
             return false;
         }
 
-        // Vérifier les droits du bot
+        // Le reste de la validation reste identique
         try {
             const botInfo = await bot.getMe();
             const botMember = await bot.getChatMember(chatId, botInfo.id);
@@ -162,12 +163,12 @@ class GroupSubscriptionHandler {
     async initiateNewSubscription(bot, msg) {
         const chatId = String(msg.chat.id);
         const adminInfo = {
-            id: msg.from.id,
+            userId: msg.from.id.toString(),
             username: msg.from.username
         };
 
         const session = await this.paymentHandler.createGroupPaymentSession(
-            chatId.toString(),
+            chatId,
             msg.chat.title,
             adminInfo
         );
@@ -259,6 +260,7 @@ class GroupSubscriptionHandler {
 
     async handleSuccessfulPayment(bot, query, sessionId, sessionData, result) {
         const chatId = String(query.message.chat.id);
+        const adminUserId = query.from.id.toString();
 
         if (result.alreadyPaid) {
             await bot.sendMessage(chatId, "✅ Group payment was already confirmed. Group subscription is active!");
@@ -283,13 +285,11 @@ class GroupSubscriptionHandler {
 
         const paymentId = `group_payment_${Date.now()}`;
         const payerInfo = {
-            id: query.from.id.toString(),
+            userId: query.from.id.toString(),
             username: query.from.username
         };
 
         await this.accessControl.subscriptionService.createOrUpdateGroupSubscription(sessionData.chatId, sessionData.groupName, payerInfo, paymentId, transactionHashes);
-
-        await UserService.recordReferralConversion(String(chatId));
 
         const subscription = await this.accessControl.subscriptionService.getGroupSubscription(String(chatId));
         if (subscription) {

@@ -23,6 +23,7 @@ const SUBSCRIPTION_TYPES = {
 // Common payment record schema with type-specific extensions
 const basePaymentRecordSchema = {
     paymentId: Joi.string().required(),
+    userId: Joi.string().required(),
     duration: Joi.string().valid('1month').required(),
     paymentDate: Joi.date().default(Date.now),
     paymentStatus: Joi.string().valid('pending', 'completed', 'failed').default('completed'),
@@ -52,6 +53,7 @@ const baseSubscriptionSchema = {
 
 const userSubscriptionSchema = Joi.object({
     ...baseSubscriptionSchema,
+    userId: Joi.string().required(),   
     chatId: Joi.alternatives().try(Joi.string(), Joi.number()).required(),
     username: Joi.string().optional(),
     paymentHistory: Joi.array().items(userPaymentRecordSchema).default([]),
@@ -62,6 +64,7 @@ const groupSubscriptionSchema = Joi.object({
     ...baseSubscriptionSchema,
     chatId: Joi.alternatives().try(Joi.string(), Joi.number()).required(),
     groupName: Joi.string().required(),
+    adminUserId: Joi.string().required(),  
     paymentHistory: Joi.array().items(groupPaymentRecordSchema).default([])
 });
 
