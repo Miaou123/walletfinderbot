@@ -7,6 +7,17 @@ const logger = require('../utils/logger');
 // Configuration
 BigNumber.config({ DECIMAL_PLACES: 18, ROUNDING_MODE: BigNumber.ROUND_DOWN });
 
+const KNOWN_LP_POOLS = new Set([
+    "5Q544fKrFoe6tsEbD7S8EmxGTJYAKtTVhAW5Q5pge4j1",
+    "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P",
+    "MoonCVVNZFSYkqNXP6bxHLPL6QQJiMagDL3qcqUQTrG",
+    "LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo",
+    "5quBtoiQqxF9Jv6KYKctB59NT3gtJD2Y65kdnB1Uev3h",
+    "675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8",
+    "CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C",
+    "GpMZbSM2GgvTKHJirzeGfMFoaZ8UR2X7F4v8vHTvxFbL",
+]);
+
 // Constants
 const FRESH_WALLET_THRESHOLD = 100;
 const TRANSACTION_CHECK_LIMIT = 20;
@@ -40,25 +51,15 @@ async function analyzeTeamSupply(tokenAddress, mainContext = 'default') {
         
              // Ajout de logs pour le filtrage
              const significantHolders = allHolders.filter(holder => {
+
+                if (KNOWN_LP_POOLS.has(holder.address)) {
+                    return false;
+                }
+
                 const rawBalance = new BigNumber(holder.balance);
                 const percentage = rawBalance.dividedBy(totalSupply);
                 const percentageNumber = percentage.multipliedBy(100).toNumber();
-            
-                // logger.debug('Detailed holder analysis:', {
-                //     address: holder.address,
-                //     rawBalance: rawBalance.toString(),
-                //     decimals: tokenInfo.decimals,
-                //     totalSupply: totalSupply.toString(),
-                //     percentage: percentageNumber,
-                //     calculation: {
-                //         step1_rawBalance: rawBalance.toString(),
-                //         step2_powerOfDecimals: new BigNumber(10).pow(tokenInfo.decimals).toString(),
-                //         step4_totalSupply: totalSupply.toString(),
-                //     },
-                //     threshold: SUPPLY_THRESHOLD.multipliedBy(100).toNumber(),
-                //     isSignificant: percentage.isGreaterThanOrEqualTo(SUPPLY_THRESHOLD)
-                // });
-            
+
                 return percentage.isGreaterThanOrEqualTo(SUPPLY_THRESHOLD);
             });
     
