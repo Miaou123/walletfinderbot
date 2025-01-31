@@ -1,8 +1,8 @@
 // src/bot/commandHandlers/adminCommands/index.js
 
 // Import User Management Handlers
-const AddUserHandler = require('./userManagement/addUserHandler');
 const RemoveUserHandler = require('./userManagement/removeUserHandler');
+const GetUserHandler = require('./userManagement/getUserHandler');
 
 // Import Group Management Handlers
 const AddGroupHandler = require('./groupManagement/addGroupHandler');
@@ -39,8 +39,8 @@ class AdminCommandManager {
 
         this.handlers = {
             // User Management
-            adduser: new AddUserHandler(accessControl, bot),
             removeuser: new RemoveUserHandler(accessControl, bot),
+            getuser: new GetUserHandler(accessControl, bot),
             
             // Group Management
             addgroup: new AddGroupHandler(accessControl, bot),

@@ -250,6 +250,12 @@ class MessageHandler {
                 return;
             }
 
+            if (userState?.action === 'awaiting_custom_threshold') {
+                this.logger.debug('Handling custom threshold input');
+                await this.commandHandlersInstance.trackingActionHandler.handleCustomThresholdInput(this.bot, msg);
+                return;
+            }
+    
             const messageText = msg.text || '';
             const solanaAddressRegex = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
             if (solanaAddressRegex.test(messageText)) {

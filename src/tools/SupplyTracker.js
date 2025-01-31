@@ -231,20 +231,12 @@ class SupplyTracker {
     }
     const userTrackers = this.userTrackers.get(chatId);
 
-    // Récupération du rôle pour gérer le nombre max de trackers
-    const userRole = this.accessControl.getUserRole(chatId);
-    let maxTrackers;
-    if (userRole === 'admin') {
-      maxTrackers = Infinity;
-    } else if (userRole === 'vip') {
-      maxTrackers = 10;
-    } else {
-      maxTrackers = 2;
-    }
+    // Limite fixe de 5 trackers par utilisateur
+    const MAX_TRACKERS = 5;
 
-    if (userTrackers.size >= maxTrackers) {
+    if (userTrackers.size >= MAX_TRACKERS) {
       throw new Error(
-        `You've reached your maximum number of simultaneous trackings (${maxTrackers}). ` +
+        `You've reached your maximum number of simultaneous trackings (${MAX_TRACKERS}). ` +
         `Please stop an existing tracking with /tracker before starting a new one.`
       );
     }
@@ -267,7 +259,6 @@ class SupplyTracker {
       decimals,
       trackType,
       tokenAddress,
-      chatId,
       startTimestamp: now,
       // Ne stocker wallets que pour le tracking de team
       ...(trackType === 'team' && { wallets }),
