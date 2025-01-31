@@ -53,6 +53,31 @@ class UserService {
         }
     }
 
+    static async deleteUser(username) {
+        const collection = await this.getCollection();
+        
+        // First find the user to make sure they exist
+        const user = await this.getUser(username);
+        if (!user) {
+            throw new Error('User not found');
+        }
+    
+        // Remove the user from the database
+        const result = await collection.deleteOne({ username: username.toLowerCase() });
+        
+        if (result.deletedCount === 0) {
+            throw new Error('Failed to delete user');
+        }
+    
+        // Also remove this user from any referredUsers arrays where they might appear
+        await collection.updateMany(
+            { referredUsers: username.toLowerCase() },
+            { $pull: { referredUsers: username.toLowerCase() } }
+        );
+    
+        return true;
+    }
+
     // Nouvelles méthodes de recherche
     static async getUserById(userId) {
         const collection = await this.getCollection();

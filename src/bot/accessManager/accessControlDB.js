@@ -49,77 +49,12 @@ class AccessControlDB {
         }
     }
 
-   async addUser(chatId, username, role = 'user') {
-       const normalizedUsername = this.normalizeUsername(username);
-       try {
-           await this.usersCollection.updateOne(
-               { chatId },
-               { 
-                   $set: {
-                       chatId,
-                       username: normalizedUsername,
-                       role,
-                       lastUpdated: new Date(),
-                       firstSeen: new Date()
-                   }
-               },
-               { upsert: true }
-           );
-           logger.info(`User "${chatId}" (${normalizedUsername}) added/updated as "${role}"`);
-           return true;
-       } catch (error) {
-           logger.error(`Error adding/updating user "${chatId}":`, error);
-           return false;
-       }
-   }
-
-   async removeUser(chatId) {
-       try {
-           const result = await this.usersCollection.deleteOne({ chatId });
-           logger.info(`User "${chatId}" removed (${result.deletedCount} document)`);
-           return result.deletedCount > 0;
-       } catch (error) {
-           logger.error(`Error removing user "${chatId}":`, error);
-           return false;
-       }
-   }
-
-   async getUserRole(chatId) {
-       try {
-           const user = await this.usersCollection.findOne({ chatId });
-           return user?.role || 'guest';
-       } catch (error) {
-           logger.error(`Error getting role for user "${chatId}":`, error);
-           return 'guest';
-       }
-   }
-
-   async isVIP(chatId) {
-       const role = await this.getUserRole(chatId);
-       return role === 'vip' || role === 'admin';
-   }
-
    async getUsers(filter = {}) {
        try {
            return await this.usersCollection.find(filter).toArray();
        } catch (error) {
            logger.error('Error getting users:', error);
            return [];
-       }
-   }
-
-   async updateUsername(chatId, newUsername) {
-       const normalizedUsername = this.normalizeUsername(newUsername);
-       try {
-           await this.usersCollection.updateOne(
-               { chatId },
-               { $set: { username: normalizedUsername, lastUpdated: new Date() } }
-           );
-           logger.info(`Updated username for user "${chatId}" to "${normalizedUsername}"`);
-           return true;
-       } catch (error) {
-           logger.error(`Error updating username for "${chatId}":`, error);
-           return false;
        }
    }
 

@@ -158,13 +158,46 @@ async handleCallback(bot, query) {
  }
 
   async handleSetCustomThreshold(bot, chatId, trackingInfo) {
+    // Cette fonction est appelée par le callback button
     await bot.sendMessage(chatId, "Enter new supply change percentage (e.g., 2.5):");
-    trackingInfo.awaitingCustomThreshold = true;
     stateManager.setUserState(chatId, {
         action: 'awaiting_custom_threshold',
-        tokenAddress: trackingInfo.tokenAddress,
-        currentThreshold: trackingInfo.threshold  // Ajouter le seuil actuel
+        tokenAddress: trackingInfo.tokenAddress
     });
+  }
+
+  async handleCustomThresholdInput(bot, msg) {
+    // Cette fonction est appelée par handleNonCommand
+    const chatId = msg.chat.id;
+    const userState = stateManager.getUserState(chatId);
+
+    logger.debug('Processing custom threshold input:', msg.text);
+    logger.debug('User state:', userState);
+
+    if (!userState?.tokenAddress) {
+        await bot.sendMessage(chatId, "Session expired. Please run the scan command again.");
+        return;
+    }
+
+    const thresholdInput = msg.text.replace('%', '').trim();
+    const threshold = parseFloat(thresholdInput);
+
+    if (isNaN(threshold) || threshold < 0.1 || threshold > 100) {
+        await bot.sendMessage(chatId, "Invalid threshold. Please enter a number between 0.1 and 100.");
+        return;
+    }
+
+    const trackingInfo = stateManager.getTrackingInfo(chatId, userState.tokenAddress);
+    if (!trackingInfo) {
+        await bot.sendMessage(chatId, "Tracking information expired. Please run the scan command again.");
+        return;
+    }
+
+    trackingInfo.threshold = threshold;
+    stateManager.setTrackingInfo(chatId, userState.tokenAddress, trackingInfo);
+
+    await this.updateTrackingMessage(bot, chatId, trackingInfo);
+    stateManager.deleteUserState(chatId);
   }
 
  async handleStartTracking(bot, chatId, trackingInfo, threshold) {
@@ -323,7 +356,7 @@ async handleCallback(bot, query) {
     stateManager.setTrackingInfo(chatId, userState.tokenAddress, trackingInfo);
 
     await this.updateTrackingMessage(bot, chatId, trackingInfo);
-    stateManager.clearUserState(chatId);
+    stateManager.deleteUserState(chatId);
 }
 
 createThresholdKeyboard(tokenAddress, threshold) {

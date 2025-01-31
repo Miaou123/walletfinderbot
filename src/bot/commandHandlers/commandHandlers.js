@@ -16,6 +16,7 @@ const { SupplyTracker, initializeSupplyTracker } = require('../../tools/SupplyTr
 const TrackerHandler = require('./trackerHandler');
 const HelpHandler = require('./helpHandler');
 const StartHandler = require('./startHandler');
+const PingHandler = require('./pingHandler');
 const ScanHandler = require('./scanHandler');
 const TeamHandler = require('./teamHandler');
 const GroupSubscriptionHandler = require('./groupSubscriptionHandler');
@@ -69,6 +70,7 @@ class CommandHandlers {
         this.subscriptionHandler = new SubscriptionCommandHandler(this.accessControl, this.paymentHandler);
         this.groupSubscriptionHandler = new GroupSubscriptionHandler(this.accessControl, this.paymentHandler);
         this.startHandler = new StartHandler();
+        this.pingHandler = new PingHandler(this.bot);
         this.scanHandler = new ScanHandler(this.stateManager);
         this.referralHandler = new ReferralHandler(this.stateManager, this.claimSystem);
         this.bundleHandler = new BundleHandler();
@@ -94,6 +96,10 @@ class CommandHandlers {
         const commands = {
             // Standard commands
             'start': { handler: this.startHandler.handleCommand, context: this.startHandler },
+            'ping': { 
+                handler: this.pingHandler.handleCommand.bind(this.pingHandler), 
+                context: this.pingHandler 
+            },
             'scan': { handler: this.scanHandler.handleCommand, context: this.scanHandler },
             'subscribe': { handler: this.subscriptionHandler.handleCommand, context: this.subscriptionHandler },
             'subscribe_group': { handler: this.groupSubscriptionHandler.handleCommand, context: this.groupSubscriptionHandler },

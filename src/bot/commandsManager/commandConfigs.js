@@ -253,16 +253,6 @@ const validateSolanaAddress = (address) => {
   
   // Configuration des commandes admin
   const adminCommandConfigs = {
-    'adduser': {
-      aliases: [],
-      minArgs: 2,
-      maxArgs: 2,
-      requiresAuth: true,
-      description: 'Add a user to whitelist',
-      dailyLimit: Infinity,
-      usage: '/adduser [username] [type]',
-      helpMessage: 'Add a user to the whitelist.\nTypes: normal, vip, admin\n\nExample:\n/adduser username normal'
-    },
     'removeuser': {
       aliases: [],
       minArgs: 1,
@@ -272,6 +262,16 @@ const validateSolanaAddress = (address) => {
       dailyLimit: Infinity,
       usage: '/removeuser [username]',
       helpMessage: 'Remove a user from the whitelist.\n\nExample:\n/removeuser username'
+    },
+    'getuser': {
+      aliases: [],
+      minArgs: 1,
+      maxArgs: 1,
+      requiresAuth: true,
+      description: 'fetch the full infomation on a user',
+      dailyLimit: Infinity,
+      usage: '/getuser [username]',
+      helpMessage: 'fetch the full infomation on a user.\n\nExample:\n/getuser username'
     },
     'addgroup': {
       aliases: [],
