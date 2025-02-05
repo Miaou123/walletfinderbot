@@ -83,37 +83,38 @@ class SubscriptionService {
         const collection = database.collection("group_subscriptions");
         const chatId = msg.chat.id.toString();
         const adminUserId = msg.from.id.toString();
-
+    
+        logger.debug('Creating/Updating group subscription with data:', { 
+            chatId, 
+            groupName, 
+            adminUserId, 
+            username: msg.from.username 
+        });
+    
         try {
             const now = new Date();
             const existingSubscription = await collection.findOne({ chatId });
-
-            const paidByUser = {
-                userId: adminUserId,
-                username: (msg.from.username || '').toLowerCase()
-            };
-
-            if (existingSubscription) {
-                return this.updateExistingGroupSubscription(collection, existingSubscription, {
-                    chatId,
-                    groupName,
-                    paidByUser,
-                    paymentId,
-                    amount: SUBSCRIPTION_TYPES.GROUP.price,
-                    transactionHashes,
-                    now
-                });
-            }
-
-            return this.createNewGroupSubscription(collection, {
+    
+            // Données communes pour création/mise à jour
+            const subscriptionData = {
                 chatId,
                 groupName,
-                paidByUser,
+                adminUserId,  // Ajouté
+                paidByUser: {
+                    userId: adminUserId,
+                    username: (msg.from.username || '').toLowerCase()
+                },
                 paymentId,
                 amount: SUBSCRIPTION_TYPES.GROUP.price,
                 transactionHashes,
                 now
-            });
+            };
+    
+            if (existingSubscription) {
+                return this.updateExistingGroupSubscription(collection, existingSubscription, subscriptionData);
+            }
+    
+            return this.createNewGroupSubscription(collection, subscriptionData);
         } catch (error) {
             logger.error(`Error with group subscription for ${chatId}:`, error);
             throw error;
@@ -228,17 +229,17 @@ class SubscriptionService {
     }
 
     static async createNewGroupSubscription(collection, data) {
-        const { chatId, groupName, paidByUser, paymentId, amount, transactionHashes, now } = data;
+        const { chatId, groupName, adminUserId, paidByUser, paymentId, amount, transactionHashes, now } = data;
 
         const newSubscription = {
             chatId,
             groupName,
+            adminUserId,
             active: true,
             startDate: now,
             expiresAt: new Date(now.getTime() + SUBSCRIPTION_TYPES.GROUP.duration),
             lastUpdated: now,
             paymentHistory: [{
-                userId,
                 paymentId,
                 duration: '1month',
                 amount,
@@ -299,6 +300,53 @@ class SubscriptionService {
     static async getGroupSubscriptionList() {
         const database = await getDatabase();
         return await database.collection("group_subscriptions").find().toArray();
+    }
+
+    static async removeSubscriptionByUsername(username) {
+        if (!username) {
+            logger.error("❌ ERROR: Username is required for removeSubscriptionByUsername");
+            throw new Error("Username is required");
+        }
+    
+        const normalizedUsername = username.toLowerCase();
+        logger.debug("Attempting to remove subscription for username:", { username: normalizedUsername });
+    
+        try {
+            const database = await getDatabase();
+            const collection = database.collection("subscriptions");
+    
+            // Find the subscription first to check if it exists
+            const subscription = await collection.findOne({ username: normalizedUsername });
+            
+            if (!subscription) {
+                logger.warn(`No subscription found for username: ${normalizedUsername}`);
+                return {
+                    success: false,
+                    message: "Subscription not found"
+                };
+            }
+    
+            // Remove the subscription
+            const result = await collection.deleteOne({ username: normalizedUsername });
+    
+            if (result.deletedCount === 1) {
+                logger.info(`Successfully removed subscription for username: ${normalizedUsername}`);
+                return {
+                    success: true,
+                    message: "Subscription successfully removed",
+                    userId: subscription.userId
+                };
+            } else {
+                logger.error(`Failed to remove subscription for username: ${normalizedUsername}`);
+                return {
+                    success: false,
+                    message: "Failed to remove subscription"
+                };
+            }
+        } catch (error) {
+            logger.error(`Error removing subscription for username ${normalizedUsername}:`, error);
+            throw error;
+        }
     }
 
     static async updateReferrerRewards(referrerUserId, subscriptionAmount) {
