@@ -27,30 +27,26 @@ class RemoveSubscriptionHandler extends BaseAdminHandler {
     
             const username = args[0];
             const normalizedUsername = this.accessControl.normalizeUsername(username);
-            const subscription = await this.accessControl.subscriptionService.getSubscriptionByUsername(normalizedUsername);
-
-            if (!subscription) {
-                console.log("❌ Subscription not found in DB.");
-                await this.bot.sendMessage(
-                    chatId,
-                    `❌ No subscription found for @${username}`
-                );
-                return;
-            }
-    
-            // Supprimer complètement l'entrée
+            
+            // Obtenir la subscription avant de la supprimer pour avoir les infos d'expiration
+            const subscription = await this.accessControl.subscriptionService.getSubscriptionByChatId(chatId);
+            
+            // Supprimer la subscription
             const result = await this.accessControl.subscriptionService.removeSubscriptionByUsername(normalizedUsername);
     
-            if (result.deletedCount > 0) {
+            if (result.success) {
+                const expiryInfo = subscription 
+                    ? `\nLast valid until: ${subscription.expiresAt.toLocaleString()}`
+                    : '';
+                
                 await this.bot.sendMessage(
                     chatId, 
-                    `✅ Subscription successfully removed for @${username}\n` +
-                    `Last valid until: ${subscription.expiresAt.toLocaleString()}`
+                    `✅ Subscription successfully removed for @${username}${expiryInfo}`
                 );
             } else {
                 await this.bot.sendMessage(
                     chatId,
-                    `❌ Failed to remove subscription for @${username}`
+                    `❌ ${result.message} for @${username}`
                 );
             }
         } catch (error) {

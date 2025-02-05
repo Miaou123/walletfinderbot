@@ -282,16 +282,16 @@ class GroupSubscriptionHandler {
 
     async handleSuccessfulPayment(bot, query, sessionId, sessionData, result) {
         const chatId = String(query.message.chat.id);
-        const adminUserId = query.from.id.toString();
-
+        const groupName = query.message.chat.title;
+    
         if (result.alreadyPaid) {
             await bot.sendMessage(chatId, "✅ Group payment was already confirmed. Group subscription is active!");
             return;
         }
-
+    
         await bot.sendMessage(chatId, "✅ Group payment confirmed! Activating group subscription...");
         await this.accessControl.paymentService.updatePaymentAddressStatus(sessionId, 'completed');
-
+    
         let transferResult = {};
         try {
             transferResult = await this.paymentHandler.transferFunds(sessionId);
@@ -299,23 +299,40 @@ class GroupSubscriptionHandler {
         } catch (err) {
             logger.error(`Error transferring group funds for session ${sessionId}:`, err);
         }
-
+    
         const transactionHashes = {
             transactionHash: result.transactionHash,       
             transferHash: transferResult?.signature          
         };
-
+    
         const paymentId = `group_payment_${Date.now()}`;
-        const payerInfo = {
-            userId: query.from.id.toString(),
-            username: query.from.username
+        
+        // Créer un objet msg compatible avec ce qu'attend createOrUpdateGroupSubscription
+        const msgObj = {
+            chat: {
+                id: chatId
+            },
+            from: {
+                id: query.from.id,
+                username: query.from.username
+            }
         };
 
-        await this.accessControl.subscriptionService.createOrUpdateGroupSubscription(sessionData.chatId, sessionData.groupName, payerInfo, paymentId, transactionHashes);
-
+        console.log('msg obj:', msgObj);
+    
+        await this.accessControl.subscriptionService.createOrUpdateGroupSubscription(
+            msgObj, 
+            groupName, 
+            paymentId, 
+            transactionHashes
+        );
+    
         const subscription = await this.accessControl.subscriptionService.getGroupSubscription(String(chatId));
         if (subscription) {
-            await this.sendSuccessMessage(bot, chatId, subscription);
+            await this.sendSuccessMessage(bot, chatId, {
+                ...sessionData,
+                groupName 
+            });
         }
     }
 

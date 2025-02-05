@@ -1,49 +1,50 @@
-// src/database/config/subscriptionConfig.js
 const Joi = require('joi');
 
 const SUBSCRIPTION_TYPES = {
     USER: {
         type: 'individual',
-        duration: 30 * 24 * 60 * 60 * 1000, // 30 days in milliseconds
-        price: 0.5, // SOL
+        duration: 30 * 24 * 60 * 60 * 1000,
+        price: 0.5,
         schemaName: 'user'
     },
     GROUP: {
         type: 'group',
-        duration: 30 * 24 * 60 * 60 * 1000, // 30 days in milliseconds
-        price: 2.0, // SOL
+        duration: 30 * 24 * 60 * 60 * 1000,
+        price: 2.0,
         schemaName: 'group'
     },
     REFERRAL: {
-        discountPercent: 20, // 20% off for referred users
-        referrerCredit: 0.1 // 0.1 SOL credit for each referral
+        discountPercent: 20,
+        referrerCredit: 0.1
     }
 };
 
-// Common payment record schema with type-specific extensions
-const basePaymentRecordSchema = {
+// Schéma de base commun pour les paiements
+const commonPaymentFields = {
     paymentId: Joi.string().required(),
-    userId: Joi.string().required(),
     duration: Joi.string().valid('1month').required(),
     paymentDate: Joi.date().default(Date.now),
     paymentStatus: Joi.string().valid('pending', 'completed', 'failed').default('completed'),
     amount: Joi.number().optional(),
     transactionHash: Joi.string().optional(),
-    transferHash: Joi.string().optional(),
-    referralCode: Joi.string().optional()
+    transferHash: Joi.string().optional()
 };
 
+// Schéma spécifique pour les paiements utilisateur
 const userPaymentRecordSchema = Joi.object({
-    ...basePaymentRecordSchema
+    ...commonPaymentFields,
+    userId: Joi.string().required(),
+    referralCode: Joi.string().optional()
 });
 
+// Schéma spécifique pour les paiements de groupe
 const groupPaymentRecordSchema = Joi.object({
-    ...basePaymentRecordSchema,
+    ...commonPaymentFields,
     paidByUserId: Joi.string().required(),
     paidByUsername: Joi.string().required()
 });
 
-// Base subscription schema with type-specific extensions
+// Schema de base pour les souscriptions
 const baseSubscriptionSchema = {
     startDate: Joi.date().default(Date.now),
     expiresAt: Joi.date().greater('now').required(),
