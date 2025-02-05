@@ -21,6 +21,7 @@ const ScanHandler = require('./scanHandler');
 const TeamHandler = require('./teamHandler');
 const GroupSubscriptionHandler = require('./groupSubscriptionHandler');
 const ReferralHandler = require('./referralHandler');
+const WalletCheckerHandler = require('./walletCheckerHandler');
 const stateManager = require('../../utils/stateManager');
 const logger = require('../../utils/logger');
 
@@ -74,6 +75,7 @@ class CommandHandlers {
         this.scanHandler = new ScanHandler(this.stateManager);
         this.referralHandler = new ReferralHandler(this.stateManager, this.claimSystem);
         this.bundleHandler = new BundleHandler();
+        this.walletCheckerHandler = new WalletCheckerHandler();
         this.crossBtHandler = new CrossBtHandler();
         this.freshRatioHandler = new FreshRatioHandler();
         this.dexPaidHandler = new DexPaidHandler();
@@ -104,6 +106,7 @@ class CommandHandlers {
             'subscribe': { handler: this.subscriptionHandler.handleCommand, context: this.subscriptionHandler },
             'subscribe_group': { handler: this.groupSubscriptionHandler.handleCommand, context: this.groupSubscriptionHandler },
             'bundle': { handler: this.bundleHandler.handleCommand, context: this.bundleHandler },
+            'walletchecker': { handler: this.walletCheckerHandler.handleCommand, context: this.walletCheckerHandler },
             'crossbt': { handler: this.crossBtHandler.handleCommand, context: this.crossBtHandler },
             'freshratio': { handler: this.freshRatioHandler.handleCommand, context: this.freshRatioHandler },
             'dexpaid': { handler: this.dexPaidHandler.handleCommand, context: this.dexPaidHandler },
