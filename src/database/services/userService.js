@@ -94,6 +94,12 @@ class UserService {
         return collection.findOne({ username });
     }
 
+    static async isUserRegistered(userId) {
+        const collection = await this.getCollection();
+        const user = await collection.findOne({ userId }, { projection: { _id: 1 } });
+        return !!user; 
+    }
+
     static generateReferralLink(username) {
         return `https://t.me/Noesis_local_bot?start=r-${username}`;
     }

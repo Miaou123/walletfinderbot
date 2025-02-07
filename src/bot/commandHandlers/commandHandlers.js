@@ -22,6 +22,7 @@ const TeamHandler = require('./teamHandler');
 const GroupSubscriptionHandler = require('./groupSubscriptionHandler');
 const ReferralHandler = require('./referralHandler');
 const WalletCheckerHandler = require('./walletCheckerHandler');
+const PreviewHandler = require('./previewHandler');
 const stateManager = require('../../utils/stateManager');
 const logger = require('../../utils/logger');
 
@@ -30,6 +31,7 @@ class CommandHandlers {
         if (!accessControl || !bot || !paymentHandler) {
             throw new Error('Required dependencies missing');
         }
+
         this.accessControl = accessControl;
         this.bot = bot;
         this.paymentHandler = paymentHandler;
@@ -39,6 +41,12 @@ class CommandHandlers {
 
     async initialize() {
         try {
+            logger.debug('CommandHandlers initialize - AccessControl state:', {
+                hasSubscriptionService: Boolean(this.accessControl.subscriptionService),
+                subscriptionServiceMethods: this.accessControl.subscriptionService ? Object.keys(this.accessControl.subscriptionService) : [],
+                accessControlMethods: Object.keys(this.accessControl)
+            });
+
             await this.initializeHandlers();
 
             this.initializeCommandMapping();
@@ -51,6 +59,7 @@ class CommandHandlers {
                 'scan': this.scanHandler,
                 'team': this.teamHandler,
                 'referral': this.referralHandler,
+                'preview': this.previewHandler,
             };
 
             await this.setupCallbackHandler();
@@ -62,6 +71,10 @@ class CommandHandlers {
     }
 
     async initializeHandlers() {
+        logger.debug('initializeHandlers - AccessControl state before handlers:', {
+            hasSubscriptionService: Boolean(this.accessControl.subscriptionService),
+            subscriptionServiceMethods: this.accessControl.subscriptionService ? Object.keys(this.accessControl.subscriptionService) : []
+        });
 
         this.adminCommands = new AdminCommandManager(
             this.accessControl,
@@ -72,6 +85,7 @@ class CommandHandlers {
         this.groupSubscriptionHandler = new GroupSubscriptionHandler(this.accessControl, this.paymentHandler);
         this.startHandler = new StartHandler();
         this.pingHandler = new PingHandler(this.bot);
+        this.previewHandler = new PreviewHandler();
         this.scanHandler = new ScanHandler(this.stateManager);
         this.referralHandler = new ReferralHandler(this.stateManager, this.claimSystem);
         this.bundleHandler = new BundleHandler();
@@ -91,7 +105,18 @@ class CommandHandlers {
 
         this.supplyTracker = await initializeSupplyTracker(this.bot, this.accessControl);
         this.trackerHandler = new TrackerHandler(this.supplyTracker);
-        this.trackingActionHandler = new TrackingActionHandler(this.supplyTracker);
+
+        if (!this.accessControl.subscriptionService?.getUserSubscription) {
+            logger.error('getUserSubscription method not found in subscriptionService');
+            throw new Error('Invalid subscription service configuration');
+        }
+
+        logger.debug('Creating TrackingActionHandler with AccessControl:', {
+            hasSubscriptionService: Boolean(this.accessControl.subscriptionService),
+            subscriptionServiceMethods: this.accessControl.subscriptionService ? Object.keys(this.accessControl.subscriptionService) : []
+        });
+        
+        this.trackingActionHandler = new TrackingActionHandler(this.supplyTracker, this.accessControl);
     }
 
     initializeCommandMapping() {
@@ -102,6 +127,8 @@ class CommandHandlers {
                 handler: this.pingHandler.handleCommand.bind(this.pingHandler), 
                 context: this.pingHandler 
             },
+            'help': { handler: this.helpHandler.handleCommand, context: this.helpHandler },
+            'preview': { handler: this.previewHandler.handleCommand, context: this.previewHandler },
             'scan': { handler: this.scanHandler.handleCommand, context: this.scanHandler },
             'subscribe': { handler: this.subscriptionHandler.handleCommand, context: this.subscriptionHandler },
             'subscribe_group': { handler: this.groupSubscriptionHandler.handleCommand, context: this.groupSubscriptionHandler },

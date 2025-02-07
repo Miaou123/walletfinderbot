@@ -1,5 +1,6 @@
 const CommandParser = require('./commandsManager/commandParser');  // Nouvelle classe
 const groupMessageLogger = require('./messageDataManager/groupMessageLogger');
+const UserService = require('../database/services/userService'); 
 
 class MessageHandler {
     constructor(dependencies) {
@@ -77,6 +78,23 @@ class MessageHandler {
             this.logger.info(`Ignored old message from user ${username} (ID: ${userId}): ${msg.text}`);
             return;
         }
+
+        // Vérification de l'enregistrement de l'utilisateur pour les messages privés
+        if (!isGroup && msg.text.startsWith('/')) {
+            const { command } = this.commandParser.parseCommand(msg.text);
+            // On permet /start et /help sans enregistrement
+            if (command !== 'start' && command !== 'help') {
+                const isRegistered = await UserService.isUserRegistered(userId);
+                if (!isRegistered) {
+                    this.logger.debug(`Unregistered user ${username} (${userId}) attempted to use command: ${command}`);
+                    await this.bot.sendMessage(chatId,
+                        "⚠️ Please /start the bot before using any commands.",
+                        { message_thread_id: messageThreadId }
+                    );
+                    return;
+                }
+            }
+        }
     
         // Vérification des commandes
         if (msg.text.startsWith('/')) {
@@ -108,10 +126,13 @@ class MessageHandler {
                 if (isGroup) {
                     // Exception pour la commande subscribe_group
                     if (command !== 'subscribe_group') {
-                        const hasGroupSub = await this.accessControl.subscriptionService.getGroupSubscription(chatId);
-                        if (!hasGroupSub?.active) {
+                        const hasActiveGroupSub = await this.accessControl.hasActiveGroupSubscription(chatId);
+                        if (!hasActiveGroupSub) {
                             await this.bot.sendMessage(chatId,
-                                "This group doesn't have an active subscription. Use /subscribe_group to subscribe.",
+                                "🔒 This command requires an active group subscription\n\n" +
+                                "• Use /subscribe_group to view our group subscription plans\n" +
+                                "• Try /preview to test our features before subscribing\n\n" +
+                                "Need help? Contact @Rengon0x for support",
                                 { message_thread_id: messageThreadId }
                             );
                             return;
@@ -119,10 +140,13 @@ class MessageHandler {
                     }
                 } else {
                     // Vérification des utilisateurs individuels
-                    const userSub = await this.accessControl.subscriptionService.getUserSubscription(userId);
-                    if (!userSub?.active && command !== 'subscribe') {
+                    const hasActiveUserSub = await this.accessControl.hasActiveSubscription(userId);
+                    if (!hasActiveUserSub && command !== 'subscribe') {
                         await this.bot.sendMessage(chatId,
-                            "You need an active subscription to use this command. Use /subscribe to get started."
+                            "🔒 This command requires an active subscription\n\n" +
+                            "• Use /subscribe to view our subscription plans\n" +
+                            "• Try /preview to test our features before subscribing\n\n" +
+                            "Need help? Contact @Rengon0x for support"
                         );
                         return;
                     }
@@ -153,6 +177,19 @@ class MessageHandler {
             if (isAdmin) {
                 await this.handleAdminCommand(command, msg, args, messageThreadId);
                 return;
+            }
+
+            const commandConfig = this.commandConfigs[command];
+            if (commandConfig && args.length === 0 && command !== 'help' && command !== 'start' && 
+                command !== 'subscribe' && command !== 'subscribe_group' && command !== 'ping' && 
+                command !== 'cancel' && command !== 'tracker' && command !== 'access' && 
+                command !== 'referral' && command !== 'preview') {
+                // Afficher l'aide pour cette commande
+                this.logger.debug(`Showing help for command ${command} due to no arguments`);
+                if (typeof this.commandHandlers['help'] === 'function') {
+                    await this.commandHandlers['help'](this.bot, msg, [command], messageThreadId);
+                    return;
+                }
             }
     
             // Vérification anti-spam
