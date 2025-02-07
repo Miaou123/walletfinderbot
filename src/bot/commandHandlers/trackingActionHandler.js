@@ -13,10 +13,17 @@ const ACTIONS = {
 };
 
 class TrackingActionHandler {
- constructor(supplyTracker) {
-   if (!supplyTracker) throw new Error('SupplyTracker is required');
-   this.supplyTracker = supplyTracker;
- }
+  constructor(supplyTracker, accessControl) {
+    if (!supplyTracker) throw new Error('SupplyTracker is required');
+    if (!accessControl) throw new Error('AccessControl is required');
+    if (!accessControl.subscriptionService?.getUserSubscription || 
+        !accessControl.subscriptionService?.getGroupSubscription) {
+        throw new Error('AccessControl must have subscriptionService with required methods');
+    }
+    
+    this.supplyTracker = supplyTracker;
+    this.accessControl = accessControl;
+}
 
 generateCallbackData(action, params = {}) {
   // Format standard: track:action:tokenAddress[:extraParam]
@@ -35,9 +42,47 @@ generateCallbackData(action, params = {}) {
 async handleCallback(bot, query) {
   try {
       const [category, action, tokenAddress, threshold] = query.data.split(':');
-      const chatId = query.message.chat.id;
+      const chatId = query.message.chat.id.toString();
+      const userId = query.from.id.toString();
+      const isGroup = query.message.chat.type === 'group' || query.message.chat.type === 'supergroup';
 
-      logger.debug(`Handling callback - category: ${category}, action: ${action}, tokenAddress: ${tokenAddress}`);
+      logger.debug('TrackingActionHandler subscription check details:', {
+          isGroup,
+          chatId,
+          userId,
+          accessControlExists: Boolean(this.accessControl),
+          subscriptionServiceExists: Boolean(this.accessControl.subscriptionService),
+          getUserSubscriptionExists: Boolean(this.accessControl.subscriptionService?.getUserSubscription),
+          getGroupSubscriptionExists: Boolean(this.accessControl.subscriptionService?.getGroupSubscription)
+      });
+
+      // Check subscription before any tracking action
+      let hasSubscription;
+      if (isGroup) {
+          const groupSub = await this.accessControl.subscriptionService.getGroupSubscription(chatId);
+          hasSubscription = groupSub?.active === true && groupSub.expiresAt > new Date();
+      } else {
+          const userSub = await this.accessControl.subscriptionService.getUserSubscription(userId);
+          hasSubscription = userSub?.active === true && userSub.expiresAt > new Date();
+      }
+
+      logger.debug('Final subscription check result:', {
+          hasSubscription,
+          isGroup,
+          chatId,
+          userId
+      });
+
+      if (!hasSubscription) {
+          await bot.answerCallbackQuery(query.id);
+          await bot.sendMessage(chatId,
+              "🔒 This command requires an active subscription\n\n" +
+              "• Use /subscribe to view our subscription plans\n" +
+              "• Try /preview to test our features before subscribing\n\n" +
+              "Need help? Contact @Rengon0x for support"
+          );
+          return;
+      }
 
       if (action === 'stop') {
         await this.executeAction(action, bot, query, { tokenAddress });
@@ -158,13 +203,46 @@ async handleCallback(bot, query) {
  }
 
   async handleSetCustomThreshold(bot, chatId, trackingInfo) {
+    // Cette fonction est appelée par le callback button
     await bot.sendMessage(chatId, "Enter new supply change percentage (e.g., 2.5):");
-    trackingInfo.awaitingCustomThreshold = true;
     stateManager.setUserState(chatId, {
         action: 'awaiting_custom_threshold',
-        tokenAddress: trackingInfo.tokenAddress,
-        currentThreshold: trackingInfo.threshold  // Ajouter le seuil actuel
+        tokenAddress: trackingInfo.tokenAddress
     });
+  }
+
+  async handleCustomThresholdInput(bot, msg) {
+    // Cette fonction est appelée par handleNonCommand
+    const chatId = msg.chat.id;
+    const userState = stateManager.getUserState(chatId);
+
+    logger.debug('Processing custom threshold input:', msg.text);
+    logger.debug('User state:', userState);
+
+    if (!userState?.tokenAddress) {
+        await bot.sendMessage(chatId, "Session expired. Please run the scan command again.");
+        return;
+    }
+
+    const thresholdInput = msg.text.replace('%', '').trim();
+    const threshold = parseFloat(thresholdInput);
+
+    if (isNaN(threshold) || threshold < 0.1 || threshold > 100) {
+        await bot.sendMessage(chatId, "Invalid threshold. Please enter a number between 0.1 and 100.");
+        return;
+    }
+
+    const trackingInfo = stateManager.getTrackingInfo(chatId, userState.tokenAddress);
+    if (!trackingInfo) {
+        await bot.sendMessage(chatId, "Tracking information expired. Please run the scan command again.");
+        return;
+    }
+
+    trackingInfo.threshold = threshold;
+    stateManager.setTrackingInfo(chatId, userState.tokenAddress, trackingInfo);
+
+    await this.updateTrackingMessage(bot, chatId, trackingInfo);
+    stateManager.deleteUserState(chatId);
   }
 
  async handleStartTracking(bot, chatId, trackingInfo, threshold) {
@@ -323,7 +401,7 @@ async handleCallback(bot, query) {
     stateManager.setTrackingInfo(chatId, userState.tokenAddress, trackingInfo);
 
     await this.updateTrackingMessage(bot, chatId, trackingInfo);
-    stateManager.clearUserState(chatId);
+    stateManager.deleteUserState(chatId);
 }
 
 createThresholdKeyboard(tokenAddress, threshold) {

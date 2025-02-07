@@ -40,6 +40,23 @@ class CrossBtHandler {
             logger.info(`Processing CrossBt analysis for addresses: ${tokenAddresses.join(', ')}`);
 
             const analysisResults = await this.analyzer.analyze(tokenAddresses);
+
+            if (!analysisResults.commonTraders || analysisResults.commonTraders.length === 0) {
+                await bot.sendMessage(msg.chat.id, 
+                    '❌ No common top traders found between these tokens.\n\n' +
+                    'This could mean:\n' +
+                    '• No wallet appears in the top 100 traders of all these tokens simultaneously\n' +
+                    '• The tokens are too new or have a low trading activity\n' +
+                    '• The addresses provided might be incorrect\n\n' +
+                    ' If you are looking for common holders, please use /cross instead.\n',
+                    {
+                        parse_mode: 'HTML',
+                        message_thread_id: messageThreadId
+                    }
+                );
+                return;
+            }
+
             const formattedMessage = formatCrossBtResponse(analysisResults, tokenAddresses);
 
             await bot.sendLongMessage(msg.chat.id, formattedMessage, {

@@ -5,9 +5,11 @@ const logger = require('../../utils/logger');
 const stateManager = require('../../utils/stateManager');
 
 class TeamHandler {
-  constructor() {
+  constructor(stateManager) {
+      if (!stateManager) throw new Error('StateManager is required');
       this.COMMAND_NAME = 'team';
       this.cache = new RequestCache(2 * 60 * 1000);
+      this.stateManager = stateManager;
   }
 
   generateCallbackData(action, params = {}) {
@@ -37,7 +39,6 @@ class TeamHandler {
 
   async handleCommand(bot, msg, args) {
       const chatId = msg.chat.id;
-      const username = msg.from.username;
 
       try {
           const [tokenAddress] = args;
@@ -45,6 +46,8 @@ class TeamHandler {
               await bot.sendMessage(chatId, "Please provide a token address.");
               return;
           }
+
+          const statusMessage = await bot.sendMessage(chatId, "🔍 Team analysis in progress... Please wait, this may take a few minutes.");
 
           const cacheParams = { tokenAddress };
           const fetchFunction = async () => analyzeTeamSupply(tokenAddress, 'teamSupply');
@@ -63,8 +66,10 @@ class TeamHandler {
               scanData.totalSupplyControlled
           );
 
-          const trackingData = this.prepareTrackingData(scanData, tokenAddress, username);
+          const trackingData = this.prepareTrackingData(scanData, tokenAddress, chatId);
           stateManager.setTrackingInfo(chatId, tokenAddress, trackingData);
+
+          await bot.deleteMessage(chatId, statusMessage.message_id);
 
           await bot.sendMessage(chatId, formattedResult, {
               parse_mode: 'HTML',
@@ -115,9 +120,10 @@ class TeamHandler {
       });
   }
 
- prepareTrackingData(scanData, tokenAddress, username) {
+ prepareTrackingData(scanData, tokenAddress, chatId) {
    return {
      tokenAddress,
+     trackType: 'team',
      tokenInfo: {
        symbol: scanData.tokenInfo.symbol,
        totalSupply: scanData.tokenInfo.totalSupply,
@@ -125,12 +131,10 @@ class TeamHandler {
      },
      totalSupplyControlled: scanData.totalSupplyControlled,
      initialSupplyPercentage: scanData.totalSupplyControlled,
-     teamWallets: scanData.teamWallets,
      topHoldersWallets: [],
+     teamWallets: scanData.teamWallets,
      allWalletsDetails: scanData.analyzedWallets,
-     analysisType: 'teamSupplyAnalyzer',
-     trackType: 'team',
-     username
+     chatId
    };
  }
 }

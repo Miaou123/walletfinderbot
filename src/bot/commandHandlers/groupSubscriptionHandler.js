@@ -1,5 +1,5 @@
 const logger = require('../../utils/logger');
-const { updatePaymentAddressStatus } = require('../../database/database');
+const { UserService } = require('../../database'); 
 
 class GroupSubscriptionHandler {
     constructor(accessControl, paymentHandler) {
@@ -30,14 +30,14 @@ class GroupSubscriptionHandler {
     }
 
     async handleCommand(bot, msg) {
-        const chatId = msg.chat.id;
+        const chatId = String(msg.chat.id);
 
         try {
             if (!await this.validateGroupContext(bot, msg)) {
                 return;
             }
 
-            const subscription = await this.accessControl.getGroupSubscription(chatId.toString());
+            const subscription = await this.accessControl.subscriptionService.getGroupSubscription(chatId.toString());
             
             if (subscription?.active && subscription.expiresAt > new Date()) {
                 await this.showActiveSubscription(bot, msg, subscription);
@@ -60,7 +60,7 @@ class GroupSubscriptionHandler {
     }
 
     async validateGroupContext(bot, msg) {
-        const chatId = msg.chat.id;
+        const chatId = String(msg.chat.id);
         const isGroup = msg.chat.type === 'group' || msg.chat.type === 'supergroup';
         
         if (!isGroup) {
@@ -78,10 +78,17 @@ class GroupSubscriptionHandler {
     }
 
     async validateAdminRights(bot, msg) {
-        const chatId = msg.chat.id;
+        const chatId = String(msg.chat.id);
+        const adminUserId = msg.from?.id ? String(msg.from.id) : null;
+        
+        if (!adminUserId) {
+            logger.error("❌ ERROR: Unable to retrieve adminUserId for group subscription", { msg });
+            await bot.sendMessage(msg.chat.id, "❌ Error: Could not retrieve admin details.");
+            return;
+        }
         
         // Vérifier si l'utilisateur est admin
-        const chatMember = await bot.getChatMember(chatId, msg.from.id);
+        const chatMember = await bot.getChatMember(chatId, adminUserId);
         const isAdmin = ['creator', 'administrator'].includes(chatMember.status);
         
         if (!isAdmin) {
@@ -89,7 +96,7 @@ class GroupSubscriptionHandler {
             return false;
         }
 
-        // Vérifier les droits du bot
+        // Le reste de la validation reste identique
         try {
             const botInfo = await bot.getMe();
             const botMember = await bot.getChatMember(chatId, botInfo.id);
@@ -114,7 +121,7 @@ class GroupSubscriptionHandler {
     }
 
     async showActiveSubscription(bot, msg, subscription) {
-        const chatId = msg.chat.id;
+        const chatId = String(msg.chat.id);
         const daysLeft = Math.ceil((new Date(subscription.expiresAt) - new Date()) / (1000 * 60 * 60 * 24));
         const message = this.formatSubscriptionStatus(msg.chat.title, subscription, daysLeft);
 
@@ -160,28 +167,44 @@ class GroupSubscriptionHandler {
     }
 
     async initiateNewSubscription(bot, msg) {
-        const chatId = msg.chat.id;
+        const chatId = String(msg.chat.id);
+        const groupName = msg.chat.title;
+        const adminUserId = msg.from?.id ? String(msg.from.id) : null;
+
+        console.log ("admin user id is: " + adminUserId);
+        const adminUsername = msg.from?.username || "unknown";
+    
+        if (!adminUserId) {
+            logger.error("❌ ERROR: Unable to retrieve adminUserId for group subscription", { msg });
+            await bot.sendMessage(chatId, "❌ Error: Could not retrieve admin details.");
+            return;
+        }
+    
         const adminInfo = {
-            chatId: msg.from.id,
-            username: msg.from.username
+            userId: adminUserId,
+            username: adminUsername
         };
 
+        logger.debug("📥 createGroupPaymentSession() received:", {
+            chatId,
+            groupName,
+            adminInfo
+        });        
+
         const session = await this.paymentHandler.createGroupPaymentSession(
-            chatId.toString(),
-            msg.chat.title,
+            chatId,
+            groupName,
             adminInfo
         );
-
+    
         const message = this.formatPaymentMessage(msg.chat.title, session);
         await bot.sendMessage(chatId, message, {
             parse_mode: 'HTML',
             reply_markup: {
-                inline_keyboard: [
-                    [this.createPaymentCheckButton(session.sessionId)]
-                ]
+                inline_keyboard: [[this.createPaymentCheckButton(session.sessionId)]]
             }
         });
-    }
+    }    
 
     formatPaymentMessage(groupTitle, session) {
         return `💳 <b>Group Subscription Payment</b>\n\n` +
@@ -193,7 +216,7 @@ class GroupSubscriptionHandler {
     }
 
     async handlePaymentProcess(bot, query) {
-        const chatId = query.message.chat.id;
+        const chatId = String(query.message.chat.id); 
         const adminInfo = {
             id: query.from.id.toString(),
             username: query.from.username
@@ -219,7 +242,7 @@ class GroupSubscriptionHandler {
     }
 
     async handlePaymentCheck(bot, query, sessionId) {
-        const chatId = query.message.chat.id;
+        const chatId = String(query.message.chat.id);
         const sessionData = this.paymentHandler.getPaymentSession(sessionId);
 
         if (!await this.validateSession(bot, query, sessionId, sessionData)) {
@@ -236,7 +259,7 @@ class GroupSubscriptionHandler {
     }
 
     async validateSession(bot, query, sessionId, sessionData) {
-        const chatId = query.message.chat.id;
+        const chatId = String(query.message.chat.id);
 
         if (!sessionData) {
             logger.error(`No session found for ID: ${sessionId}`);
@@ -258,16 +281,17 @@ class GroupSubscriptionHandler {
     }
 
     async handleSuccessfulPayment(bot, query, sessionId, sessionData, result) {
-        const chatId = query.message.chat.id;
-
+        const chatId = String(query.message.chat.id);
+        const groupName = query.message.chat.title;
+    
         if (result.alreadyPaid) {
             await bot.sendMessage(chatId, "✅ Group payment was already confirmed. Group subscription is active!");
             return;
         }
-
+    
         await bot.sendMessage(chatId, "✅ Group payment confirmed! Activating group subscription...");
-        await updatePaymentAddressStatus(sessionId, 'completed');
-
+        await this.accessControl.paymentService.updatePaymentAddressStatus(sessionId, 'completed');
+    
         let transferResult = {};
         try {
             transferResult = await this.paymentHandler.transferFunds(sessionId);
@@ -275,55 +299,111 @@ class GroupSubscriptionHandler {
         } catch (err) {
             logger.error(`Error transferring group funds for session ${sessionId}:`, err);
         }
-
+    
+        const transactionHashes = {
+            transactionHash: result.transactionHash,       
+            transferHash: transferResult?.signature          
+        };
+    
         const paymentId = `group_payment_${Date.now()}`;
-        const payerInfo = {
-            id: query.from.id.toString(),
-            username: query.from.username
+        
+        // Créer un objet msg compatible avec ce qu'attend createOrUpdateGroupSubscription
+        const msgObj = {
+            chat: {
+                id: chatId
+            },
+            from: {
+                id: query.from.id,
+                username: query.from.username
+            }
         };
 
-        await this.accessControl.createGroupSubscription(
-            sessionData.chatId,
-            sessionData.groupName,
-            '1month',
-            payerInfo,
-            {
-                paymentId,
-                status: 'completed',
-                transactionHash: result.transactionHash,
-                transferHash: transferResult?.signature
-            }
+        console.log('msg obj:', msgObj);
+    
+        await this.accessControl.subscriptionService.createOrUpdateGroupSubscription(
+            msgObj, 
+            groupName, 
+            paymentId, 
+            transactionHashes
         );
-
-        await this.sendSuccessMessage(bot, chatId, sessionData);
+    
+        const subscription = await this.accessControl.subscriptionService.getGroupSubscription(String(chatId));
+        if (subscription) {
+            await this.sendSuccessMessage(bot, chatId, {
+                ...sessionData,
+                groupName 
+            });
+        }
     }
 
     async handleFailedPayment(bot, chatId, sessionData, result) {
-        if (result.reason === 'Session expired.') {
-            await bot.sendMessage(chatId, "❌ The group payment session has expired.");
-        } else if (result.reason === 'Payment not detected yet') {
-            const partialBalance = result.partialBalance ?? 0;
-            const shortfall = (sessionData.amount - partialBalance).toFixed(3);
-
-            if (partialBalance > 0) {
-                await bot.sendMessage(
-                    chatId,
-                    `🚫 You sent ${partialBalance} SOL, but you need ${sessionData.amount} SOL.\n` +
-                    `You are short by ${shortfall} SOL. Please send the remaining amount.`
-                );
-            } else {
-                await bot.sendMessage(
-                    chatId,
-                    "🚫 Group payment not detected yet. Please try again in a moment."
-                );
+        try {
+            // Validation de base des données de session
+            if (!sessionData) {
+                logger.error('Missing session data');
+                await bot.sendMessage(chatId, "❌ Error: Invalid payment session. Please try again.");
+                return;
             }
-        } else {
-            await bot.sendMessage(chatId, `⚠️ Error: ${result.reason}`);
+    
+            // Récupération du montant attendu avec log pour debug
+            const expectedAmount = sessionData.finalAmount || sessionData.baseAmount;
+            logger.debug('Expected amount from session:', {
+                finalAmount: sessionData.finalAmount,
+                baseAmount: sessionData.baseAmount,
+                expectedAmount: expectedAmount
+            });
+    
+            // Gestion des différents cas d'erreur
+            if (result.reason === 'Session expired.') {
+                await bot.sendMessage(chatId, "❌ The group payment session has expired.");
+                return;
+            }
+    
+            if (result.reason === 'Payment not detected yet') {
+                // S'assurer que partialBalance est un nombre
+                const partialBalance = typeof result.partialBalance === 'number' ? result.partialBalance : 0;
+                
+                if (partialBalance > 0) {
+                    // Calculer la différence
+                    const remainingAmount = Math.max(0, expectedAmount - partialBalance);
+                    
+                    const message = 
+                        `🚫 Payment incomplete:\n` +
+                        `• Amount sent: ${partialBalance.toFixed(3)} SOL\n` +
+                        `• Amount needed: ${expectedAmount.toFixed(3)} SOL\n` +
+                        `• Remaining to pay: ${remainingAmount.toFixed(3)} SOL\n\n` +
+                        `Please send the remaining amount to complete your subscription.`;
+                    
+                    await bot.sendMessage(chatId, message);
+                } else {
+                    await bot.sendMessage(
+                        chatId,
+                        "🚫 No payment detected yet. Please send the payment and try again in a moment."
+                    );
+                }
+                return;
+            }
+    
+            // Cas par défaut pour les autres types d'erreurs
+            await bot.sendMessage(chatId, `⚠️ Error: ${result.reason || 'Unknown error occurred'}`);
+    
+        } catch (error) {
+            logger.error('Error in handleFailedPayment:', {
+                error,
+                sessionData,
+                result,
+                errorMessage: error.message,
+                errorStack: error.stack
+            });
+            await bot.sendMessage(
+                chatId,
+                "❌ An unexpected error occurred while processing the payment. Please try again."
+            );
         }
     }
 
     async sendSuccessMessage(bot, chatId, sessionData) {
-        const subscription = await this.accessControl.getGroupSubscription(sessionData.chatId);
+        const subscription = await this.accessControl.subscriptionService.getGroupSubscription(sessionData.chatId);
         let statusMessage = "🎉 Group subscription is now active!\n\n";
         statusMessage += `Group: ${sessionData.groupName}\n`;
         statusMessage += `Expires at: ${subscription.expiresAt.toLocaleString()}\n\n`;
