@@ -116,13 +116,6 @@ class CommandParser {
         return errors;
     }
 
-    getCommandHelp(command, isAdmin = false) {
-        const config = isAdmin ? adminCommandConfigs[command] : commandConfigs[command];
-        if (!config) return `Unknown command. Please use /help for a full list of commands.`;
-
-        return `${config.description}\n\nUsage: ${config.usage}\n${config.helpMessage || ''}`;
-    }
-
     isAdminCommand(command) {
         return !!adminCommandConfigs[command];
     }

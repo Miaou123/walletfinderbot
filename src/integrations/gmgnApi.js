@@ -136,8 +136,14 @@ class GmgnApi {
         return this.fetchData(url, 'getAllTransactions', mainContext, subContext);
     }
 
-    async getWalletData(wallet, mainContext = 'default', subContext = null) {
-        const url = `${this.baseUrl}/smartmoney/sol/walletNew/${wallet}`;
+    async getWalletData(wallet, mainContext = 'default', subContext = null, period = '30d') {
+        const validPeriods = ['3d', '7d', '30d'];
+        
+        if (!validPeriods.includes(period)) {
+            throw new Error("Invalid period. Valid options are '3d', '7d', or '30d'.");
+        }
+
+        const url = `${this.baseUrl}/smartmoney/sol/walletNew/${wallet}?period=${period}`;
         return this.fetchData(url, 'getWalletData', mainContext, subContext);
     }
 

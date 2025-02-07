@@ -1,21 +1,17 @@
 // bot/telegramBot.js
-
 const path = require('path');
 const TelegramBot = require('node-telegram-bot-api');
 const winston = require('winston');
-const fs = require('fs').promises;
 const config = require('../utils/config');
 const CommandHandlers = require('./commandHandlers/commandHandlers');
-const { UserManager } = require('./accessManager/userManager');
+const ClaimSystem = require('../tools/claimSystem.js');
 const ActiveCommandsTracker = require('./commandsManager/activeCommandsTracker');
 const { commandConfigs, adminCommandConfigs } = require('./commandsManager/commandConfigs');
 const AccessControlDB = require('./accessManager/accessControlDB');
-const RateLimiter = require('./commandsManager/commandRateLimiter');
-const CommandUsageTracker = require('./commandsManager/commandUsageTracker');
-const SolanaPaymentHandler = require('../solanaPaymentHandler/solanaPaymentHandler.js');
+const SolanaPaymentHandler = require('../tools/solanaPaymentHandler.js');
 const groupMessageLogger = require('./messageDataManager/groupMessageLogger');
 const MessageHandler = require('./messageHandler');
-const { getDatabase } = require('../database/database');
+const { getDatabase } = require('../database');
 
 // ====================
 // TelegramBotService
@@ -60,7 +56,6 @@ class TelegramBotService {
     async start() {
         try {
             await this.initializeDatabase();
-            await this.ensureFilesExist();
             await this.initializeBot();
             await this.initializeManagers();
             await this.setupMessageHandler();
@@ -82,40 +77,6 @@ class TelegramBotService {
             this.logger.info('Database connection established successfully');
         } catch (error) {
             this.logger.error('Failed to connect to database:', error);
-            throw error;
-        }
-    }
-
-    async ensureFilesExist() {
-        try {
-            await fs.mkdir(this.dataPath, { recursive: true });
-            await fs.mkdir(this.configPath, { recursive: true });
-
-            const defaultFiles = [
-                {
-                    path: this.userFilePath,
-                    content: '[]'
-                },
-                {
-                    path: path.join(this.configPath, 'rate_limits.json'),
-                    content: '{}'
-                },
-                {
-                    path: path.join(this.configPath, 'command_usage.json'),
-                    content: '{}'
-                }
-            ];
-
-            for (const file of defaultFiles) {
-                try {
-                    await fs.access(file.path);
-                } catch {
-                    await fs.writeFile(file.path, file.content);
-                    this.logger.info(`Created default file: ${file.path}`);
-                }
-            }
-        } catch (error) {
-            this.logger.error('Error ensuring files exist:', error);
             throw error;
         }
     }
@@ -162,30 +123,34 @@ class TelegramBotService {
         // 1. Access Control
         this.accessControl = new AccessControlDB(this.db, config);
         await this.accessControl.ensureIndexes();
-        this.logger.info('Access control system initialized');
+        
+        // Log pour vérifier que l'accessControl a bien ses méthodes
+        this.logger.debug('AccessControl after initialization:', {
+            methods: Object.getOwnPropertyNames(Object.getPrototypeOf(this.accessControl)),
+            hasActiveSubscriptionMethod: typeof this.accessControl.hasActiveSubscription === 'function',
+            hasActiveGroupSubscriptionMethod: typeof this.accessControl.hasActiveGroupSubscription === 'function'
+        });
 
-        // 2. UserManager
-        this.userManager = new UserManager(this.userFilePath);
-        await this.userManager.loadUsers();
-        this.logger.info('User manager initialized');
-
-        // 3. Taux/limites + Usage tracking
-        this.rateLimiter = new RateLimiter(path.join(this.configPath, 'rate_limits.json'));
-        this.usageTracker = new CommandUsageTracker(path.join(this.configPath, 'command_usage.json'));
-        this.logger.info('Rate limiter and usage tracker initialized');
-
-        // 4. Créer une seule instance de SolanaPaymentHandler
+        // 3. Créer une seule instance de SolanaPaymentHandler
         this.paymentHandler = new SolanaPaymentHandler(config.HELIUS_RPC_URL);
         this.logger.info('Payment handler initialized');
 
-        // 5. Instancier les handlers
-        //    -> On y passe le userManager, l'accessControl, et le bot 
+        // 4. Initialiser le ClaimSystem
+        this.claimSystem = new ClaimSystem(
+            this.paymentHandler.connection, // Réutiliser la même connexion Solana
+            config.REWARD_WALLET_PRIVATE_KEY
+        );
+        this.logger.info('Claim system initialized');
+
+        // 5. Instancier et initialiser les handlers
         this.commandHandlers = new CommandHandlers(
-            this.userManager,
             this.accessControl,
             this.bot,
-            this.paymentHandler 
+            this.paymentHandler,
+            this.claimSystem
         );
+
+        await this.commandHandlers.initialize();
 
         // 6. Initialiser le groupMessageLogger si nécessaire
         groupMessageLogger.initialize();
@@ -201,13 +166,13 @@ class TelegramBotService {
             commandHandlers: this.commandHandlers,
             accessControl: this.accessControl,
             rateLimiter: this.rateLimiter,
-            usageTracker: this.usageTracker,
             config,
             logger: this.logger,
             ActiveCommandsTracker,
             commandConfigs,
             adminCommandConfigs,
-            paymentHandler: this.paymentHandler 
+            paymentHandler: this.paymentHandler,
+            stateManager: this.commandHandlers.stateManager
         });
     
         // Initialiser le messageHandler
@@ -231,9 +196,6 @@ class TelegramBotService {
                 }
             }
         });
-
-        // 2) Plus besoin de this.bot.on('callback_query', ...) ici,
-        //    car c'est fait dans le constructor de CommandHandlers
 
         // 3) Polling error
         this.bot.on('polling_error', (error) => {

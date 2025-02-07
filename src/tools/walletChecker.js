@@ -1,6 +1,6 @@
 const pLimit = require('p-limit');
 const gmgnApi = require('../integrations/gmgnApi');
-const { getDatabase, saveInterestingWallet } = require('../database/database');
+const { getDatabase, WalletService } = require('../database');
 const logger = require('../utils/logger');
 
 async function getWalletFromDatabase(address, database) {
@@ -35,50 +35,44 @@ async function getWalletFromDatabase(address, database) {
     }
 }
 
+
 async function fetchMultipleWallets(wallets, concurrency = 5, mainContext, subContext = 'fetchMultipleWallets') {
     const limit = pLimit(concurrency);
     const database = await getDatabase();
-
+ 
     try {
         const promises = wallets.map(wallet => 
             limit(async () => {
                 try {
-                    // Vérifier d'abord dans la base de données
                     const cachedData = await getWalletFromDatabase(wallet, database);
-                    
                     if (cachedData) {
                         logger.info(`Retrieved wallet ${wallet} from cache`);
                         return { wallet, data: cachedData };
                     }
-
-                    // Si pas en cache ou expiré, faire l'appel API
-                    logger.debug(`Fetching fresh data for wallet ${wallet}`);
+ 
                     const data = await gmgnApi.getWalletData(wallet, mainContext, subContext);
-                    
-                    // Sauvegarder dans la base de données
                     if (data) {
                         try {
-                            await saveInterestingWallet(wallet, data.data);
+                            await WalletService.saveInterestingWallet(wallet, data.data);
                             logger.info(`Successfully saved wallet ${wallet} to database`);
                         } catch (dbError) {
-                            logger.error(`Error saving wallet ${wallet} to database: ${dbError.message}`, { wallet, error: dbError });
+                            logger.error(`Error saving wallet ${wallet} to database: ${dbError.message}`);
                         }
                     }
-
+ 
                     return { wallet, data };
                 } catch (error) {
-                    logger.error(`Error processing wallet ${wallet}: ${error.message}`, { wallet, error });
+                    logger.error(`Error processing wallet ${wallet}: ${error.message}`);
                     return null;
                 }
             })
         );
-
-        const results = await Promise.all(promises);
-        return results.filter(result => result !== null);
+ 
+        return (await Promise.all(promises)).filter(Boolean);
     } catch (error) {
-        logger.error('Error in fetchMultipleWallets:', { error });
+        logger.error('Error in fetchMultipleWallets:', error);
         throw error;
     }
-}
+ }
 
 module.exports = { fetchMultipleWallets };
