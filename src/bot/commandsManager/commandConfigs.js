@@ -66,7 +66,7 @@ const commandConfigs = {
     aliases: ['em'],
     minArgs: 1,
     maxArgs: 2,
-    requiresAuth: true,
+    requiresAuth: false,
     description: 'Analyze entry prices of top holders',
     usage: '/entrymap [contract_address] [number_of_holders](20)*',
     helpMessage: 'Analyzes the entry prices of top holders for a given token.\n\n' +
@@ -97,7 +97,7 @@ const commandConfigs = {
     aliases: ['th'], 
     minArgs: 1, 
     maxArgs: 2, 
-    requiresAuth: true, 
+    requiresAuth: false, 
     description: 'Analyze top holders', 
     usage: '/th [contract_address] [number_of_holders](20)*',
     helpMessage: 'Analyze the top holders of a specific coin. You can analyze up to 100 top holders.\n\nTip: Increasing the number of top holders analyzed is recommended for a better overview on high market cap tokens.'
@@ -106,7 +106,7 @@ const commandConfigs = {
     aliases: ['t'], 
     minArgs: 1, 
     maxArgs: 1, 
-    requiresAuth: true, 
+    requiresAuth: false, 
     description: 'Analyze team supply', 
     usage: '/team [contract_address]',
     helpMessage: 'Analyze team and insider supply for a token using a custom algorithm.\n\nThis command helps identify wallets likely associated with the project team or insiders and estimates the total supply they control.'
@@ -115,7 +115,7 @@ const commandConfigs = {
     aliases: ['bt'], 
     minArgs: 1, 
     maxArgs: 4, 
-    requiresAuth: true, 
+    requiresAuth: false, 
     description: 'Analyze best traders', 
     usage: '/bt [contract_address] [winrate_threshold](50%)* [portfolio_threshold]($10000)* [sort_option](port)*',
     helpMessage: 'Analyse the 100 best traders for a specific contract with given winrate and portfolio thresholds.\n\nSort options:\n- winrate/wr: Sort by win rate\n- pnl: Sort by profit and loss\n- portfolio/port: Sort by portfolio value\n- sol: Sort by SOL balance'
@@ -124,7 +124,7 @@ const commandConfigs = {
     aliases: ['eb'], 
     minArgs: 1, 
     maxArgs: 4, 
-    requiresAuth: true, 
+    requiresAuth: false, 
     description: 'Analyze early buyers', 
     usage: '/eb [coin_address] [time_frame](1h)* [min buy amount](1%)* [pump or nopump]*',
     helpMessage: 'Analyze early buyers of a specific coin within a given time frame and minimum buy amount threshold.\nTime frame is in hours or minutes (e.g., 2h or 30m).\n Percentage is the minimum percentage of total supply bought in one or multiple transactions over the timeframe.\nIf you only want to analyse pumpfun transactions, use the flag "pump" at the end of your command and if you only want to analyse raydium transactions use "nopump"'
@@ -133,7 +133,7 @@ const commandConfigs = {
     aliases: ['c'], 
     minArgs: 2, 
     maxArgs: 6, 
-    requiresAuth: true, 
+    requiresAuth: false, 
     description: 'Cross-analyze multiple tokens', 
     usage: '/cross [contract_address1] [contract_address2] ... [Combined_value_min]($10000)*',
     helpMessage: 'Search for wallets that hold multiple coins. You can analyze up to 5 coins with a minimum combined value (default is $10000).\n\nThis command helps identify wallets that have significant holdings across multiple tokens.'
@@ -142,7 +142,7 @@ const commandConfigs = {
     aliases: ['cbt'], 
     minArgs: 2, 
     maxArgs: 3, 
-    requiresAuth: true, 
+    requiresAuth: false, 
     description: 'Cross-analyze top traders of multiple tokens', 
     usage: '/crossbt [contract_address1] [contract_address2] [contract_address3]*',
     helpMessage: 'Analyze and compare the top 100 traders across 2 or 3 tokens to find common wallets. This command will help you find the best traders across a meta or wallets from team/insiders involved in multiple coins. You can analyze up to 3 coins.'
@@ -151,7 +151,7 @@ const commandConfigs = {
     aliases: ['sh'], 
     minArgs: 2, 
     maxArgs: Infinity, 
-    requiresAuth: true, 
+    requiresAuth: false, 
     description: 'Search for specific wallets', 
     usage: '/search [contract_address] [partial_address1] [partial_address2]*',
     helpMessage: 'Search for wallets that hold a specific token and match the partial addresses provided.\n\nTip: You can add multiple parts to one partial address by separating them with one or multiple dots.'
@@ -160,7 +160,7 @@ const commandConfigs = {
     aliases: ['d'], 
     minArgs: 1,
     maxArgs: 1,
-    requiresAuth: true,
+    requiresAuth: false,
     description: 'Analyze pumpfun developer profile and previous coins',
     usage: '/dev [contract_address]',
     helpMessage: 'Analyze a developer wallet to check their history of creating coins, including success rate, bonding rate, funding methods and connections to other successful projects.'
@@ -184,7 +184,7 @@ const commandConfigs = {
     aliases: ['tr'], 
     minArgs: 0, 
     maxArgs: 0, 
-    requiresAuth: true, 
+    requiresAuth: false, 
     description: 'Show tracked supplies', 
     usage: '/tracker',
     helpMessage: 'Display a list of all your currently tracked supplies.\n\nUse this command to view and manage your active supply tracking sessions.'
