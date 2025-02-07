@@ -58,14 +58,15 @@ class AccessControlDB {
        }
    }
 
-   async hasActiveSubscription(chatId) {
-        if (!chatId) return false;
+   async hasActiveSubscription(userId) {
+        if (!userId) return false;
         
         try {
-            const subscription = await this.subscriptionService.checkSubscription(chatId);
-            return Boolean(subscription);
+            // Ici on appelle la méthode statique directement sur la classe
+            const subscription = await SubscriptionService.getUserSubscription(userId);
+            return Boolean(subscription?.active);
         } catch (error) {
-            logger.error(`Error checking subscription for "${chatId}":`, error);
+            logger.error(`Error checking subscription for "${userId}":`, error);
             return false;
         }
     }
@@ -74,14 +75,14 @@ class AccessControlDB {
         if (!chatId) return false;
 
         try {
-            const subscription = await this.subscriptionService.checkGroupSubscription(chatId);
-            return Boolean(subscription);
+            // Pareil ici
+            const subscription = await SubscriptionService.getGroupSubscription(chatId);
+            return Boolean(subscription?.active);
         } catch (error) {
             logger.error(`Error checking group subscription for "${chatId}":`, error);
             return false;
         }
     }
-
    async isAllowed(identifier, context = 'user') {
        try {
            if (context === 'admin') return await this.isAdmin(identifier);

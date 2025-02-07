@@ -123,7 +123,13 @@ class TelegramBotService {
         // 1. Access Control
         this.accessControl = new AccessControlDB(this.db, config);
         await this.accessControl.ensureIndexes();
-        this.logger.info('Access control system initialized');
+        
+        // Log pour vérifier que l'accessControl a bien ses méthodes
+        this.logger.debug('AccessControl after initialization:', {
+            methods: Object.getOwnPropertyNames(Object.getPrototypeOf(this.accessControl)),
+            hasActiveSubscriptionMethod: typeof this.accessControl.hasActiveSubscription === 'function',
+            hasActiveGroupSubscriptionMethod: typeof this.accessControl.hasActiveGroupSubscription === 'function'
+        });
 
         // 3. Créer une seule instance de SolanaPaymentHandler
         this.paymentHandler = new SolanaPaymentHandler(config.HELIUS_RPC_URL);

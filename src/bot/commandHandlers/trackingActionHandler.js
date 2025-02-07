@@ -13,10 +13,17 @@ const ACTIONS = {
 };
 
 class TrackingActionHandler {
- constructor(supplyTracker) {
-   if (!supplyTracker) throw new Error('SupplyTracker is required');
-   this.supplyTracker = supplyTracker;
- }
+  constructor(supplyTracker, accessControl) {
+    if (!supplyTracker) throw new Error('SupplyTracker is required');
+    if (!accessControl) throw new Error('AccessControl is required');
+    if (!accessControl.subscriptionService?.getUserSubscription || 
+        !accessControl.subscriptionService?.getGroupSubscription) {
+        throw new Error('AccessControl must have subscriptionService with required methods');
+    }
+    
+    this.supplyTracker = supplyTracker;
+    this.accessControl = accessControl;
+}
 
 generateCallbackData(action, params = {}) {
   // Format standard: track:action:tokenAddress[:extraParam]
@@ -35,9 +42,47 @@ generateCallbackData(action, params = {}) {
 async handleCallback(bot, query) {
   try {
       const [category, action, tokenAddress, threshold] = query.data.split(':');
-      const chatId = query.message.chat.id;
+      const chatId = query.message.chat.id.toString();
+      const userId = query.from.id.toString();
+      const isGroup = query.message.chat.type === 'group' || query.message.chat.type === 'supergroup';
 
-      logger.debug(`Handling callback - category: ${category}, action: ${action}, tokenAddress: ${tokenAddress}`);
+      logger.debug('TrackingActionHandler subscription check details:', {
+          isGroup,
+          chatId,
+          userId,
+          accessControlExists: Boolean(this.accessControl),
+          subscriptionServiceExists: Boolean(this.accessControl.subscriptionService),
+          getUserSubscriptionExists: Boolean(this.accessControl.subscriptionService?.getUserSubscription),
+          getGroupSubscriptionExists: Boolean(this.accessControl.subscriptionService?.getGroupSubscription)
+      });
+
+      // Check subscription before any tracking action
+      let hasSubscription;
+      if (isGroup) {
+          const groupSub = await this.accessControl.subscriptionService.getGroupSubscription(chatId);
+          hasSubscription = groupSub?.active === true && groupSub.expiresAt > new Date();
+      } else {
+          const userSub = await this.accessControl.subscriptionService.getUserSubscription(userId);
+          hasSubscription = userSub?.active === true && userSub.expiresAt > new Date();
+      }
+
+      logger.debug('Final subscription check result:', {
+          hasSubscription,
+          isGroup,
+          chatId,
+          userId
+      });
+
+      if (!hasSubscription) {
+          await bot.answerCallbackQuery(query.id);
+          await bot.sendMessage(chatId,
+              "🔒 This command requires an active subscription\n\n" +
+              "• Use /subscribe to view our subscription plans\n" +
+              "• Try /preview to test our features before subscribing\n\n" +
+              "Need help? Contact @Rengon0x for support"
+          );
+          return;
+      }
 
       if (action === 'stop') {
         await this.executeAction(action, bot, query, { tokenAddress });

@@ -223,7 +223,7 @@ class ReferralHandler {
 
     if (!solanaAddressRegex.test(text)) {
         await bot.sendMessage(chatId, 
-            "That doesn't look like a valid Solana address. Please try again or /cancel."
+            "That doesn't look like a valid Solana address. Please try again."
         );
         return;
     }

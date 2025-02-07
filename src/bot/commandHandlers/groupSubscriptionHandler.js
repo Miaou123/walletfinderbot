@@ -337,26 +337,68 @@ class GroupSubscriptionHandler {
     }
 
     async handleFailedPayment(bot, chatId, sessionData, result) {
-        if (result.reason === 'Session expired.') {
-            await bot.sendMessage(chatId, "❌ The group payment session has expired.");
-        } else if (result.reason === 'Payment not detected yet') {
-            const partialBalance = result.partialBalance ?? 0;
-            const shortfall = (sessionData.amount - partialBalance).toFixed(3);
-
-            if (partialBalance > 0) {
-                await bot.sendMessage(
-                    chatId,
-                    `🚫 You sent ${partialBalance} SOL, but you need ${sessionData.amount} SOL.\n` +
-                    `You are short by ${shortfall} SOL. Please send the remaining amount.`
-                );
-            } else {
-                await bot.sendMessage(
-                    chatId,
-                    "🚫 Group payment not detected yet. Please try again in a moment."
-                );
+        try {
+            // Validation de base des données de session
+            if (!sessionData) {
+                logger.error('Missing session data');
+                await bot.sendMessage(chatId, "❌ Error: Invalid payment session. Please try again.");
+                return;
             }
-        } else {
-            await bot.sendMessage(chatId, `⚠️ Error: ${result.reason}`);
+    
+            // Récupération du montant attendu avec log pour debug
+            const expectedAmount = sessionData.finalAmount || sessionData.baseAmount;
+            logger.debug('Expected amount from session:', {
+                finalAmount: sessionData.finalAmount,
+                baseAmount: sessionData.baseAmount,
+                expectedAmount: expectedAmount
+            });
+    
+            // Gestion des différents cas d'erreur
+            if (result.reason === 'Session expired.') {
+                await bot.sendMessage(chatId, "❌ The group payment session has expired.");
+                return;
+            }
+    
+            if (result.reason === 'Payment not detected yet') {
+                // S'assurer que partialBalance est un nombre
+                const partialBalance = typeof result.partialBalance === 'number' ? result.partialBalance : 0;
+                
+                if (partialBalance > 0) {
+                    // Calculer la différence
+                    const remainingAmount = Math.max(0, expectedAmount - partialBalance);
+                    
+                    const message = 
+                        `🚫 Payment incomplete:\n` +
+                        `• Amount sent: ${partialBalance.toFixed(3)} SOL\n` +
+                        `• Amount needed: ${expectedAmount.toFixed(3)} SOL\n` +
+                        `• Remaining to pay: ${remainingAmount.toFixed(3)} SOL\n\n` +
+                        `Please send the remaining amount to complete your subscription.`;
+                    
+                    await bot.sendMessage(chatId, message);
+                } else {
+                    await bot.sendMessage(
+                        chatId,
+                        "🚫 No payment detected yet. Please send the payment and try again in a moment."
+                    );
+                }
+                return;
+            }
+    
+            // Cas par défaut pour les autres types d'erreurs
+            await bot.sendMessage(chatId, `⚠️ Error: ${result.reason || 'Unknown error occurred'}`);
+    
+        } catch (error) {
+            logger.error('Error in handleFailedPayment:', {
+                error,
+                sessionData,
+                result,
+                errorMessage: error.message,
+                errorStack: error.stack
+            });
+            await bot.sendMessage(
+                chatId,
+                "❌ An unexpected error occurred while processing the payment. Please try again."
+            );
         }
     }
 
