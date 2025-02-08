@@ -200,7 +200,15 @@ Boost: ❌`
         description: 'Find and analyze the most successful traders for any token',
         preview: {
             command: '/bt tokenAddress 50 10000 winrate',
-            response: `1. <a href="https://solscan.io/account/4pZB2v8g8c723e2MVe6pujLuMkn24VPriJCKocGbr4fB">4pZB2...r4fB</a> 🐳 <a href="https://gmgn.ai/sol/address/4pZB2v8g8c723e2MVe6pujLuMkn24VPriJCKocGbr4fB">gmgn</a>/<a href="https://app.cielo.finance/profile/4pZB2v8g8c723e2MVe6pujLuMkn24VPriJCKocGbr4fB/pnl/tokens">cielo</a>
+            response: `🏆 Best traders analysis for:
+<code>Ejq4Xr7KwHtLPkfGr3DGkKSgyGCuZvsndeyj92yXpump</code>
+📊 Winrate threshold: <code>>50%</code>
+💰 Portfolio threshold: <code>$10000</code>
+📈 Sorted by: <code>winrate</code>
+
+Click /bt to customize these values
+                    
+1. <a href="https://solscan.io/account/4pZB2v8g8c723e2MVe6pujLuMkn24VPriJCKocGbr4fB">4pZB2...r4fB</a> 🐳 <a href="https://gmgn.ai/sol/address/4pZB2v8g8c723e2MVe6pujLuMkn24VPriJCKocGbr4fB">gmgn</a>/<a href="https://app.cielo.finance/profile/4pZB2v8g8c723e2MVe6pujLuMkn24VPriJCKocGbr4fB/pnl/tokens">cielo</a>
 ├ 💼 Port: <code>$2M</code> (SOL: <code>0.40</code>)
 ├ 💰 P/L (30d): <code>$1M</code> 📈 uP/L: <code>$-141k</code>
 └ 📊 Winrate (30d): <code>100.00%</code>

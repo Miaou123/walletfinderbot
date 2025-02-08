@@ -1,6 +1,6 @@
 const logger = require('../../utils/logger');
 const { analyzeBestTraders } = require('../../analysis/bestTraders');
-const { formatBestTraders } = require('../formatters/bestTradersFormatter');
+const { formatBestTraders, formatInitialMessage } = require('../formatters/bestTradersFormatter');
 const { RequestCache, cachedCommand } = require('../../utils/requestCache');
 const { validateSolanaAddress } = require('./helpers');
 
@@ -13,46 +13,50 @@ class BestTradersHandler {
     async handleCommand(bot, msg, args, messageThreadId) {
         const username = msg.from.username;
         logger.info(`Starting BestTrader command for user ${username}`);
-
+    
         try {
             const parsedArgs = this._parseArguments(args);
-
-            // Validation de l'adresse solana
+            
             if (!validateSolanaAddress(parsedArgs.contractAddress)) {
-                await bot.sendLongMessage(
+                await bot.sendMessage(
                     msg.chat.id,
                     "Invalid Solana address. Please provide a valid Solana address.",
                     { message_thread_id: messageThreadId }
                 );
                 return;
             }
-
-            await this._sendInitialMessage(bot, msg.chat.id, parsedArgs, messageThreadId);
-
-            const cacheParams = {
-                contractAddress: parsedArgs.contractAddress,
-                winrateThreshold: parsedArgs.winrateThreshold,
-                portfolioThreshold: parsedArgs.portfolioThreshold,
-                sortOption: parsedArgs.sortOption
-            };
-
-            const fetchFunction = async () => {
-                return await analyzeBestTraders(
+    
+            // Envoyer le message initial avec sendMessage directement
+            const initialMessage = await bot.sendMessage(
+                msg.chat.id,
+                formatInitialMessage(parsedArgs),
+                { 
+                    parse_mode: 'HTML',
+                    disable_web_page_preview: true,
+                    message_thread_id: messageThreadId 
+                }
+            );
+    
+            const bestTraders = await cachedCommand(
+                this.cache,
+                '/bt',
+                parsedArgs,
+                () => analyzeBestTraders(
                     parsedArgs.contractAddress,
                     parsedArgs.winrateThreshold,
                     parsedArgs.portfolioThreshold,
                     parsedArgs.sortOption,
                     'bestTraders'
-                );
-            };
-
-            const bestTraders = await cachedCommand(
-                this.cache,
-                '/bt',
-                cacheParams,
-                fetchFunction
+                )
             );
-
+    
+            // Supprimer le message initial
+            try {
+                await bot.deleteMessage(msg.chat.id, initialMessage.message_id);
+            } catch (error) {
+                logger.warn('Failed to delete initial message:', error);
+            }
+    
             if (bestTraders.length === 0) {
                 await bot.sendLongMessage(
                     msg.chat.id,
@@ -61,19 +65,19 @@ class BestTradersHandler {
                 );
                 return;
             }
-
-            const message = formatBestTraders(bestTraders);
-
+    
+            // Envoyer le message final avec sendLongMessage
+            const finalMessage = formatBestTraders(bestTraders, parsedArgs);
             await bot.sendLongMessage(
                 msg.chat.id,
-                message,
+                finalMessage,
                 {
                     parse_mode: 'HTML',
                     disable_web_page_preview: true,
                     message_thread_id: messageThreadId
                 }
             );
-
+    
         } catch (error) {
             logger.error('Error in handleBestTradersCommand:', error);
             throw error;
@@ -108,17 +112,6 @@ class BestTradersHandler {
             portfolioThreshold,
             sortOption
         };
-    }
-
-    async _sendInitialMessage(bot, chatId, parsedArgs, messageThreadId) {
-        const message = [
-            `Analyzing best traders for contract: ${parsedArgs.contractAddress}`,
-            `Winrate threshold: >${parsedArgs.winrateThreshold}%`,
-            `Portfolio threshold: >$${parsedArgs.portfolioThreshold}`,
-            `Sorting by: ${parsedArgs.sortOption}`
-        ].join('\n');
-
-        await bot.sendLongMessage(chatId, message, { message_thread_id: messageThreadId });
     }
 }
 

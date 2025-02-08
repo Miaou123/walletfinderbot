@@ -5,6 +5,13 @@ const fs = require('fs').promises;
 
 class WalletService {
     static async saveInterestingWallet(address, walletData) {
+
+        if (!walletData) {
+            logger.error(`No wallet data provided for address ${address}`);
+            return null;
+        }
+
+        
         const database = await getDatabase();
         const collection = database.collection("wallets");
         
@@ -14,15 +21,18 @@ class WalletService {
         if (existingWallet?.refresh_date > fifteenMinutesAgo) {
             return null;
         }
-
+    
         try {
+            // On garde toutes les données de l'API telles quelles
             const walletToSave = {
                 address,
+                // On étale toutes les données de l'API
                 ...walletData,
+                // On ajoute nos champs de métadonnées
                 refresh_date: new Date(),
                 lastUpdated: new Date()
             };
-
+    
             const { error, value: validatedWallet } = validateWallet(walletToSave);
             if (error) {
                 logger.warn(`Validation warning: ${error.details[0].message}`, {
@@ -30,10 +40,16 @@ class WalletService {
                     error: error.details
                 });
             }
-
+    
             return await collection.updateOne(
                 { address },
-                { $set: validatedWallet || walletToSave },
+                { 
+                    $set: validatedWallet || walletToSave,
+                    // On conserve certains champs historiques si ils existent
+                    $setOnInsert: {
+                        created_at: new Date()
+                    }
+                },
                 { upsert: true }
             );
         } catch (error) {
@@ -45,7 +61,7 @@ class WalletService {
     static async getWalletsByWinrate(minWinrate) {
         const database = await getDatabase();
         return await database.collection('wallets')
-            .find({ 'data.winrate': { $gte: minWinrate } })
+            .find({ 'winrate': { $gte: minWinrate } }) // Enlever data.
             .toArray();
     }
 

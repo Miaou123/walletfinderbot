@@ -11,20 +11,17 @@ async function getWalletFromDatabase(address, database) {
 
         if (wallet && wallet.refresh_date > fifteenMinutesAgo) {
             logger.debug(`Using cached wallet data for ${address}`);
+            // On retourne toutes les données dans le même format que l'API
             return {
                 code: 0,
                 msg: 'success',
                 data: {
-                    twitter_bind: wallet.twitter_bind,
-                    balance: wallet.balance,
-                    total_value: wallet.total_value,
-                    realized_profit_30d: wallet.realized_profit_30d,
-                    winrate: wallet.winrate,
-                    buy_30d: wallet.buy_30d,
-                    token_avg_cost: wallet.token_avg_cost,
-                    token_sold_avg_profit: wallet.token_sold_avg_profit,
-                    pnl_2x_5x_num: wallet.pnl_2x_5x_num,
-                    pnl_gt_5x_num: wallet.pnl_gt_5x_num
+                    ...wallet,
+                    // On exclut les champs de métadonnées
+                    refresh_date: undefined,
+                    lastUpdated: undefined,
+                    created_at: undefined,
+                    _id: undefined
                 }
             };
         }

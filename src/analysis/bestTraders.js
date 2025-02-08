@@ -14,19 +14,24 @@ const SORT_OPTIONS = {
 function sortTraders(traders, sortOption) {
   const option = sortOption.toLowerCase();
   return traders.sort((a, b) => {
+    // On accède directement aux données via data.data maintenant
+    const aData = a.data.data;
+    const bData = b.data.data;
+
     switch (option) {
       case SORT_OPTIONS.PNL:
-        return b.data.data.realized_profit_30d - a.data.data.realized_profit_30d;
+        return bData.realized_profit_30d - aData.realized_profit_30d;
       case SORT_OPTIONS.WINRATE:
       case SORT_OPTIONS.WR:
-        return b.data.data.winrate - a.data.data.winrate;
+        return bData.winrate - aData.winrate;
       case SORT_OPTIONS.PORTFOLIO:
       case SORT_OPTIONS.PORT:
-        return b.data.data.total_value - a.data.data.total_value;
+        return bData.total_value - aData.total_value;
       case SORT_OPTIONS.SOL:
-        return b.data.data.sol_balance - a.data.data.sol_balance;
+        // Convertir les balances de string en nombre pour la comparaison
+        return parseFloat(bData.sol_balance) - parseFloat(aData.sol_balance);
       default:
-        return b.data.data.winrate - a.data.data.winrate;
+        return bData.winrate - aData.winrate;
     }
   });
 }
@@ -42,8 +47,8 @@ async function analyzeBestTraders(contractAddress, winrateThreshold = 30, portfo
     
     const bestTraders = walletData.filter(wallet => {
       if (wallet?.data?.data) {
-        const winrate = wallet.data.data.winrate * 100;
-        const portfolioValue = wallet.data.data.total_value;
+        const winrate = (wallet.data.data.winrate || 0) * 100; // Ajout d'un fallback pour éviter NaN
+        const portfolioValue = wallet.data.data.total_value || 0; // Ajout d'un fallback pour éviter undefined
         return winrate > winrateThreshold && portfolioValue > portfolioThreshold;
       }
       return false;
