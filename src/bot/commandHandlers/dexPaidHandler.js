@@ -9,11 +9,11 @@ class DexPaidHandler {
     }
 
     async handleCommand(bot, msg, args, messageThreadId) {
-        const userId = msg.from.id;
+        let tokenAddress;
+        
         logger.info(`Starting DexPaid command for user ${msg.from.username}`);
 
         try {
-            let tokenAddress;
             args.forEach(arg => {
                 const { type, value } = recognizeArgType(arg);
                 if (type === 'solanaAddress') {
@@ -34,12 +34,14 @@ class DexPaidHandler {
                 { message_thread_id: messageThreadId }
             );
 
-            const [orders, tokenInfo] = await Promise.all([
-                dexscreenerApi.getTokenOrders(tokenAddress),
-                dexscreenerApi.getTokenInfo(tokenAddress)
+           const [orders, tokenInfo] = await Promise.all([
+            dexscreenerApi.getTokenOrders(tokenAddress)
+                .catch(() => null),
+            dexscreenerApi.getTokenInfo(tokenAddress)
+                .catch(() => null) 
             ]);
 
-            const formattedResponse = formatDexPaidResponse(orders, tokenInfo);
+            const formattedResponse = formatDexPaidResponse(orders, { address: tokenAddress, ...tokenInfo });
 
             await bot.editMessageText(formattedResponse, {
                 chat_id: msg.chat.id,
@@ -49,7 +51,10 @@ class DexPaidHandler {
             });
 
         } catch (error) {
-            logger.error('Error in dexpaid command:', error);
+            logger.error('Error in dexpaid command:', {
+                error: error.message,
+                tokenAddress
+            });
             throw error;
         }
     }
