@@ -97,7 +97,7 @@ const commandConfigs = {
     aliases: ['th'], 
     minArgs: 1, 
     maxArgs: 2, 
-    requiresAuth: true, 
+    requiresAuth: false, 
     description: 'Analyze top holders', 
     usage: '/th [contract_address] [number_of_holders](20)*',
     helpMessage: 'Analyze the top holders of a specific coin. You can analyze up to 100 top holders.\n\nTip: Increasing the number of top holders analyzed is recommended for a better overview on high market cap tokens.'
