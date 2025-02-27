@@ -86,13 +86,14 @@ class BestTradersHandler {
 
     _parseArguments(args) {
         const [contractAddress, ...otherArgs] = args;
-        let winrateThreshold = 50;
+        let winrateThreshold = 30;
         let portfolioThreshold = 10000;
         let sortOption = 'winrate';
 
         for (const arg of otherArgs) {
             const lowercaseArg = arg.toLowerCase();
-            if (['pnl', 'winrate', 'wr', 'portfolio', 'port', 'sol'].includes(lowercaseArg)) {
+            // Ajout de 'rank' dans les options de tri
+            if (['pnl', 'winrate', 'wr', 'portfolio', 'port', 'sol', 'rank'].includes(lowercaseArg)) {
                 sortOption = lowercaseArg;
             } else {
                 const num = parseFloat(arg);
