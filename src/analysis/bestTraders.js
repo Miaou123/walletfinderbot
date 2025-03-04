@@ -9,8 +9,33 @@ const SORT_OPTIONS = {
   PORTFOLIO: 'portfolio',
   PORT: 'port',
   SOL: 'sol',
-  RANK: 'rank'
+  RANK: 'rank',
+  TOTALPNL: 'totalpnl'  // Nouvelle option de tri
 };
+
+/**
+ * Calcule le PnL total (réalisé + non réalisé) en pourcentage
+ * @param {Object} traderData - Données du trader
+ * @returns {number} - Pourcentage de PnL total ou 0 si indisponible
+ */
+function calculateTotalPnL(traderData) {
+  // Récupération des profits réalisés et non réalisés
+  const realizedProfit = traderData.realized_profit || 0;
+  const unrealizedProfit = traderData.unrealized_profit || 0;
+  
+  // Coût total d'achat
+  const totalCost = traderData.buy_volume_cur || 0;
+  
+  // Éviter la division par zéro
+  if (totalCost === 0 || totalCost === null) {
+    return 0;
+  }
+  
+  // Calcul du PnL total en pourcentage
+  const totalPnLPercent = ((realizedProfit + unrealizedProfit) / totalCost) * 100;
+  
+  return totalPnLPercent;
+}
 
 function sortTraders(traders, sortOption) {
   const option = sortOption.toLowerCase();
@@ -37,6 +62,9 @@ function sortTraders(traders, sortOption) {
         const bRank = bData.wallet_tag_v2 ? parseInt(bData.wallet_tag_v2.replace('TOP', ''), 10) : Number.MAX_SAFE_INTEGER;
         // Trier par rang croissant (les petits numéros en premier)
         return aRank - bRank;
+      case SORT_OPTIONS.TOTALPNL:
+        // Trier par PnL total décroissant
+        return bData.total_pnl_percent - aData.total_pnl_percent;
       default:
         return bData.winrate - aData.winrate;
     }
@@ -56,8 +84,12 @@ async function analyzeBestTraders(contractAddress, winrateThreshold = 30, portfo
     // Sauvegarder les informations spécifiques au token pour chaque trader
     traders.forEach(trader => {
       tokenSpecificInfo[trader.address] = {
-        wallet_tag_v2: trader.wallet_tag_v2,  // Tag de classement (TOP43, etc.)
-        profit_change: trader.profit_change   // Variation de profit en pourcentage (décimal)
+        wallet_tag_v2: trader.wallet_tag_v2,                // Tag de classement (TOP43, etc.)
+        profit_change: trader.profit_change,                // Variation de profit en pourcentage (décimal)
+        realized_profit: trader.realized_profit || 0,       // Profit réalisé
+        unrealized_profit: trader.unrealized_profit || 0,   // Profit non réalisé
+        buy_volume_cur: trader.buy_volume_cur || 0,         // Volume d'achat total
+        profit: trader.profit || 0                          // Profit total
       };
     });
 
@@ -80,9 +112,24 @@ async function analyzeBestTraders(contractAddress, winrateThreshold = 30, portfo
     // Ajouter les informations spécifiques au token à chaque trader
     bestTraders.forEach(trader => {
       if (trader.wallet && tokenSpecificInfo[trader.wallet]) {
+        const tokenInfo = tokenSpecificInfo[trader.wallet];
+        
         // Ajouter les informations spécifiques au token à la structure de données
-        trader.data.data.wallet_tag_v2 = tokenSpecificInfo[trader.wallet].wallet_tag_v2;
-        trader.data.data.profit_change = tokenSpecificInfo[trader.wallet].profit_change;
+        trader.data.data.wallet_tag_v2 = tokenInfo.wallet_tag_v2;
+        trader.data.data.profit_change = tokenInfo.profit_change;
+        trader.data.data.token_realized_profit = tokenInfo.realized_profit;
+        trader.data.data.token_unrealized_profit = tokenInfo.unrealized_profit;
+        trader.data.data.token_buy_volume = tokenInfo.buy_volume_cur;
+        trader.data.data.token_profit = tokenInfo.profit;
+        
+        // Calculer le PnL total en pourcentage
+        if (tokenInfo.buy_volume_cur > 0) {
+          const totalProfit = tokenInfo.realized_profit + tokenInfo.unrealized_profit;
+          const totalPnLPercent = (totalProfit / tokenInfo.buy_volume_cur) * 100;
+          trader.data.data.total_pnl_percent = totalPnLPercent;
+        } else {
+          trader.data.data.total_pnl_percent = 0;
+        }
       }
     });
 

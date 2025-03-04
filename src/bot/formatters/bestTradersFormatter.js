@@ -43,12 +43,18 @@ function formatBestTraders(traders, params) {
                     unrealized_profit,
                     realized_profit_30d,
                     wallet_tag_v2,
-                    profit_change
+                    profit_change,
+                    total_pnl_percent,
+                    token_realized_profit,
+                    token_unrealized_profit
                 } = data.data;
 
                 const winratePercentage = (winrate * 100).toFixed(2);
                 const portfolioEmoji = total_value > 100000 ? '🐳' : '🐬';
                 const truncatedWallet = truncateAddress(wallet);
+                
+                // Emoji pour le token (vous pouvez ajuster selon vos besoins)
+                const tokenEmoji = '🪙';
                 
                 // Extraction du numéro de rank à partir de wallet_tag_v2 (si présent)
                 let rankNumber = '';
@@ -60,20 +66,23 @@ function formatBestTraders(traders, params) {
                     }
                 }
                 
-                // Formatage du profit pour le token spécifique
-                const profitChangeDisplay = profit_change !== undefined && profit_change !== null ? 
-                    `Token PnL%: ${formatNumber(profit_change, 0)}%` : 'Token PnL%: N/A%';
+                // Formatage du PnL total avec formatNumber
+                let totalPnLDisplay = 'PnL: N/A';
+                if (total_pnl_percent !== undefined && total_pnl_percent !== null) {
+                    const sign = total_pnl_percent >= 0 ? '+' : '';
+                    totalPnLDisplay = `PnL: ${sign}${formatNumber(total_pnl_percent, 2)}%`;
+                }
 
                 let formattedString = `${index + 1}. <a href="https://solscan.io/account/${wallet}">${truncatedWallet}</a> ${portfolioEmoji} <a href="https://gmgn.ai/sol/address/${wallet}">gmgn</a>/<a href="https://app.cielo.finance/profile/${wallet}/pnl/tokens">cielo</a>\n`;
                 
-                // Nouvelle ligne pour le rank et le PnL
-                if (rankNumber || profitChangeDisplay) {
-                    formattedString += `├ 🪙 ${rankNumber && profitChangeDisplay !== 'Token PnL%: N/A' ? '' : ''}${profitChangeDisplay}\n`;
+                // Ligne uniquement pour le PnL (sans rank)
+                if (totalPnLDisplay !== 'PnL: N/A') {
+                    formattedString += `├ ${tokenEmoji} ${totalPnLDisplay}\n`;
                 }
                 
                 formattedString += `├ 💼 Port: $${formatNumber(total_value, 0)} (SOL: ${sol_balance ? formatNumber(sol_balance, 2) : 'N/A'})\n`;
-                formattedString += `├ 💰 PnL (30d): $${formatNumber(realized_profit_30d, 0)} 📈 uPnL: $${unrealized_profit ? formatNumber(unrealized_profit, 0) : 'N/A'}\n`;
-                formattedString += `└ 📊 Winrate (30d): ${formatNumber(winratePercentage)}%`;
+                formattedString += `├ 💰 P/L (30d): $${formatNumber(realized_profit_30d, 0)} 📈 uP/L: $${unrealized_profit ? formatNumber(unrealized_profit, 0) : 'N/A'}\n`;
+                formattedString += `└ 📊 Winrate (30d): ${winratePercentage}%`;
 
                 return formattedString;
             } catch (error) {
