@@ -2,7 +2,7 @@
 const { getSolanaApi } = require('../integrations/solanaApi');
 const definedApi = require('../integrations/definedApi');
 const dexscreenerApi = require('../integrations/dexScreenerApi');
-const pumpfunApi = require('../integrations/pumpfunApi'); // Importation de l'API PumpFun
+const pumpfunApi = require('../integrations/pumpfunApi'); 
 const { getTopHolders } = require('../tools/getHolders');
 const BigNumber = require('bignumber.js');
 const logger = require('../utils/logger');
