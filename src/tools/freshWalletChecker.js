@@ -50,4 +50,4 @@ async function isFreshWallet(address, targetTxHash, mainContext, subContext) {
 module.exports = {
     isFreshWallet,
     FRESH_WALLET_THRESHOLD
-};
+}; 

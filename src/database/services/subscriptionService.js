@@ -78,45 +78,69 @@ class SubscriptionService {
         }
     }
 
-    static async createOrUpdateGroupSubscription(msg, groupName, paymentId, transactionHashes = {}) {
-        const database = await getDatabase();
-        const collection = database.collection("group_subscriptions");
-        const chatId = msg.chat.id.toString();
-        const adminUserId = msg.from.id.toString();
-    
-        logger.debug('Creating/Updating group subscription with data:', { 
-            chatId, 
-            groupName, 
-            adminUserId, 
-            username: msg.from.username 
-        });
-    
+    static async createOrUpdateGroupSubscription(msg, groupName, paymentId, transactionData, customExpiryDate = null) {
         try {
-            const now = new Date();
+            const collection = await this.getGroupCollection();
+            const chatId = String(msg.chat.id);
+            const userId = String(msg.from.id);
+            const username = msg.from.username || 'unknown';
+            
+            // Récupérer l'abonnement existant ou créer un nouveau
             const existingSubscription = await collection.findOne({ chatId });
-    
-            // Données communes pour création/mise à jour
-            const subscriptionData = {
-                chatId,
-                groupName,
-                adminUserId,  // Ajouté
-                paidByUser: {
-                    userId: adminUserId,
-                    username: (msg.from.username || '').toLowerCase()
-                },
-                paymentId,
-                amount: SUBSCRIPTION_TYPES.GROUP.price,
-                transactionHashes,
-                now
-            };
-    
-            if (existingSubscription) {
-                return this.updateExistingGroupSubscription(collection, existingSubscription, subscriptionData);
+            
+            // Gérer la date d'expiration
+            let expiresAt;
+            
+            if (customExpiryDate) {
+                // Utiliser la date d'expiration personnalisée si fournie (cas d'admin)
+                expiresAt = new Date(customExpiryDate);
+            } else if (existingSubscription && existingSubscription.expiresAt && new Date(existingSubscription.expiresAt) > new Date()) {
+                // Prolonger un abonnement existant d'un mois
+                expiresAt = new Date(existingSubscription.expiresAt);
+                expiresAt.setMonth(expiresAt.getMonth() + 1);
+            } else {
+                // Nouvel abonnement ou abonnement expiré (1 mois à partir de maintenant)
+                expiresAt = new Date();
+                expiresAt.setMonth(expiresAt.getMonth() + 1);
             }
-    
-            return this.createNewGroupSubscription(collection, subscriptionData);
+            
+            // Préparer l'entrée de l'historique de paiement
+            const paymentEntry = {
+                paymentId,
+                paymentDate: new Date(),
+                paidByUserId: userId,
+                paidByUsername: username,
+                duration: customExpiryDate ? `Admin grant until ${expiresAt.toLocaleDateString()}` : '1 month',
+                amount: 0, // Montant symbolique pour les octrois administratifs
+                ...transactionData
+            };
+            
+            // Mettre à jour ou créer l'abonnement
+            const result = await collection.findOneAndUpdate(
+                { chatId },
+                {
+                    $set: {
+                        chatId,
+                        groupName,
+                        expiresAt,
+                        lastUpdated: new Date(),
+                        active: true
+                    },
+                    $push: { paymentHistory: paymentEntry }
+                },
+                { upsert: true, returnDocument: 'after' }
+            );
+            
+            logger.info(`Group subscription updated for ${chatId}`, {
+                groupName,
+                expiresAt,
+                paymentId,
+                isAdmin: !!customExpiryDate
+            });
+            
+            return result.value;
         } catch (error) {
-            logger.error(`Error with group subscription for ${chatId}:`, error);
+            logger.error(`Error creating/updating group subscription for ${msg.chat.id}:`, error);
             throw error;
         }
     }
