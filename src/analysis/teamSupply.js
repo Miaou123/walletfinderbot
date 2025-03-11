@@ -214,15 +214,33 @@ async function isTeamBot(address, tokenAddress, mainContext) {
 async function isFreshWallet(address, mainContext, subContext) {
     try {
         const solanaApi = getSolanaApi();
-        const signatures = await solanaApi.getSignaturesForAddress(
+        
+        // Premier appel pour vérifier si le nombre de transactions est <= au seuil
+        const initialSignatures = await solanaApi.getSignaturesForAddress(
             address, 
-            { limit: FRESH_WALLET_THRESHOLD },
+            { limit: FRESH_WALLET_THRESHOLD + 1 }, // +1 pour vérifier si on dépasse le seuil
             mainContext,
             subContext
         );
-        return signatures.length <= FRESH_WALLET_THRESHOLD;
+        
+        const transactionCount = initialSignatures.length;
+        const isFresh = transactionCount < FRESH_WALLET_THRESHOLD;
+        
+        logger.debug(`Fresh wallet check for ${address}: found ${transactionCount} transactions, isFresh: ${isFresh}`, {
+            mainContext,
+            subContext,
+            address,
+            transactionCount,
+            threshold: FRESH_WALLET_THRESHOLD
+        });
+        
+        return isFresh;
     } catch (error) {
-        logger.error(`Error checking if ${address} is a fresh wallet:`, error);
+        logger.error(`Error checking if ${address} is a fresh wallet:`, error, {
+            mainContext,
+            subContext,
+            address
+        });
         return false;
     }
 }
