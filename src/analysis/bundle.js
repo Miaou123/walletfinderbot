@@ -258,31 +258,46 @@ class UnifiedBundleAnalyzer {
         logger.debug(`percentageBundled (calculated): ${percentageBundled}`);
 
         const allBundles = await Promise.all(filteredBundles.map(async (bundle, index) => {
-            const holdingAmounts = await Promise.all(
-                Array.from(bundle.uniqueWallets).map(async (wallet) => {
-                    const tokenAccounts = await getSolanaApi().getTokenAccountsByOwner(wallet, address);
-                    const balances = await Promise.all(
-                        tokenAccounts.map(async (account) => {
-                            return await getSolanaApi().getTokenAccountBalance(account.pubkey, { commitment: 'confirmed' });
-                        })
-                    );
-                    return balances.reduce((sum, balance) => {
-                        if (balance && balance.amount) {
-                            return sum + BigInt(balance.amount);
+            try {
+                const holdingAmounts = await Promise.all(
+                    Array.from(bundle.uniqueWallets).map(async (wallet) => {
+                        try {
+                            // Get token accounts with parsed data that includes balances
+                            const tokenAccounts = await getSolanaApi().getTokenAccountsByOwner(wallet, address);
+                            
+                            // Sum up balances directly from the tokenAccount data
+                            return tokenAccounts.reduce((sum, account) => {
+                                // Extract amount from parsed account data
+                                const amount = account.account?.data?.parsed?.info?.tokenAmount?.amount;
+                                if (amount) {
+                                    return sum + BigInt(amount);
+                                }
+                                return sum;
+                            }, BigInt(0));
+                        } catch (error) {
+                            logger.warn(`Error processing wallet ${wallet}: ${error.message}`);
+                            return BigInt(0);
                         }
-                        return sum;
-                    }, BigInt(0));
-                })
-            );
-
-            const totalHolding = holdingAmounts.reduce((sum, amount) => sum + amount, BigInt(0));
-            const totalHoldingNumber = Number(totalHolding) / Math.pow(10, tokenInfo.decimals);
-
-            return {
-                ...bundle,
-                holdingAmount: totalHoldingNumber,
-                holdingPercentage: (totalHoldingNumber / totalSupply) * 100
-            };
+                    })
+                );
+        
+                const totalHolding = holdingAmounts.reduce((sum, amount) => sum + amount, BigInt(0));
+                const totalHoldingNumber = Number(totalHolding) / Math.pow(10, tokenInfo.decimals);
+        
+                return {
+                    ...bundle,
+                    holdingAmount: totalHoldingNumber,
+                    holdingPercentage: (totalHoldingNumber / totalSupply) * 100
+                };
+            } catch (error) {
+                logger.error(`Error processing bundle ${index}: ${error.message}`);
+                return {
+                    ...bundle,
+                    holdingAmount: 0,
+                    holdingPercentage: 0,
+                    error: error.message
+                };
+            }
         }));
 
         const totalHoldingAmount = allBundles.reduce((sum, bundle) => sum + bundle.holdingAmount, 0);
@@ -448,17 +463,25 @@ class UnifiedBundleAnalyzer {
     async calculateTeamHoldings(teamWallets, tokenAddress, tokenDecimals) {
         const solanaApi = getSolanaApi();
         let totalHoldingAmount = 0;
-
+    
         for (const wallet of teamWallets) {
-            const tokenAccounts = await solanaApi.getTokenAccountsByOwner(wallet, tokenAddress);
-            for (const account of tokenAccounts) {
-                const balance = await solanaApi.getTokenAccountBalance(account.pubkey, { commitment: 'confirmed' });
-                if (balance && balance.amount) {
-                    totalHoldingAmount += Number(balance.amount) / Math.pow(10, tokenDecimals);
+            try {
+                // Get token accounts with parsed data that includes balances
+                const tokenAccounts = await solanaApi.getTokenAccountsByOwner(wallet, tokenAddress);
+                
+                // Sum up balances directly from the account data
+                for (const account of tokenAccounts) {
+                    const amount = account.account?.data?.parsed?.info?.tokenAmount?.amount;
+                    if (amount) {
+                        totalHoldingAmount += Number(amount) / Math.pow(10, tokenDecimals);
+                    }
                 }
+            } catch (error) {
+                logger.warn(`Error getting holdings for team wallet ${wallet}: ${error.message}`);
+                // Continue with next wallet
             }
         }
-
+    
         return { totalHoldingAmount };
     }
 }

@@ -6,19 +6,19 @@ const logger = require('../../utils/logger');
 class HeliusRateLimiter {
   constructor() {
     this.rpcLimiter = new Bottleneck({
-      reservoir: 500,
-      reservoirRefreshAmount: 500,
-      reservoirRefreshInterval: 1000,
-      maxConcurrent: 200,
-      minTime: 2,
+      reservoir: 50,            // 50 requests allowed
+      reservoirRefreshAmount: 50, // Replenish 50 permits
+      reservoirRefreshInterval: 1000, // Every 1 second (1000ms)
+      maxConcurrent: 10,        // Only 10 requests in parallel
+      minTime: 20               // Minimum 20ms between requests
     });
-
+    
     this.apiLimiter = new Bottleneck({
-      reservoir: 100,
-      reservoirRefreshAmount: 100,
-      reservoirRefreshInterval: 1000,
-      maxConcurrent: 50,
-      minTime: 10,
+      reservoir: 10,            // 10 requests allowed 
+      reservoirRefreshAmount: 10, // Replenish 10 permits
+      reservoirRefreshInterval: 1000, // Every 1 second (1000ms)
+      maxConcurrent: 5,         // Only 5 requests in parallel 
+      minTime: 100              // Minimum 100ms between requests
     });
 
     this.requestQueue = {
@@ -101,23 +101,23 @@ class HeliusRateLimiter {
     }
   }
 
-  async executeRequest(request) {
+  async executeRequest(request, attempt = 1) {
     const { config, requestId, context } = request;
+    const maxAttempts = 5;
     const startTime = Date.now();
     this.stats.totalRequests++;
-
+  
     try {
-      
       const response = await axios({
         ...config,
         timeout: config.timeout || this.defaultTimeout
       });
-
+  
       if (!response || !response.data) {
         this.stats.nullResponseErrors++;
         return null;
       }
-
+  
       if (this.isHeliusError(response.data)) {
         if (this.isLongTermStorageError(response.data.error)) {
           this.stats.longTermStorageErrors++;
@@ -126,10 +126,18 @@ class HeliusRateLimiter {
         this.stats.failedRequests++;
         return null;
       }
-
+  
       return response;
-
+  
     } catch (error) {
+      // Check if this is a rate limit error (429)
+      if (error.response && error.response.status === 429 && attempt < maxAttempts) {
+        const delay = Math.min(Math.pow(2, attempt) * 1000 + Math.random() * 1000, 30000);
+        logger.warn(`Rate limit hit. Attempt ${attempt}/${maxAttempts}. Waiting ${Math.round(delay/1000)}s before retry.`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+        return this.executeRequest(request, attempt + 1);
+      }
+      
       if (error.code === 'ECONNABORTED') {
         this.stats.timeoutRequests++;
       }
@@ -138,7 +146,7 @@ class HeliusRateLimiter {
       return null;
     }
   }
-
+  
   isHeliusError(response) {
     return response && response.jsonrpc === '2.0' && response.error;
   }

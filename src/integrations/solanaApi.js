@@ -254,10 +254,11 @@ class SolanaApi {
     }
 
     try {
+        // Use jsonParsed encoding to get balance information directly
         const result = await this.callHelius('getTokenAccountsByOwner', [
             validWalletAddress,
             { mint: validTokenAddress },
-            { encoding: 'jsonParsed' }
+            { encoding: 'jsonParsed', commitment: 'confirmed' }
         ], 'rpc', mainContext, subContext);
 
         if (!result || !Array.isArray(result.value)) {
@@ -265,7 +266,17 @@ class SolanaApi {
             return [];
         }
 
-        return result.value;
+        // Enhance the response with token amount info to save additional API calls
+        const enhancedAccounts = result.value.map(account => {
+            // Extract token amount directly from the parsed data
+            const tokenAmount = account.account?.data?.parsed?.info?.tokenAmount || null;
+            return {
+                ...account,
+                tokenAmount // Include token amount directly
+            };
+        });
+
+        return enhancedAccounts;
     } catch (error) {
         console.error(`Error in getTokenAccountsByOwner for wallet ${validWalletAddress}:`, error);
         return [];
