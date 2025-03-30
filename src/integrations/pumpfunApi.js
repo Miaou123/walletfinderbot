@@ -9,7 +9,7 @@ puppeteer.use(StealthPlugin());
 
 class PumpFunApi {
     constructor() {
-        this.baseUrl = 'https://frontend-api-v2.pump.fun';
+        this.baseUrl = 'https://frontend-api-v3.pump.fun';
         this.browser = null;
     }
 
