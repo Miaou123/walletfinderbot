@@ -102,10 +102,11 @@ const validateSolanaAddress = (address) => {
         throw new Error(`Invalid input. Please enter a percentage between ${minPercentage}% and ${maxPercentage}%`);
     }
 
-    const minAmount = BigInt(Math.floor((totalSupply * minPercentage / 100) * Math.pow(10, decimals)));
+    // Fixed line: use the parsed 'value' instead of 'minPercentage'
+    const minAmount = BigInt(Math.floor((totalSupply * value / 100) * Math.pow(10, decimals)));
  
-    return { minAmount, minPercentage };
- };
+    return { minAmount, minPercentage: value };  // Also return the correct percentage
+};
  
  module.exports = {
     validateSolanaAddress,
