@@ -6,19 +6,19 @@ const logger = require('../../utils/logger');
 class HeliusRateLimiter {
   constructor() {
     this.rpcLimiter = new Bottleneck({
-      reservoir: 50,            // 50 requests allowed
+      reservoir: 30,            // 50 requests allowed
       reservoirRefreshAmount: 50, // Replenish 50 permits
       reservoirRefreshInterval: 1000, // Every 1 second (1000ms)
-      maxConcurrent: 10,        // Only 10 requests in parallel
-      minTime: 20               // Minimum 20ms between requests
+      maxConcurrent: 5,        // Only 10 requests in parallel
+      minTime: 50            // Minimum 20ms between requests
     });
     
     this.apiLimiter = new Bottleneck({
-      reservoir: 10,            // 10 requests allowed 
+      reservoir: 8,            // 10 requests allowed 
       reservoirRefreshAmount: 10, // Replenish 10 permits
       reservoirRefreshInterval: 1000, // Every 1 second (1000ms)
-      maxConcurrent: 5,         // Only 5 requests in parallel 
-      minTime: 100              // Minimum 100ms between requests
+      maxConcurrent: 3,         // Only 5 requests in parallel 
+      minTime: 200              // Minimum 100ms between requests
     });
 
     this.requestQueue = {
@@ -32,12 +32,13 @@ class HeliusRateLimiter {
       timeoutRequests: 0,
       nullResponseErrors: 0,
       longTermStorageErrors: 0,
+      retrySuccesses: 0, 
     };
 
-    this.defaultTimeout = 15000;
+    this.defaultTimeout = 45000;
 
     // Démarrer le traitement automatique des batchs
-    setInterval(() => this.processBatches(), 50);
+    setInterval(() => this.processBatches(), 100);
   }
 
   getRequestKey(config) {
@@ -76,7 +77,7 @@ class HeliusRateLimiter {
           continue;
         }
 
-        const batch = requests.splice(0, 50);
+        const batch = requests.splice(0, 20);
         this.processBatch(batch, apiType);
       }
     }
@@ -108,9 +109,12 @@ class HeliusRateLimiter {
     this.stats.totalRequests++;
   
     try {
+      // Augmenter progressivement le timeout en fonction du nombre de tentatives
+      const dynamicTimeout = (config.timeout || this.defaultTimeout) * Math.min(attempt, 2);
+      
       const response = await axios({
         ...config,
-        timeout: config.timeout || this.defaultTimeout
+        timeout: dynamicTimeout
       });
   
       if (!response || !response.data) {
@@ -127,13 +131,26 @@ class HeliusRateLimiter {
         return null;
       }
   
+      // Si c'était une retry réussie, comptabiliser
+      if (attempt > 1) {
+        this.stats.retrySuccesses++;
+      }
+      
       return response;
   
     } catch (error) {
-      // Check if this is a rate limit error (429)
-      if (error.response && error.response.status === 429 && attempt < maxAttempts) {
-        const delay = Math.min(Math.pow(2, attempt) * 1000 + Math.random() * 1000, 30000);
-        logger.warn(`Rate limit hit. Attempt ${attempt}/${maxAttempts}. Waiting ${Math.round(delay/1000)}s before retry.`);
+      // Check if this is a rate limit error (429) or a timeout
+      const isTimeout = error.code === 'ECONNABORTED' || error.message.includes('timeout');
+      
+      if ((error.response && error.response.status === 429 || isTimeout) && attempt < maxAttempts) {
+        // Backoff exponentiel avec un peu de jitter pour réduire les pics de charge
+        const baseDelay = Math.pow(2, attempt) * 1000;
+        const jitter = Math.random() * 1000;
+        const delay = Math.min(baseDelay + jitter, 30000);
+        
+        const errorType = isTimeout ? "timeout" : "rate limit";
+        logger.warn(`${errorType} hit. Attempt ${attempt}/${maxAttempts}. Waiting ${Math.round(delay/1000)}s before retry.`);
+        
         await new Promise(resolve => setTimeout(resolve, delay));
         return this.executeRequest(request, attempt + 1);
       }
@@ -141,8 +158,9 @@ class HeliusRateLimiter {
       if (error.code === 'ECONNABORTED') {
         this.stats.timeoutRequests++;
       }
+      
       this.stats.failedRequests++;
-      logger.error(`[${requestId}] Request failed:`, error);
+      logger.error(`[${requestId}] Request failed (attempt ${attempt}/${maxAttempts}):`, error.message);
       return null;
     }
   }
@@ -174,6 +192,7 @@ class HeliusRateLimiter {
       timeoutRequests: 0,
       nullResponseErrors: 0,
       longTermStorageErrors: 0,
+      retrySuccesses: 0,
     };
   }
 }

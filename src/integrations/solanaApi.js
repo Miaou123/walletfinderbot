@@ -96,17 +96,19 @@ class SolanaApi {
     }
   }
 
-  async getAssetsByOwner(ownerAddress, limit = 1000, options = {}, mainContext = 'default', subContext = null) {
-    const result = await this.callHelius('getAssetsByOwner', {
+  async getAssetsByOwner(ownerAddress, limit = 100, options = {}, mainContext = 'default', subContext = null) {
+    const params = {
       ownerAddress,
       limit,
-      after: options.after || null,
+      ...(options.after && { after: options.after }),
       displayOptions: {
         showFungible: options.showFungible || false,
         showNativeBalance: options.showNativeBalance || false,
         showZeroBalance: options.showZeroBalance || false
       }
-    }, 'api', mainContext, subContext);
+    };
+    
+    const result = await this.callHelius('getAssetsByOwner', params, 'api', mainContext, subContext);
   
     if (!result || !Array.isArray(result.items)) {
       return { items: [], total: 0, nativeBalance: 0 };
