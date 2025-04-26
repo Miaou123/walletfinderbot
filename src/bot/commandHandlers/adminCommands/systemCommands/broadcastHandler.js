@@ -1,19 +1,8 @@
 // src/bot/commandHandlers/adminCommands/systemCommands/broadcastHandler.js
 
-const fs = require('fs');
-const path = require('path');
 const BaseAdminHandler = require('../baseAdminHandler');
 const logger = require('../../../../utils/logger');
 const { UserService } = require('../../../../database');
-
-// On remonte 4 fois pour revenir à src/
-const allUsersPath = path.join(__dirname, '../../../../data/all_users.json');
-logger.info("Reading JSON from:", allUsersPath);
-
-const rawData = fs.readFileSync(allUsersPath, 'utf-8');
-logger.info("Raw file content:", rawData); // Ajout
-const jsonUsersFromRequire = JSON.parse(rawData);
-logger.info('JSON content:', jsonUsersFromRequire);
 
 class BroadcastHandler extends BaseAdminHandler {
     constructor(accessControl, bot) {
@@ -23,6 +12,7 @@ class BroadcastHandler extends BaseAdminHandler {
     async handle(msg, args) {
         const chatId = String(msg.chat.id);
         const userId = msg.from.id;
+        const adminUsername = msg.from.username;
 
         try {
             if (!await this.checkAdmin(userId)) {
@@ -40,7 +30,20 @@ class BroadcastHandler extends BaseAdminHandler {
                 return;
             }
 
-            const { successCount, failCount } = await this.broadcastMessage(fullMessage);
+            const { successCount, failCount, debugInfo } = await this.broadcastMessage(fullMessage, adminUsername);
+            
+            // Send detailed debug info only to admin
+            if (debugInfo.adminStatus) {
+                await this.bot.sendMessage(
+                    chatId,
+                    `🔍 Admin Debug Info:\n` +
+                    `Admin username: ${adminUsername}\n` +
+                    `Admin chatId: ${debugInfo.adminStatus.adminChatId}\n` +
+                    `Found in DB: ${debugInfo.adminStatus.foundInDB}\n` +
+                    `Sent to admin: ${debugInfo.adminStatus.sentToAdmin}`
+                );
+            }
+
             await this.bot.sendMessage(
                 chatId,
                 `📢 Broadcast Results:\n` +
@@ -56,18 +59,20 @@ class BroadcastHandler extends BaseAdminHandler {
         }
     }
 
-    async broadcastMessage(message) {
+    async broadcastMessage(message, adminUsername) {
         logger.info('Starting broadcast');
 
         let successCount = 0;
         let failCount = 0;
-        // Set pour éviter double envoi pour le même username (en minuscule)
-        const broadcastedUsernames = new Set();
+        const debugInfo = {
+            adminStatus: {
+                foundInDB: false,
+                sentToAdmin: false,
+                adminChatId: null
+            }
+        };
 
         try {
-            //
-            // 1) Diffusion via la base de données
-            //
             const collection = await UserService.getCollection();
             const users = await collection.find({}, { projection: { chatId: 1, username: 1 } }).toArray();
 
@@ -75,94 +80,47 @@ class BroadcastHandler extends BaseAdminHandler {
 
             for (const user of users) {
                 const chatIdNum = Number(user.chatId);
-                // Normaliser le username en minuscule
                 const normalizedUsername = user.username ? user.username.toLowerCase() : null;
 
-                // Vérifier si l'utilisateur a un chatId valide
-                if (chatIdNum > 0 && normalizedUsername && !broadcastedUsernames.has(normalizedUsername)) {
-                    try {
-                        logger.info(`Attempting to send message to user ${user.username} (${chatIdNum})`);
+                // Check if this is the admin
+                if (normalizedUsername === adminUsername?.toLowerCase()) {
+                    debugInfo.adminStatus.foundInDB = true;
+                    debugInfo.adminStatus.adminChatId = chatIdNum;
+                    logger.info(`Found admin in DB: ${user.username} with chatId: ${chatIdNum}`);
+                }
 
+                if (chatIdNum > 0 && normalizedUsername) {
+                    try {
                         await this.bot.sendMessage(chatIdNum, message, {
                             parse_mode: 'HTML',
                             disable_web_page_preview: true
                         });
 
                         successCount++;
-                        logger.info(`Successfully sent broadcast to user ${user.username}`);
+                        logger.info(`Successfully sent broadcast to user ${user.username} (${chatIdNum})`);
 
-                        // Ajouter au set pour éviter un second envoi
-                        broadcastedUsernames.add(normalizedUsername);
+                        if (normalizedUsername === adminUsername?.toLowerCase()) {
+                            debugInfo.adminStatus.sentToAdmin = true;
+                        }
 
                         // Délai pour éviter les limites de rate de Telegram
                         await new Promise(resolve => setTimeout(resolve, 100));
                     } catch (error) {
                         failCount++;
                         logger.error(
-                            `Failed to send broadcast to user ${user.username}:`,
+                            `Failed to send broadcast to user ${user.username} (${chatIdNum}):`,
                             error.message || error
                         );
                     }
                 } else {
-                    logger.info(`Skipping user ${user.username} - already broadcasted, no username, or invalid chat ID`);
+                    logger.info(`Skipping user ${user.username} - invalid chatId or no username`);
                 }
-            }
-
-            //
-            // 2) Diffusion via l'ancien fichier JSON (data/all_users.json)
-            //
-            let jsonUsers;
-            try {
-                const rawData = fs.readFileSync(allUsersPath, 'utf-8');
-                jsonUsers = JSON.parse(rawData);
-            } catch (error) {
-                logger.error('Failed to read or parse data/all_users.json:', error.message || error);
-                jsonUsers = []; // On continue quand même, même si le fichier JSON n'est pas valide
-            }
-
-            if (Array.isArray(jsonUsers)) {
-                logger.info(`Retrieved ${jsonUsers.length} users from JSON for broadcasting`);
-
-                for (const [_, userObj] of jsonUsers) {
-                    if (!userObj) continue;
-                    
-                    const chatIdNum = Number(userObj.chatId);
-                    // Normaliser le username en minuscule
-                    const normalizedUsername = userObj.username ? userObj.username.toLowerCase() : null;
-
-                    if (chatIdNum > 0 && normalizedUsername && !broadcastedUsernames.has(normalizedUsername)) {
-                        try {
-                            logger.info(`Attempting to send message to user ${userObj.username} (${chatIdNum})`);
-
-                            await this.bot.sendMessage(chatIdNum, message, {
-                                parse_mode: 'HTML',
-                                disable_web_page_preview: true
-                            });
-
-                            successCount++;
-                            logger.info(`Successfully sent broadcast to user ${userObj.username}`);
-
-                            broadcastedUsernames.add(normalizedUsername);
-
-                            // Délai pour éviter les limites de rate de Telegram
-                            await new Promise(resolve => setTimeout(resolve, 100));
-                        } catch (error) {
-                            failCount++;
-                            logger.error(
-                                `Failed to send broadcast to user ${userObj.username}:`,
-                                error.message || error
-                            );
-                        }
-                    } else {
-                        logger.info(`Skipping user from JSON ${userObj.username} - already broadcasted, no username, or invalid chat ID`);
-                    }
-                }
-            } else {
-                logger.warn('JSON users data is not an array. Skipping JSON broadcast...');
             }
 
             logger.info(`Broadcast complete. Successful: ${successCount}, Failed: ${failCount}`);
-            return { successCount, failCount };
+            logger.info(`Admin status: ${JSON.stringify(debugInfo.adminStatus, null, 2)}`);
+            
+            return { successCount, failCount, debugInfo };
         } catch (error) {
             logger.error('Error retrieving or sending broadcast:', error);
             throw error;
