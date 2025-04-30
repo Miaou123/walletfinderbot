@@ -48,6 +48,51 @@ class StateManager {
   getMessage(chatId, messageId) {
     return this.messages.get(`${chatId}_${messageId}`);
   }
+  
+  // Get all state keys for debugging
+  getAllKeys() {
+    return {
+      userStates: Array.from(this.userStates.keys()),
+      trackingData: Array.from(this.trackingData.keys()),
+      messages: Array.from(this.messages.keys())
+    };
+  }
+  
+  // Comprehensive cleanup of all states related to a chat
+  cleanAllChatStates(chatId) {
+    if (!chatId) return 0;
+    
+    const chatIdStr = chatId.toString();
+    let count = 0;
+    
+    // Clean userStates with this chatId
+    for (const [key, state] of this.userStates.entries()) {
+      if (key === `grp_${chatIdStr}` || 
+          state?.chatId === chatIdStr || 
+          state?.action === 'awaiting_custom_threshold') {
+        this.userStates.delete(key);
+        count++;
+      }
+    }
+    
+    // Clean trackingData with this chatId
+    for (const key of this.trackingData.keys()) {
+      if (key.startsWith(`${chatIdStr}_`)) {
+        this.trackingData.delete(key);
+        count++;
+      }
+    }
+    
+    // Clean messages with this chatId
+    for (const key of this.messages.keys()) {
+      if (key.startsWith(`${chatIdStr}_`)) {
+        this.messages.delete(key);
+        count++;
+      }
+    }
+    
+    return count;
+  }
 }
 
 module.exports = new StateManager();

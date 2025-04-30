@@ -281,6 +281,21 @@ class MessageHandler {
             const userId = msg.from.id;
             const chatId = msg.chat.id;
             const isGroup = msg.chat.type === 'group' || msg.chat.type === 'supergroup';
+            const inputText = msg.text?.trim()?.toLowerCase() || '';
+            
+            // Check for explicit cancellation words
+            const isCancelCommand = ['cancel', 'stop', '/cancel', '/stop'].includes(inputText);
+            if (isCancelCommand) {
+                // Clear all states for this chat if cancel command is detected
+                if (typeof this.stateManager.cleanAllChatStates === 'function') {
+                    const count = this.stateManager.cleanAllChatStates(chatId);
+                    if (count > 0) {
+                        this.logger.debug(`Cancelled operation via text command. Cleaned ${count} states`);
+                        await this.bot.sendMessage(chatId, "Operation cancelled.", { message_thread_id: messageThreadId });
+                        return;
+                    }
+                }
+            }
             
             // Check individual user state
             let userState = this.stateManager.getUserState(userId);
@@ -324,8 +339,10 @@ class MessageHandler {
                 this.logger.debug('Handling custom threshold input', {
                     isGroup,
                     fromUser: msg.from.username || userId,
-                    userState
+                    userState,
+                    text: inputText
                 });
+                
                 await this.commandHandlersInstance.trackingActionHandler.handleCustomThresholdInput(this.bot, msg);
                 return;
             }

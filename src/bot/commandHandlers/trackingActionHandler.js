@@ -83,6 +83,49 @@ async handleCallback(bot, query) {
       }
 
       if (action === 'stop') {
+        // First check if this is a tracking setup cancellation (no active tracker)
+        const activeTrackers = this.supplyTracker.getTrackedSuppliesByUser(chatId);
+        const hasActiveTracker = activeTrackers.some(t => t.tokenAddress === tokenAddress);
+        
+        if (!hasActiveTracker) {
+          logger.debug('Canceling tracking setup process (no active tracker)', {
+            chatId,
+            tokenAddress
+          });
+          
+          // Clean up any potential custom threshold states
+          const groupKey = `grp_${chatId}`;
+          stateManager.deleteUserState(groupKey);
+          
+          // If enhanced stateManager is available, do a comprehensive cleanup
+          if (typeof stateManager.cleanAllChatStates === 'function') {
+            stateManager.cleanAllChatStates(chatId);
+          } else {
+            this.cleanupAllChatStates?.(chatId);
+          }
+          
+          // Update the message to show cancellation
+          try {
+            await bot.editMessageText(
+              "Tracking setup canceled.", 
+              {
+                chat_id: chatId,
+                message_id: query.message.message_id
+              }
+            );
+          } catch (error) {
+            logger.error('Error updating message for cancellation:', error);
+            // Try to send a new message if editing fails
+            await bot.sendMessage(chatId, "Tracking setup canceled.");
+          }
+          
+          await bot.answerCallbackQuery(query.id, { 
+            text: "Tracking setup canceled." 
+          });
+          return;
+        }
+        
+        // Otherwise, this is a normal tracking stop action
         await this.executeAction(action, bot, query, { tokenAddress });
         return;
       }
@@ -292,6 +335,9 @@ async handleCallback(bot, query) {
     if (!userState?.tokenAddress) {
         logger.debug('No valid state with token address');
         await bot.sendMessage(chatId, "Session expired. Please run the scan command again.");
+        
+        // Clean up any lingering states to prevent further processing
+        this.cleanupAllInputStates(chatId, userId);
         return;
     }
 
@@ -301,7 +347,10 @@ async handleCallback(bot, query) {
 
     if (isNaN(threshold) || threshold < 0.1 || threshold > 100) {
         logger.debug('Invalid threshold value:', thresholdInput);
-        await bot.sendMessage(chatId, "Invalid threshold. Please enter a number between 0.1 and 100.");
+        await bot.sendMessage(chatId, "Invalid input. Please enter a number between 0.1 and 100.");
+        
+        // Important: Clean up all states even for invalid input to stop listening
+        this.cleanupAllInputStates(chatId, userId);
         return;
     }
 
@@ -310,6 +359,9 @@ async handleCallback(bot, query) {
     if (!trackingInfo) {
         logger.debug('No tracking info found for token:', userState.tokenAddress);
         await bot.sendMessage(chatId, "Tracking information expired. Please run the scan command again.");
+        
+        // Clean up all states
+        this.cleanupAllInputStates(chatId, userId);
         return;
     }
 
@@ -328,30 +380,41 @@ async handleCallback(bot, query) {
     // Update the tracking message with new threshold
     await this.updateTrackingMessage(bot, chatId, trackingInfo);
     
-    // Clean up all states
-    if (isGroup) {
-      // Clean up group state
-      const groupStateKey = `grp_${chatId}`;
-      stateManager.deleteUserState(groupStateKey);
-      
-      // If this user was linked to group state, clean up their state too
-      if (userState.isRespondingToGroup) {
-        stateManager.deleteUserState(userId);
-      }
-      
-      // If there was a specific user recorded as responding, clean up their state too
-      if (groupState?.respondingUserId && groupState.respondingUserId !== userId) {
-        stateManager.deleteUserState(groupState.respondingUserId);
-      }
-    } else {
-      // Just clean up this user's state in private chat
-      stateManager.deleteUserState(userId);
-    }
+    // Clean up all states thoroughly to stop listening for further input
+    this.cleanupAllInputStates(chatId, userId);
     
     logger.debug('Threshold updated successfully:', {
       newThreshold: threshold,
       tokenAddress: trackingInfo.tokenAddress
     });
+  }
+  
+  // Helper method to thoroughly clean up all input-related states
+  cleanupAllInputStates(chatId, userId) {
+    logger.debug('Thoroughly cleaning up all input states', { chatId, userId });
+    
+    // Use enhanced cleanup if available
+    if (typeof stateManager.cleanAllChatStates === 'function') {
+      const count = stateManager.cleanAllChatStates(chatId);
+      logger.debug(`Cleaned up ${count} states with cleanAllChatStates`);
+    } else {
+      // Fallback to manual cleanup
+      // Clean up group state
+      const groupStateKey = `grp_${chatId}`;
+      stateManager.deleteUserState(groupStateKey);
+      
+      // Clean up user state
+      if (userId) {
+        stateManager.deleteUserState(userId);
+      }
+      
+      // Try to clean up all users in this group with awaiting_custom_threshold state
+      for (const [key, state] of stateManager.userStates.entries()) {
+        if (state?.action === 'awaiting_custom_threshold') {
+          stateManager.deleteUserState(key);
+        }
+      }
+    }
   }
 
  async handleStartTracking(bot, chatId, trackingInfo, threshold) {
@@ -366,6 +429,23 @@ async handleCallback(bot, query) {
    }
 
    try {
+     // First, clean up any lingering threshold input states to prevent errors
+     logger.debug('Cleaning up states before starting tracking', {
+       chatId, tokenAddress, trackType
+     });
+     
+     // Clean up group threshold state
+     const groupKey = `grp_${chatId}`;
+     stateManager.deleteUserState(groupKey);
+     
+     // Clean up linked user states if possible
+     if (typeof stateManager.cleanAllChatStates === 'function') {
+       stateManager.cleanAllChatStates(chatId);
+     } else if (typeof this.cleanupAllChatStates === 'function') {
+       this.cleanupAllChatStates(chatId);
+     }
+     
+     // Start tracking
      this.supplyTracker.startTracking(
        tokenAddress,
        chatId, 
@@ -377,6 +457,24 @@ async handleCallback(bot, query) {
        tokenInfo.decimals,
        trackType,
      );
+
+     // Force reset of user states
+     try {
+       // Find and clean up any user states related to this tracking
+       if (typeof stateManager.getAllKeys === 'function') {
+         const allUserKeys = stateManager.getAllKeys().userStates || [];
+         for (const key of allUserKeys) {
+           const state = stateManager.getUserState(key);
+           if (state?.tokenAddress === tokenAddress || 
+               state?.action === 'awaiting_custom_threshold') {
+             logger.debug(`Cleaning up user state for ${key} after tracking start`);
+             stateManager.deleteUserState(key);
+           }
+         }
+       }
+     } catch (error) {
+       logger.error('Error cleaning up user states after tracking start:', error);
+     }
 
      await bot.sendMessage(chatId,
        `Tracking started for ${tokenInfo.symbol} with ${threshold}% threshold. Use /tracker to manage active trackings.`
@@ -478,41 +576,22 @@ async handleCallback(bot, query) {
                     callback_data: `track:${ACTIONS.SET_CUSTOM}:${tokenAddress}` 
                 }
             ],
-            [{ 
-                text: "Start tracking", 
-                callback_data: `track:${ACTIONS.START}:${tokenAddress}:1` 
-            }]
+            [
+                { 
+                    text: "Start tracking", 
+                    callback_data: `track:${ACTIONS.START}:${tokenAddress}:1` 
+                },
+                {
+                    text: "❌ Cancel",
+                    callback_data: `track:${ACTIONS.STOP}:${tokenAddress}:1`
+                }
+            ]
         ]
     };
   }
 
-  async handleCustomThresholdInput(bot, msg) {
-    const chatId = msg.chat.id;
-    const userId = msg.from.id;
-    const userState = stateManager.getUserState(userId);
-
-    if (!userState?.tokenAddress) {
-        await bot.sendMessage(chatId, "Session expired. Please run the scan or team command again.");
-        return;
-    }
-
-    const trackingInfo = stateManager.getTrackingInfo(chatId, userState.tokenAddress);
-
-    const thresholdInput = msg.text.replace('%', '').trim();
-    const threshold = parseFloat(thresholdInput);
-
-    if (isNaN(threshold) || threshold < 0.1 || threshold > 100) {
-        await bot.sendMessage(chatId, "Invalid input. Please enter a number between 0.1 and 100.");
-        return;
-    }
-
-    trackingInfo.threshold = threshold;
-    trackingInfo.isCustomThreshold = true;  // Ajouter un flag pour le seuil personnalisé
-    stateManager.setTrackingInfo(chatId, userState.tokenAddress, trackingInfo);
-
-    await this.updateTrackingMessage(bot, chatId, trackingInfo);
-    stateManager.deleteUserState(userId);
-}
+  // NOTE: This is a duplicate method that is not being used
+  // The main implementation is above at line ~293
 
 createThresholdKeyboard(tokenAddress, threshold) {
   const isCustomThreshold = threshold !== 1;
@@ -528,10 +607,16 @@ createThresholdKeyboard(tokenAddress, threshold) {
                   callback_data: `track:${ACTIONS.SET_CUSTOM}:${tokenAddress}`
               }
           ],
-          [{ 
-              text: "Start tracking",
-              callback_data: `track:${ACTIONS.START}:${tokenAddress}:${threshold}`
-          }]
+          [
+              { 
+                  text: "Start tracking",
+                  callback_data: `track:${ACTIONS.START}:${tokenAddress}:${threshold}`
+              },
+              {
+                  text: "❌ Cancel",
+                  callback_data: `track:${ACTIONS.STOP}:${tokenAddress}:${threshold}`
+              }
+          ]
       ]
   };
 }
