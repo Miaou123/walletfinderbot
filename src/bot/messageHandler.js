@@ -286,9 +286,10 @@ class MessageHandler {
             // Check for explicit cancellation words
             const isCancelCommand = ['cancel', 'stop', '/cancel', '/stop'].includes(inputText);
             if (isCancelCommand) {
-                // Clear all states for this chat if cancel command is detected
+                // Clear input states for this chat if cancel command is detected
+                // But preserve tracking info
                 if (typeof this.stateManager.cleanAllChatStates === 'function') {
-                    const count = this.stateManager.cleanAllChatStates(chatId);
+                    const count = this.stateManager.cleanAllChatStates(chatId, { preserveTrackingInfo: true });
                     if (count > 0) {
                         this.logger.debug(`Cancelled operation via text command. Cleaned ${count} states`);
                         await this.bot.sendMessage(chatId, "Operation cancelled.", { message_thread_id: messageThreadId });

@@ -98,10 +98,11 @@ async handleCallback(bot, query) {
           stateManager.deleteUserState(groupKey);
           
           // If enhanced stateManager is available, do a comprehensive cleanup
+          // Here we want to preserve tracking info since we're just canceling the setup
           if (typeof stateManager.cleanAllChatStates === 'function') {
-            stateManager.cleanAllChatStates(chatId);
+            stateManager.cleanAllChatStates(chatId, { preserveTrackingInfo: true });
           } else {
-            this.cleanupAllChatStates?.(chatId);
+            this.cleanupAllInputStates?.(chatId);
           }
           
           // Update the message to show cancellation
@@ -390,31 +391,39 @@ async handleCallback(bot, query) {
   }
   
   // Helper method to thoroughly clean up all input-related states
+  // But preserve the tracking info for the token
   cleanupAllInputStates(chatId, userId) {
-    logger.debug('Thoroughly cleaning up all input states', { chatId, userId });
+    logger.debug('Cleaning up input states while preserving tracking info', { chatId, userId });
     
-    // Use enhanced cleanup if available
-    if (typeof stateManager.cleanAllChatStates === 'function') {
-      const count = stateManager.cleanAllChatStates(chatId);
-      logger.debug(`Cleaned up ${count} states with cleanAllChatStates`);
-    } else {
-      // Fallback to manual cleanup
-      // Clean up group state
-      const groupStateKey = `grp_${chatId}`;
+    // Only clean up user states related to awaiting input
+    // Don't clean up tracking info, which is needed for the custom % button
+    
+    // Clean up group state for input handling
+    const groupStateKey = `grp_${chatId}`;
+    const groupState = stateManager.getUserState(groupStateKey);
+    if (groupState && groupState.action === 'awaiting_custom_threshold') {
+      logger.debug('Deleting group awaiting_custom_threshold state', { groupStateKey });
       stateManager.deleteUserState(groupStateKey);
-      
-      // Clean up user state
-      if (userId) {
+    }
+    
+    // Clean up user state
+    if (userId) {
+      const userState = stateManager.getUserState(userId);
+      if (userState && userState.action === 'awaiting_custom_threshold') {
+        logger.debug('Deleting user awaiting_custom_threshold state', { userId });
         stateManager.deleteUserState(userId);
       }
-      
-      // Try to clean up all users in this group with awaiting_custom_threshold state
-      for (const [key, state] of stateManager.userStates.entries()) {
-        if (state?.action === 'awaiting_custom_threshold') {
-          stateManager.deleteUserState(key);
-        }
+    }
+    
+    // Try to clean up all users in this group with awaiting_custom_threshold state
+    for (const [key, state] of stateManager.userStates.entries()) {
+      if (state?.action === 'awaiting_custom_threshold') {
+        logger.debug('Deleting related awaiting_custom_threshold state', { key });
+        stateManager.deleteUserState(key);
       }
     }
+    
+    logger.debug('Completed cleaning input states while preserving tracking info');
   }
 
  async handleStartTracking(bot, chatId, trackingInfo, threshold) {
@@ -440,7 +449,9 @@ async handleCallback(bot, query) {
      
      // Clean up linked user states if possible
      if (typeof stateManager.cleanAllChatStates === 'function') {
-       stateManager.cleanAllChatStates(chatId);
+       // When starting tracking, we DO want to clean up everything
+       // including tracking data, as the supplyTracker will manage the tracking now
+       stateManager.cleanAllChatStates(chatId, { preserveTrackingInfo: false });
      } else if (typeof this.cleanupAllChatStates === 'function') {
        this.cleanupAllChatStates(chatId);
      }

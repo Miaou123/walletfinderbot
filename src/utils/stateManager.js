@@ -59,7 +59,8 @@ class StateManager {
   }
   
   // Comprehensive cleanup of all states related to a chat
-  cleanAllChatStates(chatId) {
+  // By default, we preserve tracking info to allow buttons to continue working
+  cleanAllChatStates(chatId, options = { preserveTrackingInfo: true }) {
     if (!chatId) return 0;
     
     const chatIdStr = chatId.toString();
@@ -75,11 +76,14 @@ class StateManager {
       }
     }
     
-    // Clean trackingData with this chatId
-    for (const key of this.trackingData.keys()) {
-      if (key.startsWith(`${chatIdStr}_`)) {
-        this.trackingData.delete(key);
-        count++;
+    // Only clean trackingData if preserveTrackingInfo is false
+    if (!options.preserveTrackingInfo) {
+      // Clean trackingData with this chatId
+      for (const key of this.trackingData.keys()) {
+        if (key.startsWith(`${chatIdStr}_`)) {
+          this.trackingData.delete(key);
+          count++;
+        }
       }
     }
     
