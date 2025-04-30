@@ -46,14 +46,12 @@ async handleCallback(bot, query) {
       const userId = query.from.id.toString();
       const isGroup = query.message.chat.type === 'group' || query.message.chat.type === 'supergroup';
 
-      logger.debug('TrackingActionHandler subscription check details:', {
+      logger.debug('TrackingActionHandler callback received:', {
           isGroup,
           chatId,
           userId,
-          accessControlExists: Boolean(this.accessControl),
-          subscriptionServiceExists: Boolean(this.accessControl.subscriptionService),
-          getUserSubscriptionExists: Boolean(this.accessControl.subscriptionService?.getUserSubscription),
-          getGroupSubscriptionExists: Boolean(this.accessControl.subscriptionService?.getGroupSubscription)
+          action,
+          tokenAddress
       });
 
       // Check subscription before any tracking action
@@ -66,7 +64,7 @@ async handleCallback(bot, query) {
           hasSubscription = userSub?.active === true && userSub.expiresAt > new Date();
       }
 
-      logger.debug('Final subscription check result:', {
+      logger.debug('Subscription check result:', {
           hasSubscription,
           isGroup,
           chatId,
@@ -94,14 +92,18 @@ async handleCallback(bot, query) {
           const trackType = action === 'team' ? 'team' : 'topHolders';
           let trackingInfo = stateManager.getTrackingInfo(chatId, tokenAddress);
           
-          logger.debug('Retrieved tracking info:', JSON.stringify(trackingInfo, null, 2));
+          logger.debug('Retrieved tracking info for initial action:', trackingInfo 
+              ? { trackType: trackingInfo.trackType, tokenSymbol: trackingInfo.tokenInfo?.symbol } 
+              : 'No tracking info found');
 
           if (!this.validateTrackingInfo(trackingInfo, tokenAddress)) {
-              logger.warn('Invalid tracking info detected');
+              logger.warn('Invalid tracking info detected for initial action');
               return await this.handleInvalidTracking(bot, query);
           }
 
           trackingInfo.trackType = trackType;
+          // Store the query user ID for later use in private chats
+          trackingInfo.queryFromId = userId;
           await this.handleTrackAction(bot, chatId, tokenAddress, trackingInfo);
       }
       // Actions de configuration et contrôle (sd, sc, st, stop)
@@ -109,9 +111,12 @@ async handleCallback(bot, query) {
           let trackingInfo = stateManager.getTrackingInfo(chatId, tokenAddress);
 
           if (!this.validateTrackingInfo(trackingInfo, tokenAddress)) {
+              logger.warn('Invalid tracking info detected for configuration action');
               return await this.handleInvalidTracking(bot, query);
           }
 
+          // Store the query user ID for later use in private chats
+          trackingInfo.queryFromId = userId;
           await this.executeAction(action, bot, query, trackingInfo);
       }
       
@@ -204,45 +209,149 @@ async handleCallback(bot, query) {
 
   async handleSetCustomThreshold(bot, chatId, trackingInfo) {
     // Cette fonction est appelée par le callback button
+    const isGroup = String(chatId).startsWith('-');
+    
     await bot.sendMessage(chatId, "Enter new supply change percentage (e.g., 2.5):");
-    stateManager.setUserState(chatId, {
-        action: 'awaiting_custom_threshold',
-        tokenAddress: trackingInfo.tokenAddress
+    
+    // Add debug logging
+    logger.debug('In handleSetCustomThreshold:', {
+      tokenAddress: trackingInfo.tokenAddress,
+      chatId,
+      isGroup,
+      messageSent: true
     });
+    
+    if (isGroup) {
+      // For group chats, use a special group key to track the state
+      const stateKey = `grp_${chatId}`;
+      stateManager.setUserState(stateKey, {
+          action: 'awaiting_custom_threshold',
+          tokenAddress: trackingInfo.tokenAddress,
+          startTime: Date.now()
+      });
+      
+      logger.debug('Set group threshold state with key:', stateKey);
+    } else {
+      // For private chats, track state with user ID directly from query
+      const userId = trackingInfo.queryFromId;
+      if (userId) {
+        stateManager.setUserState(userId, {
+            action: 'awaiting_custom_threshold',
+            tokenAddress: trackingInfo.tokenAddress,
+            startTime: Date.now()
+        });
+        logger.debug('Set private chat threshold state for user:', userId);
+      } else {
+        logger.error('No user ID available for private chat threshold tracking');
+      }
+    }
   }
 
   async handleCustomThresholdInput(bot, msg) {
     // Cette fonction est appelée par handleNonCommand
     const chatId = msg.chat.id;
-    const userState = stateManager.getUserState(chatId);
+    const userId = msg.from.id;
+    const username = msg.from.username || String(userId);
+    const isGroup = msg.chat.type === 'group' || msg.chat.type === 'supergroup';
+    
+    logger.debug('Processing custom threshold input:', {
+      text: msg.text,
+      fromUser: username,
+      chatId,
+      isGroup
+    });
+    
+    // Check for user-specific state first
+    let userState = stateManager.getUserState(userId);
+    
+    // If in a group chat and no user state, check for group state
+    let groupState = null;
+    if (isGroup) {
+      const groupStateKey = `grp_${chatId}`;
+      groupState = stateManager.getUserState(groupStateKey);
+      
+      // If we have group state but no user state, this is likely the first
+      // response to the prompt - set up user state now
+      if (groupState && !userState) {
+        logger.debug('Found group state but no user state. Setting up user state for group responder', {
+          groupStateKey,
+          fromUser: username
+        });
+        userState = groupState;
+      }
+    }
+    
+    // Log the state we're working with
+    logger.debug('State for threshold handling:', {
+      hasUserState: !!userState,
+      hasGroupState: !!groupState,
+      stateSource: userState?.isRespondingToGroup ? 'group-linked' : (userState ? 'user' : 'none')
+    });
 
-    logger.debug('Processing custom threshold input:', msg.text);
-    logger.debug('User state:', userState);
-
+    // Ensure we have valid state with token address
     if (!userState?.tokenAddress) {
+        logger.debug('No valid state with token address');
         await bot.sendMessage(chatId, "Session expired. Please run the scan command again.");
         return;
     }
 
+    // Parse and validate the threshold input
     const thresholdInput = msg.text.replace('%', '').trim();
     const threshold = parseFloat(thresholdInput);
 
     if (isNaN(threshold) || threshold < 0.1 || threshold > 100) {
+        logger.debug('Invalid threshold value:', thresholdInput);
         await bot.sendMessage(chatId, "Invalid threshold. Please enter a number between 0.1 and 100.");
         return;
     }
 
+    // Get tracking info using the token address from state
     const trackingInfo = stateManager.getTrackingInfo(chatId, userState.tokenAddress);
     if (!trackingInfo) {
+        logger.debug('No tracking info found for token:', userState.tokenAddress);
         await bot.sendMessage(chatId, "Tracking information expired. Please run the scan command again.");
         return;
     }
 
+    // Log tracking info before update
+    logger.debug('Found tracking info:', {
+      tokenAddress: trackingInfo.tokenAddress,
+      currentThreshold: trackingInfo.threshold,
+      messageId: trackingInfo.messageId,
+      newThreshold: threshold
+    });
+
+    // Update tracking info with new threshold
     trackingInfo.threshold = threshold;
     stateManager.setTrackingInfo(chatId, userState.tokenAddress, trackingInfo);
 
+    // Update the tracking message with new threshold
     await this.updateTrackingMessage(bot, chatId, trackingInfo);
-    stateManager.deleteUserState(chatId);
+    
+    // Clean up all states
+    if (isGroup) {
+      // Clean up group state
+      const groupStateKey = `grp_${chatId}`;
+      stateManager.deleteUserState(groupStateKey);
+      
+      // If this user was linked to group state, clean up their state too
+      if (userState.isRespondingToGroup) {
+        stateManager.deleteUserState(userId);
+      }
+      
+      // If there was a specific user recorded as responding, clean up their state too
+      if (groupState?.respondingUserId && groupState.respondingUserId !== userId) {
+        stateManager.deleteUserState(groupState.respondingUserId);
+      }
+    } else {
+      // Just clean up this user's state in private chat
+      stateManager.deleteUserState(userId);
+    }
+    
+    logger.debug('Threshold updated successfully:', {
+      newThreshold: threshold,
+      tokenAddress: trackingInfo.tokenAddress
+    });
   }
 
  async handleStartTracking(bot, chatId, trackingInfo, threshold) {
@@ -379,7 +488,8 @@ async handleCallback(bot, query) {
 
   async handleCustomThresholdInput(bot, msg) {
     const chatId = msg.chat.id;
-    const userState = stateManager.getUserState(chatId);
+    const userId = msg.from.id;
+    const userState = stateManager.getUserState(userId);
 
     if (!userState?.tokenAddress) {
         await bot.sendMessage(chatId, "Session expired. Please run the scan or team command again.");
@@ -401,7 +511,7 @@ async handleCallback(bot, query) {
     stateManager.setTrackingInfo(chatId, userState.tokenAddress, trackingInfo);
 
     await this.updateTrackingMessage(bot, chatId, trackingInfo);
-    stateManager.deleteUserState(chatId);
+    stateManager.deleteUserState(userId);
 }
 
 createThresholdKeyboard(tokenAddress, threshold) {

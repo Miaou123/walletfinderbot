@@ -279,7 +279,40 @@ class MessageHandler {
         try {
             // Récupérer l'état utilisateur
             const userId = msg.from.id;
-            const userState = this.stateManager.getUserState(userId);
+            const chatId = msg.chat.id;
+            const isGroup = msg.chat.type === 'group' || msg.chat.type === 'supergroup';
+            
+            // Check individual user state
+            let userState = this.stateManager.getUserState(userId);
+            
+            // For groups, also check group-level state
+            if (isGroup) {
+                // Check for group chat threshold state with any active requests
+                const groupStateKey = `grp_${chatId}`;
+                const groupState = this.stateManager.getUserState(groupStateKey);
+                
+                if (groupState && groupState.action === 'awaiting_custom_threshold') {
+                    this.logger.debug('Found group threshold request state:', {
+                        groupStateKey,
+                        groupState,
+                        fromUser: msg.from.username || userId
+                    });
+                    
+                    // Record which user is responding to the threshold request
+                    groupState.respondingUserId = userId;
+                    this.stateManager.setUserState(groupStateKey, groupState);
+                    
+                    // Set temporary individual state for this user to link them to the group threshold request
+                    this.stateManager.setUserState(userId, {
+                        action: 'awaiting_custom_threshold',
+                        tokenAddress: groupState.tokenAddress,
+                        isRespondingToGroup: true,
+                        groupStateKey
+                    });
+                    
+                    userState = this.stateManager.getUserState(userId);
+                }
+            }
             
             // Si en attente d'une adresse referral
             if (userState?.context === 'referral' && userState?.step === 'WAITING_ADDRESS') {
@@ -288,7 +321,11 @@ class MessageHandler {
             }
 
             if (userState?.action === 'awaiting_custom_threshold') {
-                this.logger.debug('Handling custom threshold input');
+                this.logger.debug('Handling custom threshold input', {
+                    isGroup,
+                    fromUser: msg.from.username || userId,
+                    userState
+                });
                 await this.commandHandlersInstance.trackingActionHandler.handleCustomThresholdInput(this.bot, msg);
                 return;
             }
