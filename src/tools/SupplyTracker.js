@@ -260,8 +260,8 @@ class SupplyTracker {
       trackType,
       tokenAddress,
       startTimestamp: now,
-      // Ne stocker wallets que pour le tracking de team
-      ...(trackType === 'team' && { wallets }),
+      // Store wallets for team or fresh tracking
+      ...((trackType === 'team' || trackType === 'fresh') && { wallets }),
       intervalId: setInterval(() => this.checkSupply(chatId, trackerId), CHECK_INTERVAL)
     };
 
@@ -319,7 +319,7 @@ class SupplyTracker {
       currentSupplyPercentage: tracker.currentSupplyPercentage.toFixed(2),
       trackType: tracker.trackType,
       significantChangeThreshold: tracker.significantChangeThreshold.toFixed(2),
-      wallets: tracker.trackType === 'team' ? tracker.wallets : [] // Ajout des wallets pour team tracking
+      wallets: (tracker.trackType === 'team' || tracker.trackType === 'fresh') ? tracker.wallets : [] // Include wallets for team and fresh tracking
     }));
    }
 
@@ -354,6 +354,16 @@ class SupplyTracker {
             tracker.decimals,
             'supply', 
             'check' 
+          );
+        } else if (tracker.trackType === 'fresh') {
+          // Pour le tracking fresh wallets, utiliser getControlledSupply
+          newSupplyPercentage = await this.getControlledSupply(
+            tracker.wallets,
+            tracker.tokenAddress,
+            tracker.totalSupply,
+            tracker.decimals,
+            'supply',
+            'freshCheck'
           );
         } else {
           // Pour le tracking top holders, utiliser scanToken
@@ -397,24 +407,40 @@ class SupplyTracker {
   async getTokenBalance(walletAddress, tokenAddress, mainContext, subContext) {
     return retryWithBackoff(async () => {
       try {
-        if (!walletAddress || !tokenAddress) {
-          logger.warn(`Invalid wallet address or token address: ${walletAddress}, ${tokenAddress}`);
+        // Handle case where walletAddress is an object
+        const address = typeof walletAddress === 'object' ? 
+          (walletAddress.address || '') : walletAddress;
+        
+        if (!address || !tokenAddress) {
+          logger.warn(`Invalid wallet address or token address:`, {
+            wallet: typeof walletAddress === 'object' ? 'object' : walletAddress,
+            token: tokenAddress
+          });
           return new BigNumber(0);
         }
-        const tokenAccounts = await solanaApi.getTokenAccountsByOwner(walletAddress, tokenAddress, mainContext, subContext);
+        
+        logger.debug(`Getting token balance for ${address.slice(0, 8)}...`);
+        const tokenAccounts = await solanaApi.getTokenAccountsByOwner(address, tokenAddress, mainContext, subContext);
+        
         if (
           tokenAccounts &&
           tokenAccounts.length > 0 &&
           tokenAccounts[0].account?.data?.parsed?.info?.tokenAmount?.amount
         ) {
           const balance = new BigNumber(tokenAccounts[0].account.data.parsed.info.tokenAmount.amount);
+          logger.debug(`Found balance for ${address.slice(0, 8)}...: ${balance.toString()}`);
           return balance;
         }
-        logger.warn(`No valid token account found for wallet ${walletAddress} and token ${tokenAddress}`);
+        
+        logger.warn(`No valid token account found for wallet ${address} and token ${tokenAddress}`);
         return new BigNumber(0);
       } catch (error) {
-        logger.error(`Error getting token balance for ${walletAddress}:`, { error });
-        throw error;
+        logger.error(`Error getting token balance:`, { 
+          wallet: typeof walletAddress === 'object' ? JSON.stringify(walletAddress).slice(0, 50) : walletAddress,
+          error: error.message
+        });
+        // Return 0 instead of throwing so tracking can continue
+        return new BigNumber(0);
       }
     });
   }
@@ -460,7 +486,8 @@ class SupplyTracker {
    */
   async getTeamSupply(teamWallets, tokenAddress, totalSupply, decimals, mainContext, subContext) {
     logger.debug(`Calculating team supply for ${tokenAddress}`, {
-      wallets: teamWallets,
+      wallets: teamWallets?.slice(0, 3) || [], // Log just a few wallets for brevity
+      totalWallets: teamWallets?.length || 0,
       totalSupply,
       decimals
     });
@@ -486,9 +513,19 @@ class SupplyTracker {
    */
   async notifyChange(tracker, newPercentage, change) {
     const emoji = change.isGreaterThan(0) ? "📈" : "📉";
+    
+    let holderType;
+    if (tracker.trackType === 'team') {
+      holderType = 'Team';
+    } else if (tracker.trackType === 'fresh') {
+      holderType = 'Fresh wallets';
+    } else {
+      holderType = 'Top holders';
+    }
+    
     const message =
       `⚠️ Significant change detected in ${tracker.trackType} supply for ${tracker.ticker}\n\n` +
-      `${tracker.trackType === 'team' ? 'Team' : 'Top holders'} now hold ${newPercentage.toFixed(2)}% ` +
+      `${holderType} now hold ${newPercentage.toFixed(2)}% ` +
       `(previously ${tracker.initialSupplyPercentage.toFixed(2)}%)\n\n` +
       `${emoji} ${change.isGreaterThan(0) ? '+' : ''}${change.toFixed(2)}%`;
 

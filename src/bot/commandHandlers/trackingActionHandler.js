@@ -1,7 +1,9 @@
 // handlers/trackingActionHandler.js
 const logger = require('../../utils/logger');
 const stateManager = require('../../utils/stateManager');
-const { formatWalletDetails } = require('../formatters/teamSupplyFormatter');
+// Import formatters for different track types
+const { formatWalletDetails: formatTeamWalletDetails } = require('../formatters/teamSupplyFormatter');
+const { formatWalletDetails: formatFreshWalletDetails } = require('../formatters/freshWalletFormatter');
 
 const ACTIONS = {
  TRACK: 'track',
@@ -131,9 +133,18 @@ async handleCallback(bot, query) {
         return;
       }
 
-      // Initial tracking from scan or team
-      if (action === 'supply' || action === 'team') {
-          const trackType = action === 'team' ? 'team' : 'topHolders';
+      // Initial tracking from scan, team or fresh
+      if (action === 'supply' || action === 'team' || action === 'fresh') {
+          // Determine track type based on action
+          let trackType;
+          if (action === 'team') {
+              trackType = 'team';
+          } else if (action === 'fresh') {
+              trackType = 'fresh';
+          } else {
+              trackType = 'topHolders';
+          }
+          
           let trackingInfo = stateManager.getTrackingInfo(chatId, tokenAddress);
           
           logger.debug('Retrieved tracking info for initial action:', trackingInfo 
@@ -242,7 +253,16 @@ async handleCallback(bot, query) {
    if (!trackingInfo?.allWalletsDetails) {
      throw new Error("No wallet details found");
    }
-   const message = formatWalletDetails(trackingInfo.allWalletsDetails, trackingInfo.tokenInfo);
+   
+   let message;
+   // Use the appropriate formatter based on track type
+   if (trackingInfo.trackType === 'fresh') {
+     message = formatFreshWalletDetails(trackingInfo.allWalletsDetails, trackingInfo.tokenInfo);
+   } else {
+     // Default to team wallet formatter for other types
+     message = formatTeamWalletDetails(trackingInfo.allWalletsDetails, trackingInfo.tokenInfo);
+   }
+   
    await bot.sendMessage(chatId, message, { parse_mode: 'HTML' });
  }
 
@@ -427,9 +447,31 @@ async handleCallback(bot, query) {
   }
 
  async handleStartTracking(bot, chatId, trackingInfo, threshold) {
-   const { tokenAddress, teamWallets, topHoldersWallets, tokenInfo } = trackingInfo;
+   const { tokenAddress, teamWallets, freshWallets, topHoldersWallets, wallets: directWallets, tokenInfo } = trackingInfo;
    const trackType = trackingInfo.trackType || 'topHolders';
-   const wallets = trackType === 'team' ? teamWallets : topHoldersWallets;
+   
+   // First check if there are direct wallets provided (from wallets field)
+   let wallets = directWallets;
+   
+   // If not, check for the specific wallet type based on trackType
+   if (!wallets || !wallets.length) {
+     if (trackType === 'team') {
+       wallets = teamWallets;
+     } else if (trackType === 'fresh') {
+       wallets = freshWallets?.map(w => w.address || w);
+     } else {
+       wallets = topHoldersWallets;
+     }
+   }
+   
+   // Log what we found for debugging
+   logger.debug(`Starting tracking with wallets:`, {
+     trackType,
+     hasDirectWallets: !!directWallets?.length,
+     hasTeamWallets: !!teamWallets?.length,
+     hasFreshWallets: !!freshWallets?.length,
+     wallets: wallets?.slice(0, 3) // Log just a few for brevity
+   });
 
    if (!wallets?.length) {
      return await bot.sendMessage(chatId, 
@@ -568,10 +610,20 @@ async handleCallback(bot, query) {
  }
 
  createTrackingMessage(trackingInfo, supplyType, threshold = 1) {
-   const baseMessage = `🔁 Ready to track ${trackingInfo.tokenInfo.symbol} ${supplyType} ` +
+   // Determine the appropriate supply type description
+   let supplyTypeDesc;
+   if (trackingInfo.trackType === 'fresh') {
+     supplyTypeDesc = 'fresh wallet supply';
+   } else if (trackingInfo.trackType === 'team') {
+     supplyTypeDesc = 'team supply';
+   } else {
+     supplyTypeDesc = 'total supply';
+   }
+   
+   const baseMessage = `🔁 Ready to track ${trackingInfo.tokenInfo.symbol} ${supplyTypeDesc} ` +
                       `(${trackingInfo.totalSupplyControlled.toFixed(2)}%)\n\n`;
                       
-   return baseMessage + `You will receive a notification when ${supplyType} changes by more than ${threshold}%`;
+   return baseMessage + `You will receive a notification when ${supplyTypeDesc} changes by more than ${threshold}%`;
  }
 
   createTrackingKeyboard(tokenAddress) {

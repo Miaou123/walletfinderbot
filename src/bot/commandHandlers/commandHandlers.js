@@ -2,6 +2,7 @@ const AdminCommandManager = require('./adminCommands');
 const BundleHandler = require('./bundleHandler');
 const CrossBtHandler = require('./crossBtHandler');
 const FreshRatioHandler = require('./freshRatioHandler');
+const FreshHandler = require('./freshHandler');
 const DexPaidHandler = require('./dexPaidHandler');
 const EntryMapHandler = require('./entryMapHandler');
 const DevCommandHandler = require('./devHandler');
@@ -58,6 +59,7 @@ class CommandHandlers {
                 'track': this.trackingActionHandler,
                 'scan': this.scanHandler,
                 'team': this.teamHandler,
+                'fresh': this.freshHandler,
                 'referral': this.referralHandler,
                 'preview': this.previewHandler,
             };
@@ -92,6 +94,7 @@ class CommandHandlers {
         this.walletCheckerHandler = new WalletCheckerHandler();
         this.crossBtHandler = new CrossBtHandler();
         this.freshRatioHandler = new FreshRatioHandler();
+        this.freshHandler = new FreshHandler(this.stateManager);
         this.dexPaidHandler = new DexPaidHandler();
         this.entryMapHandler = new EntryMapHandler();
         this.devHandler = new DevCommandHandler();
@@ -146,6 +149,7 @@ class CommandHandlers {
             'topholders': { handler: this.topHoldersHandler.handleCommand, context: this.topHoldersHandler },
             'help': { handler: this.helpHandler.handleCommand, context: this.helpHandler },
             'team': { handler: this.teamHandler.handleCommand, context: this.teamHandler },
+            'fresh': { handler: this.freshHandler.handleCommand, context: this.freshHandler },
             'tracker': { handler: this.trackerHandler.handleCommand, context: this.trackerHandler },
             'referral': { handler: this.referralHandler.handleCommand, context: this.referralHandler },
 

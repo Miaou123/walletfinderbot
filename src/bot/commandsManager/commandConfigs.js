@@ -111,6 +111,15 @@ const commandConfigs = {
     usage: '/team [contract_address]',
     helpMessage: 'Analyze team and insider supply for a token using a custom algorithm.\n\nThis command helps identify wallets likely associated with the project team or insiders and estimates the total supply they control.'
   },
+  'fresh': { 
+    aliases: ['f'], 
+    minArgs: 1, 
+    maxArgs: 1, 
+    requiresAuth: true, 
+    description: 'Analyze fresh wallets', 
+    usage: '/fresh [contract_address]',
+    helpMessage: 'Analyze fresh wallets holding a token with significant amounts (>0.05% of supply).\n\nThis command identifies wallets with low transaction counts that hold meaningful amounts of a token.'
+  },
   'besttraders': { 
     aliases: ['bt'], 
     minArgs: 1, 
