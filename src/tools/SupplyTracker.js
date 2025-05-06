@@ -13,7 +13,7 @@ const solanaApi = getSolanaApi();
 const CHECK_INTERVAL = 1 * 60 * 1000;       // 1 minute
 const SAVE_INTERVAL = 0.5 * 60 * 1000;      // 30 secondes
 const CLEANUP_INTERVAL = 1 * 60 * 60 * 1000; // 1 heure
-const EXPIRY_TIME = 48 * 60 * 60 * 1000;    // 48 heures
+const EXPIRY_TIME = 31 * 24 * 60 * 60 * 1000;    // 31 days (1 month)
 
 /**
  * Petite fonction utilitaire pour attendre `ms` millisecondes.
@@ -120,7 +120,7 @@ class SupplyTracker {
    */
   async notifyExpiry(tracker) {
     const message = `⌛ Tracking expired for ${tracker.ticker}\n\n` +
-                    `The ${tracker.trackType} supply tracking has been automatically stopped after 48 hours.\n` +
+                    `The ${tracker.trackType} supply tracking has been automatically stopped after 31 days.\n` +
                     `If you want to continue tracking, please start a new tracking session.`;
     try {
       await this.bot.sendMessage(tracker.chatId, message);
@@ -247,7 +247,8 @@ class SupplyTracker {
     }
 
     const now = Date.now();
-    logger.debug(`Creating new tracker with timestamp ${now} - Will expire at ${new Date(now + EXPIRY_TIME)}`);
+    const expiryDate = new Date(now + EXPIRY_TIME);
+    logger.debug(`Creating new tracker with timestamp ${now} - Will expire at ${expiryDate.toLocaleString()} (in 31 days)`);
 
     const tracker = {
       chatId,
