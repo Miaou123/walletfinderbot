@@ -17,6 +17,9 @@ class MessageHandler {
         this.adminCommandConfigs = dependencies.adminCommandConfigs;
         this.commandParser = null;
         this.stateManager = dependencies.stateManager;
+        
+        // Save instance for external access
+        MessageHandler.instance = this;
     }
 
     async initialize() {
@@ -180,10 +183,15 @@ class MessageHandler {
             }
 
             const commandConfig = this.commandConfigs[command];
-            if (commandConfig && args.length === 0 && command !== 'help' && command !== 'start' && 
+            // Only show help if:
+            // 1. Command exists and needs arguments (minArgs > 0)
+            // 2. No arguments were provided
+            // 3. Not one of the special commands that always execute
+            if (commandConfig && commandConfig.minArgs > 0 && args.length === 0 && 
+                command !== 'help' && command !== 'start' && 
                 command !== 'subscribe' && command !== 'subscribe_group' && command !== 'ping' && 
                 command !== 'cancel' && command !== 'tracker' && command !== 'access' && 
-                command !== 'referral' && command !== 'preview') {
+                command !== 'referral' && command !== 'preview' && command !== 'walletsearch') {
                 // Afficher l'aide pour cette commande
                 this.logger.debug(`Showing help for command ${command} due to no arguments`);
                 if (typeof this.commandHandlers['help'] === 'function') {

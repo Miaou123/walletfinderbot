@@ -10,9 +10,20 @@ const { formatNumber } = require('../formatters/generalFormatters');
 class WalletSearcherHandler extends BaseHandler {
     constructor(accessControl) {
         super();
+        logger.debug('Initializing WalletSearcherHandler', {
+            accessControlProvided: Boolean(accessControl)
+        });
+        
         this.accessControl = accessControl;
         this.commandName = 'walletsearch';
-        this.stateManager = require('../../utils/stateManager');
+        
+        try {
+            this.stateManager = require('../../utils/stateManager');
+            logger.debug('StateManager imported successfully in WalletSearcherHandler');
+        } catch (error) {
+            logger.error('Error importing stateManager in WalletSearcherHandler:', error);
+            this.stateManager = null;
+        }
         
         // Default search criteria
         this.defaultCriteria = {
@@ -48,6 +59,8 @@ class WalletSearcherHandler extends BaseHandler {
         
         // Maximum results to return
         this.maxResults = 20;
+        
+        logger.info('WalletSearcherHandler initialized');
     }
 
     /**
@@ -87,10 +100,44 @@ class WalletSearcherHandler extends BaseHandler {
             const userId = msg.from.id;
             const username = msg.from.username || userId;
             
-            logger.info(`WalletSearch command started by user ${username}`);
+            logger.info(`WalletSearch command started by user ${username}`, {
+                chatId,
+                userId,
+                messageThreadId,
+                args
+            });
+            
+            // Debug stateManager
+            logger.debug('StateManager check in wallet searcher:', {
+                stateManagerExists: Boolean(this.stateManager),
+                stateManagerType: typeof this.stateManager,
+                hasSetSessionDataMethod: this.stateManager && typeof this.stateManager.setSessionData === 'function'
+            });
+            
+            // Debug accessControl
+            logger.debug('AccessControl check in wallet searcher:', {
+                accessControlExists: Boolean(this.accessControl),
+                accessControlType: typeof this.accessControl,
+                hasActiveSubscriptionMethod: this.accessControl && typeof this.accessControl.hasActiveSubscription === 'function',
+                methods: this.accessControl ? Object.keys(this.accessControl) : []
+            });
             
             // Check if user has subscription
-            if (!await this.accessControl.checkSubscription(userId)) {
+            if (!this.accessControl || typeof this.accessControl.hasActiveSubscription !== 'function') {
+                logger.error('AccessControl not properly initialized in WalletSearcherHandler', {
+                    accessControlMethods: this.accessControl ? Object.keys(this.accessControl) : []
+                });
+                await this.sendMessage(
+                    bot,
+                    chatId,
+                    "An error occurred. Please try again later.",
+                    { message_thread_id: messageThreadId }
+                );
+                return;
+            }
+            
+            if (!await this.accessControl.hasActiveSubscription(userId)) {
+                logger.info(`User ${username} denied access to wallet searcher - no subscription`);
                 await this.sendMessage(
                     bot,
                     chatId,
@@ -107,13 +154,29 @@ class WalletSearcherHandler extends BaseHandler {
             };
             
             // Store in user session
-            this.stateManager.setSessionData(chatId, 'walletSearch', searchState);
+            try {
+                if (!this.stateManager || typeof this.stateManager.setSessionData !== 'function') {
+                    throw new Error('StateManager not properly initialized');
+                }
+                
+                this.stateManager.setSessionData(chatId, 'walletSearch', searchState);
+                logger.debug('Search state saved successfully', { chatId, state: searchState });
+            } catch (stateError) {
+                logger.error('Error saving search state:', stateError);
+                throw stateError;
+            }
             
             // Send initial search panel
+            logger.debug('Sending search panel', { chatId, criteria: searchState.criteria });
             await this.sendSearchPanel(bot, chatId, searchState.criteria, messageThreadId);
+            logger.info('Wallet search panel sent successfully');
             
         } catch (error) {
-            logger.error('Error in wallet search command:', error);
+            logger.error('Error in wallet search command:', error, {
+                stack: error.stack,
+                message: error.message
+            });
+            
             await this.sendMessage(
                 bot,
                 msg.chat.id,
@@ -190,18 +253,30 @@ class WalletSearcherHandler extends BaseHandler {
         const message = this.formatSearchPanelMessage(criteria);
         const keyboard = this.createSearchPanelKeyboard(criteria);
         
-        await this.sendMessage(
-            bot,
-            chatId,
-            message,
-            {
-                parse_mode: 'HTML',
-                reply_markup: {
-                    inline_keyboard: keyboard
-                },
-                message_thread_id: messageThreadId
-            }
-        );
+        logger.debug('sendSearchPanel prepared data:', {
+            messageLength: message.length,
+            keyboardRows: keyboard.length,
+            chatId
+        });
+        
+        try {
+            await this.sendMessage(
+                bot,
+                chatId,
+                message,
+                {
+                    parse_mode: 'HTML',
+                    reply_markup: {
+                        inline_keyboard: keyboard
+                    },
+                    message_thread_id: messageThreadId
+                }
+            );
+            logger.debug('Search panel sent successfully');
+        } catch (error) {
+            logger.error('Error sending search panel:', error);
+            throw error;
+        }
     }
 
     /**
