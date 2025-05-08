@@ -174,6 +174,16 @@ const commandConfigs = {
     usage: '/dev [contract_address]',
     helpMessage: 'Analyze a developer wallet to check their history of creating coins, including success rate, bonding rate, funding methods and connections to other successful projects.'
   },
+  'walletsearch': {
+    aliases: ['ws'],
+    minArgs: 0,
+    maxArgs: 0,
+    requiresAuth: true,
+    description: 'Search for wallets by criteria',
+    usage: '/walletsearch',
+    helpMessage: 'Interactive search tool for finding wallets based on various criteria such as win rate, portfolio value, profit, and SOL balance.\n\n' +
+                 'Use this command to filter our database for wallets that match specific trading criteria. All searches are interactive with an easy-to-use UI.'
+  },
   // 'freshratio': {
   //   aliases: ['fr'],
   //   minArgs: 1,
