@@ -62,6 +62,7 @@ class CommandHandlers {
                 'fresh': this.freshHandler,
                 'referral': this.referralHandler,
                 'preview': this.previewHandler,
+                'walletsearch': this.walletSearcherHandler,
             };
 
             await this.setupCallbackHandler();
@@ -105,6 +106,10 @@ class CommandHandlers {
         this.topHoldersHandler = new TopHoldersHandler();
         this.helpHandler = new HelpHandler(this.bot);
         this.teamHandler = new TeamHandler(this.stateManager);
+        
+        // Initialize the wallet searcher handler
+        const WalletSearcherHandler = require('./walletSearcherHandler');
+        this.walletSearcherHandler = new WalletSearcherHandler(this.accessControl);
 
         this.supplyTracker = await initializeSupplyTracker(this.bot, this.accessControl);
         this.trackerHandler = new TrackerHandler(this.supplyTracker);
@@ -152,6 +157,7 @@ class CommandHandlers {
             'fresh': { handler: this.freshHandler.handleCommand, context: this.freshHandler },
             'tracker': { handler: this.trackerHandler.handleCommand, context: this.trackerHandler },
             'referral': { handler: this.referralHandler.handleCommand, context: this.referralHandler },
+            'walletsearch': { handler: this.walletSearcherHandler.handleCommand, context: this.walletSearcherHandler },
 
             // Admin Commands
             'adduser': { handler: (msg, args) => this.adminCommands.handleCommand('adduser', msg, args) },
