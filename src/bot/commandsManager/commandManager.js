@@ -1,6 +1,6 @@
 const { Worker } = require('worker_threads');
 const path = require('path');
-const ActiveCommandsTracker = require('./commandsManager/activeCommandsTracker');
+const ActiveCommandsTracker = require('./activeCommandsTracker');
 
 class CommandManager {
     constructor() {

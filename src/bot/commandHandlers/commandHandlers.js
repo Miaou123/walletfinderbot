@@ -229,4 +229,15 @@ class CommandHandlers {
     }
 }
 
-module.exports = CommandHandlers;
+// Export a singleton instance that can be accessed by other modules
+const commandHandlersInstance = new CommandHandlers();
+
+// Add a method to get the command mapping
+commandHandlersInstance.getCommandMapping = function() {
+    if (!this.commandMapping) {
+        this.initializeCommandMapping();
+    }
+    return this.commandMapping;
+};
+
+module.exports = commandHandlersInstance;

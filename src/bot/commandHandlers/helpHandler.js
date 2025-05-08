@@ -72,10 +72,15 @@ If you have any questions, want to report a bug, or have any suggestions on new 
             return;
         }
         
-        // If the command doesn't take arguments, just start the command instead of showing help
+        // If the command doesn't take arguments, execute it directly through message handler
         if (config.minArgs === 0 && cleanCommand !== 'help') {
-            const commandManager = require('../commandsManager/commandManager');
-            return await commandManager.executeCommand(bot, msg, `/${cleanCommand}`, []);
+            const handlers = require('./commandHandlers');
+            // Find the handler in the command mapping
+            const command = handlers.getCommandMapping()[cleanCommand];
+            if (command && command.handler) {
+                // Execute the command directly
+                return await command.handler(bot, msg, [], msg.message_thread_id);
+            }
         }
     
         const commandEmojis = {
