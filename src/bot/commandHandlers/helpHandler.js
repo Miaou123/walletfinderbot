@@ -1,4 +1,5 @@
 const { commandConfigs, adminCommandConfigs } = require('../commandsManager/commandConfigs');
+const logger = require('../../utils/logger');
 
 class HelpHandler {
     constructor(commandParser) {
@@ -72,15 +73,15 @@ If you have any questions, want to report a bug, or have any suggestions on new 
             return;
         }
         
-        // If the command doesn't take arguments, execute it directly through message handler
+        // For commands that take no arguments and aren't the help command itself, 
+        // just use bot.sendMessage to emulate the user sending the command
         if (config.minArgs === 0 && cleanCommand !== 'help') {
-            const handlers = require('./commandHandlers');
-            // Find the handler in the command mapping
-            const command = handlers.getCommandMapping()[cleanCommand];
-            if (command && command.handler) {
-                // Execute the command directly
-                return await command.handler(bot, msg, [], msg.message_thread_id);
-            }
+            await bot.sendMessage(
+                msg.chat.id,
+                `/${cleanCommand}`,
+                { message_thread_id: messageThreadId }
+            );
+            return;
         }
     
         const commandEmojis = {
