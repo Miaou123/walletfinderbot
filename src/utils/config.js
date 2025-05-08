@@ -1,5 +1,6 @@
 require('dotenv').config();
 
+// Never hardcode sensitive values - always use environment variables
 const sensitiveConfig = {
   TELEGRAM_TOKEN: process.env.TELEGRAM_TOKEN,
   HELIUS_API_KEY: process.env.HELIUS_API_KEY,

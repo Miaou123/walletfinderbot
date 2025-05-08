@@ -1,46 +1,65 @@
-const logger = require('../../utils/logger');
+const BaseHandler = require('./baseHandler');
 
-class PingHandler {
+/**
+ * Handler for the /ping command
+ * Used to check if the bot is responsive
+ */
+class PingHandler extends BaseHandler {
     constructor() {
+        super();
     }
 
-    // Méthode principale qui sera appelée par le système de commandes
-    async handleCommand(bot, msg, args)  {  // Ajout du paramètre args même si non utilisé
+    /**
+     * Handle the ping command
+     * @param {Object} bot - The telegram bot instance
+     * @param {Object} msg - The message object from Telegram
+     * @param {Array} args - Command arguments (not used for ping)
+     * @param {number|undefined} messageThreadId - The message thread ID if applicable
+     */
+    async handleCommand(bot, msg, args, messageThreadId) {
         const chatId = msg.chat.id;
         const startTime = Date.now();
 
         try {
-            logger.debug('Handling ping command for chatId:', chatId);
+            this.logger.debug('Handling ping command for chatId:', chatId);
             
             // Send initial message
             const sentMsg = await bot.sendMessage(
                 chatId,
-                '🏓 Pinging...'
+                '🏓 Pinging...',
+                { message_thread_id: messageThreadId }
             );
 
             // Calculate round trip time
             const endTime = Date.now();
             const roundTripTime = endTime - startTime;
+            
+            // Get memory usage statistics
+            const memoryUsage = process.memoryUsage();
+            const heapUsed = Math.round(memoryUsage.heapUsed / 1024 / 1024 * 100) / 100;
+            const rssUsed = Math.round(memoryUsage.rss / 1024 / 1024 * 100) / 100;
 
             // Edit the message with the results
             await bot.editMessageText(
                 `🏓 Pong!\n\n` +
                 `📊 Response time: ${roundTripTime}ms\n` +
+                `💾 Memory: ${heapUsed}MB / ${rssUsed}MB\n` +
                 `🤖 Bot Status: Online`,
                 {
                     chat_id: chatId,
-                    message_id: sentMsg.message_id
+                    message_id: sentMsg.message_id,
+                    message_thread_id: messageThreadId
                 }
             );
 
         } catch (error) {
-            logger.error('Error in ping command:', error);
-            if (chatId) {
-                await this.bot.sendMessage(
-                    chatId,
-                    "❌ An error occurred while checking bot status."
-                );
-            }
+            this.logger.error('Error in ping command:', error);
+            await this.sendMessage(
+                bot, 
+                chatId,
+                "❌ An error occurred while checking bot status.",
+                { message_thread_id: messageThreadId }
+            );
         }
     }
 }
