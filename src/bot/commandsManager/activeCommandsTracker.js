@@ -1,35 +1,20 @@
 const logger = require('../../utils/logger');
+const { commandConfigs } = require('./commandParser');
 
-/**
- * Tracks and manages active commands per user to prevent command spamming
- */
 class ActiveCommandsTracker {
   constructor() {
     this.activeCommands = new Map();
-    this.TIMEOUT = 10 * 60 * 1000; // 10 minutes
-    this.MAX_COMMANDS_PER_USER = 3;
+    this.TIMEOUT = 10 * 60 * 1000;
   }
 
-  /**
-   * Check if a user can add a new command
-   * @param {string} userId - The user ID
-   * @param {string} command - The command name
-   * @returns {boolean} Whether the user can add the command
-   */
   canAddCommand(userId, command) {
     logger.debug(`Checking if command ${command} can be added for user ${userId}`);
     const userCommands = this.activeCommands.get(userId) || new Map();
     const totalCommands = Array.from(userCommands.values()).reduce((sum, cmd) => sum + cmd.count, 0);
     logger.debug(`User ${userId} has ${totalCommands} active commands`);
-    return totalCommands < this.MAX_COMMANDS_PER_USER;
+    return totalCommands < 3;
   }
 
-  /**
-   * Add a command for a user
-   * @param {string} userId - The user ID
-   * @param {string} command - The command name
-   * @returns {boolean} Whether the command was added successfully
-   */
   addCommand(userId, command) {
     logger.debug(`Attempting to add command ${command} for user ${userId}`);
 
@@ -40,7 +25,7 @@ class ActiveCommandsTracker {
     const userCommands = this.activeCommands.get(userId);
     const currentCommand = userCommands.get(command) || { count: 0, timeouts: [] };
 
-    if (currentCommand.count >= this.MAX_COMMANDS_PER_USER) {
+    if (currentCommand.count >= 3) {
       logger.warn(`User ${userId} attempted to start a third instance of command ${command}`);
       return false;
     }
@@ -59,11 +44,6 @@ class ActiveCommandsTracker {
     return true;
   }
 
-  /**
-   * Remove a command for a user
-   * @param {string} userId - The user ID
-   * @param {string} command - The command name
-   */
   removeCommand(userId, command) {
     logger.debug(`Attempting to remove command ${command} for user ${userId}`);
     if (!this.activeCommands.has(userId)) {
@@ -97,11 +77,6 @@ class ActiveCommandsTracker {
     }
   }
 
-  /**
-   * Get the active command count for a user
-   * @param {string} userId - The user ID
-   * @returns {number} The number of active commands
-   */
   getActiveCommandCount(userId) {
     if (!this.activeCommands.has(userId)) return 0;
     const userCommands = this.activeCommands.get(userId);
@@ -110,11 +85,6 @@ class ActiveCommandsTracker {
     return count;
   }
 
-  /**
-   * Get all active commands for a user
-   * @param {string} userId - The user ID
-   * @returns {Array<string>} Array of active command names
-   */
   getActiveCommands(userId) {
     if (!this.activeCommands.has(userId)) return [];
     const userCommands = this.activeCommands.get(userId);
@@ -123,23 +93,6 @@ class ActiveCommandsTracker {
     );
     logger.debug(`Active commands for user ${userId}: ${commands.join(', ')}`);
     return commands;
-  }
-
-  /**
-   * Clear all active commands
-   */
-  clearAll() {
-    // Clear all timeouts first
-    for (const [userId, userCommands] of this.activeCommands.entries()) {
-      for (const [command, info] of userCommands.entries()) {
-        for (const timeoutId of info.timeouts) {
-          clearTimeout(timeoutId);
-        }
-      }
-    }
-    
-    this.activeCommands.clear();
-    logger.info('Cleared all active commands');
   }
 }
 

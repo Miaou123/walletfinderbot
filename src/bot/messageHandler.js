@@ -1,17 +1,16 @@
-const CommandParser = require('./commandsManager/commandParser');
-const commandRegistry = require('./commandsManager/commandRegistry');
+const CommandParser = require('./commandsManager/commandParser');  // Nouvelle classe
 const groupMessageLogger = require('./messageDataManager/groupMessageLogger');
-const UserService = require('../database/services/userService');
-const logger = require('../utils/logger');
+const UserService = require('../database/services/userService'); 
 
 class MessageHandler {
     constructor(dependencies) {
         this.bot = dependencies.bot;
         this.commandHandlersInstance = dependencies.commandHandlers;
+        this.commandHandlers = {}; 
         this.accessControl = dependencies.accessControl;
         this.rateLimiter = dependencies.rateLimiter;
         this.config = dependencies.config;
-        this.logger = logger;
+        this.logger = dependencies.logger;
         this.ActiveCommandsTracker = dependencies.ActiveCommandsTracker;
         this.MAX_MESSAGE_AGE = 600;
         this.commandConfigs = dependencies.commandConfigs;
@@ -26,6 +25,9 @@ class MessageHandler {
             this.botUsername = botInfo.username;
             this.commandParser = new CommandParser(this.botUsername);
             
+            // Récupérer les handlers après leur initialisation
+            this.commandHandlers = this.commandHandlersInstance.getHandlers();
+            
             this.logger.info(`Bot initialized with username: ${this.botUsername}`);
         } catch (error) {
             this.logger.error('Failed to initialize MessageHandler:', error);
@@ -33,14 +35,14 @@ class MessageHandler {
         }
     }
     
-    // Getter for commands requiring authentication
+    // Getter pour les commandes limitées (requiresAuth: true)
     get limitedCommands() {
         return Object.entries(this.commandConfigs)
             .filter(([_, config]) => config.requiresAuth)
             .map(([command, _]) => command);
     }
     
-    // Getter for basic commands (no auth required)
+    // Getter pour les commandes de base (requiresAuth: false)
     get basicCommands() {
         return Object.entries(this.commandConfigs)
             .filter(([_, config]) => !config.requiresAuth)
@@ -68,7 +70,7 @@ class MessageHandler {
         const userId = msg.from.id.toString();
         const chatId = msg.chat.id.toString();
     
-        // Check message age
+        // Vérification de l'ancienneté du message
         const currentTimestamp = Math.floor(Date.now() / 1000);
         const messageAge = currentTimestamp - msg.date;
         
@@ -77,10 +79,10 @@ class MessageHandler {
             return;
         }
 
-        // Verify user registration for private messages with commands
+        // Vérification de l'enregistrement de l'utilisateur pour les messages privés
         if (!isGroup && msg.text.startsWith('/')) {
             const { command } = this.commandParser.parseCommand(msg.text);
-            // Allow /start and /help without registration
+            // On permet /start et /help sans enregistrement
             if (command !== 'start' && command !== 'help') {
                 const isRegistered = await UserService.isUserRegistered(userId);
                 if (!isRegistered) {
@@ -94,9 +96,9 @@ class MessageHandler {
             }
         }
     
-        // Command processing
+        // Vérification des commandes
         if (msg.text.startsWith('/')) {
-            const { command, args, isAdmin } = this.commandParser.parseCommand(msg.text);
+            const { command, isAdmin } = this.commandParser.parseCommand(msg.text);
 
             if (!command) {
                 if (!isGroup) {
@@ -105,7 +107,7 @@ class MessageHandler {
                 return;
             }
 
-            // Admin command verification
+            // Vérification des commandes admin
             if (isAdmin) {
                 const isAdminUser = await this.accessControl.isAdmin(userId);
                 if (!isAdminUser) {
@@ -116,13 +118,13 @@ class MessageHandler {
                 return;
             }
 
-            // Check if command requires authentication
+            // Vérifier si la commande nécessite une authentification
             const commandConfig = this.commandConfigs[command];
             const requiresAuth = commandConfig?.requiresAuth ?? false;
 
             if (requiresAuth) {
                 if (isGroup) {
-                    // Exception for subscribe_group command
+                    // Exception pour la commande subscribe_group
                     if (command !== 'subscribe_group') {
                         const hasActiveGroupSub = await this.accessControl.hasActiveGroupSubscription(chatId);
                         if (!hasActiveGroupSub) {
@@ -137,7 +139,7 @@ class MessageHandler {
                         }
                     }
                 } else {
-                    // Check individual user subscription
+                    // Vérification des utilisateurs individuels
                     const hasActiveUserSub = await this.accessControl.hasActiveSubscription(userId);
                     if (!hasActiveUserSub && command !== 'subscribe') {
                         await this.bot.sendMessage(chatId,
@@ -162,7 +164,6 @@ class MessageHandler {
         const userId = msg.from.id.toString();
         const chatId = msg.chat.id.toString();
     
-        // Prevent /subscribe in groups
         if (isGroup && command === 'subscribe') {
             await this.bot.sendMessage(chatId,
                 '❌ You cannot use /subscribe in a group chat. Please use /subscribe_group instead.',
@@ -172,31 +173,26 @@ class MessageHandler {
         }
     
         try {
-            // Handle admin commands
+            // Gestion des commandes admin
             if (isAdmin) {
                 await this.handleAdminCommand(command, msg, args, messageThreadId);
                 return;
             }
 
-            // Show help for commands with no arguments
             const commandConfig = this.commandConfigs[command];
-            const showHelpForEmptyArgs = (
-                commandConfig && 
-                args.length === 0 && 
-                !['help', 'start', 'subscribe', 'subscribe_group', 'ping', 
-                 'cancel', 'tracker', 'access', 'referral', 'preview'].includes(command)
-            );
-            
-            if (showHelpForEmptyArgs) {
+            if (commandConfig && args.length === 0 && command !== 'help' && command !== 'start' && 
+                command !== 'subscribe' && command !== 'subscribe_group' && command !== 'ping' && 
+                command !== 'cancel' && command !== 'tracker' && command !== 'access' && 
+                command !== 'referral' && command !== 'preview') {
+                // Afficher l'aide pour cette commande
                 this.logger.debug(`Showing help for command ${command} due to no arguments`);
-                const helpHandler = commandRegistry.getCommandHandler('help');
-                if (helpHandler) {
-                    await helpHandler.handler(this.bot, msg, [command], messageThreadId);
+                if (typeof this.commandHandlers['help'] === 'function') {
+                    await this.commandHandlers['help'](this.bot, msg, [command], messageThreadId);
                     return;
                 }
             }
     
-            // Anti-spam check
+            // Vérification anti-spam
             if (!this.ActiveCommandsTracker.canAddCommand(userId, command)) {
                 if (!isGroup) {
                     await this.bot.sendMessage(chatId,
@@ -218,9 +214,9 @@ class MessageHandler {
             }
     
             try {
-                const cmdHandler = commandRegistry.getCommandHandler(command);
-                if (cmdHandler && cmdHandler.handler) {
-                    await cmdHandler.handler(this.bot, msg, args, messageThreadId);
+                const handlerName = command.toLowerCase();
+                if (typeof this.commandHandlers[handlerName] === 'function') {
+                    await this.commandHandlers[handlerName](this.bot, msg, args, messageThreadId);
                 } else {
                     throw new Error(`No handler found for command: ${command}`);
                 }                
@@ -242,13 +238,13 @@ class MessageHandler {
 
     async handleAdminCommand(command, msg, args, messageThreadId) {
         try {
-            // Validate message structure
+            // On vérifie que msg contient toutes les propriétés nécessaires
             if (!msg?.chat?.id || !msg?.from?.id) {
                 this.logger.error('Invalid message format in handleAdminCommand');
                 return;
             }
     
-            // Verify user is admin
+            // On s'assure que c'est bien un admin
             const userId = msg.from.id;
             const chatId = String(msg.chat.id);
             
@@ -258,7 +254,7 @@ class MessageHandler {
                 return;
             }
     
-            // Use the admin command handler
+            // On utilise notre nouveau AdminCommandManager à travers commandHandlersInstance
             if (this.commandHandlersInstance.adminCommands) {
                 await this.commandHandlersInstance.adminCommands.handleCommand(command, msg, args);
             } else {
@@ -277,18 +273,21 @@ class MessageHandler {
         }
     }
     
+    
+
     async handleNonCommand(msg, messageThreadId) {
         try {
-            // Get user state
+            // Récupérer l'état utilisateur
             const userId = msg.from.id;
             const chatId = msg.chat.id;
             const isGroup = msg.chat.type === 'group' || msg.chat.type === 'supergroup';
             const inputText = msg.text?.trim()?.toLowerCase() || '';
             
-            // Check for cancel commands
+            // Check for explicit cancellation words
             const isCancelCommand = ['cancel', 'stop', '/cancel', '/stop'].includes(inputText);
             if (isCancelCommand) {
-                // Clear states but preserve tracking info
+                // Clear input states for this chat if cancel command is detected
+                // But preserve tracking info
                 if (typeof this.stateManager.cleanAllChatStates === 'function') {
                     const count = this.stateManager.cleanAllChatStates(chatId, { preserveTrackingInfo: true });
                     if (count > 0) {
@@ -304,7 +303,7 @@ class MessageHandler {
             
             // For groups, also check group-level state
             if (isGroup) {
-                // Check for group chat threshold state
+                // Check for group chat threshold state with any active requests
                 const groupStateKey = `grp_${chatId}`;
                 const groupState = this.stateManager.getUserState(groupStateKey);
                 
@@ -319,7 +318,7 @@ class MessageHandler {
                     groupState.respondingUserId = userId;
                     this.stateManager.setUserState(groupStateKey, groupState);
                     
-                    // Link the user to the group threshold request
+                    // Set temporary individual state for this user to link them to the group threshold request
                     this.stateManager.setUserState(userId, {
                         action: 'awaiting_custom_threshold',
                         tokenAddress: groupState.tokenAddress,
@@ -331,13 +330,12 @@ class MessageHandler {
                 }
             }
             
-            // Handle referral address input
+            // Si en attente d'une adresse referral
             if (userState?.context === 'referral' && userState?.step === 'WAITING_ADDRESS') {
                 await this.commandHandlersInstance.referralHandler.handleAddressInput(this.bot, msg);
                 return;
             }
 
-            // Handle custom threshold input
             if (userState?.action === 'awaiting_custom_threshold') {
                 this.logger.debug('Handling custom threshold input', {
                     isGroup,
@@ -350,7 +348,6 @@ class MessageHandler {
                 return;
             }
     
-            // Log Solana addresses in group chats
             const messageText = msg.text || '';
             const solanaAddressRegex = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
             if (solanaAddressRegex.test(messageText)) {
@@ -360,6 +357,7 @@ class MessageHandler {
             this.logger.error(`Error handling non-command message:`, error);
         }
     }
+    
 }
 
 module.exports = MessageHandler;

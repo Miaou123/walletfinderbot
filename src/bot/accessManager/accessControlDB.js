@@ -42,29 +42,9 @@ class AccessControlDB {
 
    async isAdmin(userId) {
         try {
-            logger.debug(`Checking if user ${userId} is an admin. Config adminIds: ${this.config.adminIds}`);
-            
-            // Convert to number for comparison
-            const userIdNum = Number(userId);
-            
-            // Handle both array and comma-separated string formats
-            if (Array.isArray(this.config.adminIds)) {
-                return this.config.adminIds.includes(userIdNum);
-            } else if (typeof this.config.adminIds === 'string') {
-                // Parse comma-separated string of admin IDs
-                const adminIdArray = this.config.adminIds.split(',').map(id => Number(id.trim()));
-                logger.debug(`Parsed admin IDs: ${JSON.stringify(adminIdArray)}`);
-                return adminIdArray.includes(userIdNum);
-            } else if (typeof this.config.adminIds === 'number') {
-                // Single admin ID as number
-                return this.config.adminIds === userIdNum;
-            }
-            
-            logger.warn(`Admin IDs not configured properly: ${this.config.adminIds}`);
-            return false;
+            return this.config.adminIds.includes(Number(userId));
         } catch (error) {
             logger.error(`Error checking admin status for user "${userId}":`, error);
-            logger.error(`Error details: ${error.message}`, { stack: error.stack });
             return false;
         }
     }
