@@ -45,6 +45,7 @@ For example "/help /eb", "/eb help" or "/eb" with no arguments will give you a f
 /cross (/c) - Find common holders between multiple tokens
 /crossbt (/cbt) - Find common holders between the top traders of multiple tokens (realized and unrealized PnL)
 /search (/sh) - Search for specific wallets with only a part of their address
+/walletsearch (/ws) - Search for wallets based on criteria like winrate and portfolio value
 /tracker - Show tracked supplies
 
 For more information on how to use each command and how they work, please consult our <a href="https://smp-team.gitbook.io/noesis-bot">documentation</a>.
@@ -87,6 +88,7 @@ If you have any questions, want to report a bug, or have any suggestions on new 
             'crossbt': '🔄',
             'search': '🔎',
             'tracker': '👁️',
+            'walletsearch': '🔍',
             'subscribe': '💫',
             'subscribe_group': '👥',
             'referral': '🔗',
