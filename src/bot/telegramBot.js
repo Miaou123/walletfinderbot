@@ -11,6 +11,7 @@ const AccessControlDB = require('./accessManager/accessControlDB');
 const SolanaPaymentHandler = require('../tools/solanaPaymentHandler.js');
 const groupMessageLogger = require('./messageDataManager/groupMessageLogger');
 const MessageHandler = require('./messageHandler');
+const WalletUpdateManager = require('./walletUpdateManager');
 const { getDatabase } = require('../database');
 
 // ====================
@@ -154,6 +155,18 @@ class TelegramBotService {
 
         // 6. Initialiser le groupMessageLogger si nécessaire
         groupMessageLogger.initialize();
+
+        // 7. Initialize the wallet update manager to update old wallet data
+        this.walletUpdateManager = new WalletUpdateManager({
+            ageDays: 7,            // Update wallets older than 7 days
+            walletsPerMinute: 10,  // Limit to 10 updates per minute to avoid API overload
+            logInterval: 60 * 60 * 1000  // Log stats once per hour
+        });
+        
+        // Start the wallet update manager
+        this.walletUpdateManager.start();
+        this.logger.info('Wallet update manager started successfully');
+        
         this.logger.info('All managers initialized successfully');
     }
 
@@ -204,6 +217,10 @@ class TelegramBotService {
 
         // 4) Reset des limites quotidiennes
         setInterval(() => this.resetDailyLimits(), this.ONE_DAY_IN_MS);
+
+        // 5) Process termination handling to gracefully stop services
+        process.on('SIGINT', this.handleShutdown.bind(this));
+        process.on('SIGTERM', this.handleShutdown.bind(this));
 
         this.logger.info('Event listeners setup completed');
     }
@@ -287,6 +304,27 @@ class TelegramBotService {
 
         if (currentMessage) messages.push(currentMessage.trim());
         return messages.filter(msg => msg.trim().length > 0);
+    }
+
+    /**
+     * Gracefully handle shutdown, stopping all services
+     */
+    handleShutdown() {
+        this.logger.info('Received shutdown signal, stopping services...');
+        
+        // Stop the wallet update manager if it exists
+        if (this.walletUpdateManager) {
+            this.walletUpdateManager.stop();
+            this.logger.info('Wallet update manager stopped');
+        }
+        
+        // Close any other resources
+        // ...
+
+        this.logger.info('All services stopped, shutting down');
+        
+        // Exit with a delay to allow logs to be written
+        setTimeout(() => process.exit(0), 1000);
     }
 }
 

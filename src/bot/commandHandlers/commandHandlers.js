@@ -23,6 +23,7 @@ const TeamHandler = require('./teamHandler');
 const GroupSubscriptionHandler = require('./groupSubscriptionHandler');
 const ReferralHandler = require('./referralHandler');
 const WalletCheckerHandler = require('./walletCheckerHandler');
+const WalletSearcherHandler = require('./walletSearcherHandler');
 const PreviewHandler = require('./previewHandler');
 const stateManager = require('../../utils/stateManager');
 const logger = require('../../utils/logger');

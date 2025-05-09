@@ -308,6 +308,22 @@ class MessageHandler {
             
             // Check individual user state
             let userState = this.stateManager.getUserState(userId);
+
+            // Check if the wallet search handler is waiting for custom input
+            if (userState?.context === 'walletSearch' && userState.data?.pendingCriteria) {
+                try {
+                    // Try to handle custom input for wallet search
+                    if (this.commandHandlersInstance.walletSearcherHandler.handleCustomInput) {
+                        const handled = await this.commandHandlersInstance.walletSearcherHandler.handleCustomInput(
+                            this.bot, 
+                            msg
+                        );
+                        if (handled) return; // Message was handled
+                    }
+                } catch (error) {
+                    this.logger.error('Error handling wallet search custom input:', error);
+                }
+            }
             
             // For groups, also check group-level state
             if (isGroup) {

@@ -1,13 +1,13 @@
-const formatNumber = (number, decimals = 1, isPercentage = false) => {
+const formatNumber = (number, decimals = 1, isPercentage = false, useHtmlTags = true) => {
   if (number === undefined || number === null) {
-    return '<code>N/A</code>';
+    return useHtmlTags ? '<code>N/A</code>' : 'N/A';
   }
 
   // Convertir en nombre si ce n'est pas déjà le cas
   number = Number(number);
 
   if (isNaN(number)) {
-    return '<code>N/A</code>';
+    return useHtmlTags ? '<code>N/A</code>' : 'N/A';
   }
 
   const absNumber = Math.abs(number);
@@ -33,7 +33,7 @@ const formatNumber = (number, decimals = 1, isPercentage = false) => {
     formattedNumber = formattedNumber.replace(/\.0+([kM%])?$/, '$1');
   }
 
-  return `<code>${formattedNumber}</code>`;
+  return useHtmlTags ? `<code>${formattedNumber}</code>` : formattedNumber;
 };
 
   

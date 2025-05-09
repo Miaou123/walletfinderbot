@@ -12,6 +12,8 @@ class StartHandler {
     const username = (msg.from.username || '').toLowerCase();
 
     try {
+      // No special handling needed for wallet checker links anymore
+      
       // Check if there's a referral link
       let referrerUserId = null;
       if (args.length > 0 && args[0].startsWith('r-')) {

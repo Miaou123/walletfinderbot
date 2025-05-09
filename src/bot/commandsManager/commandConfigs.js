@@ -181,24 +181,14 @@ const commandConfigs = {
     requiresAuth: true,
     description: 'Search for wallets by criteria',
     usage: '/walletsearch',
-    helpMessage: 'Interactive search tool for finding wallets based on various criteria such as win rate, portfolio value, profit, and SOL balance.\n\n' +
-                 'Use this command to filter our database for wallets that match specific trading criteria. All searches are interactive with an easy-to-use UI.'
-  },
-  // 'freshratio': {
-  //   aliases: ['fr'],
-  //   minArgs: 1,
-  //   maxArgs: 3,
-  //   requiresAuth: true,
-  //   description: 'Analyze fresh wallet ratio',
-  //   usage: '/freshratio [contract_address] [time_frame](1h)* [min buy amount](0.005%)*',
-  //   helpMessage: 'Analyze the proportion of fresh wallets buying a token over a specific time frame.\n\n' +
-  //                 'Time frame is in hours or minutes (e.g., 1h, 30m, 5d). Default is 1 hour.\n' +
-  //                 'Percentage is the minimum percentage of total supply for a buy to be considered. Default is 0.005%.\n\n' +
-  //                 'Examples:\n' +
-  //                 '/freshratio tokenAddress\n' +
-  //                 '/freshratio tokenAddress 2h\n' +
-  //                 '/freshratio tokenAddress 5d 0.01%\n'
-  // },
+    helpMessage: 'Search for wallets based on criteria like Win Rate, Portfolio Value, Profit, and SOL Balance.\n\n' +
+                'This interactive search allows you to set multiple criteria and find wallets matching all conditions.\n\n' +
+                'Examples of what you can find:\n' +
+                '• High value traders with strong performance\n' +
+                '• Wealthy traders accumulating SOL\n' +
+                '• Consistent profit makers\n\n' +
+                'Simply use /walletsearch with no arguments to start the interactive search panel.'
+},
   'tracker': { 
     aliases: ['tr'], 
     minArgs: 0, 
