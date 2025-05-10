@@ -84,7 +84,7 @@ const formatSingleWallet = (buyer, index, tokenInfo, coinAddress) => {
       if (walletData.realized_profit_30d || walletData.unrealized_profit) {
         const realizedPL = walletData.realized_profit_30d ? `$${formatNumber(walletData.realized_profit_30d, 0)}` : 'N/A';
         const unrealizedPL = walletData.unrealized_profit ? `$${formatNumber(walletData.unrealized_profit, 0)}` : 'N/A';
-        result += `├ 💰 P/L (30d): ${realizedPL} / uP/L: ${unrealizedPL}\n`;
+        result += `├ 💰 P/L (30d): ${realizedPL} / uPnL: ${unrealizedPL}\n`;
       }
 
       if (walletData.winrate) {

@@ -42,7 +42,7 @@ function formatTraderInfo(trader, rank, tokenAddresses) {
     if (trader.walletCheckerData) {
         const { total_value, sol_balance, realized_profit_30d, unrealized_profit, winrate } = trader.walletCheckerData;
         result += `├ 💼 Port: $${formatNumber(total_value || 0, 0)} (SOL: ${formatNumber(sol_balance || 0, 2)})\n`;
-        result += `├ 💰 P/L (30d): $${formatNumber(realized_profit_30d || 0, 0)} 📈 uP/L: $${formatNumber(unrealized_profit || 0, 0)}\n`;
+        result += `├ 💰 P/L (30d): $${formatNumber(realized_profit_30d || 0, 0)} 📈 uPnL: $${formatNumber(unrealized_profit || 0, 0)}\n`;
         result += `├ 📊 Winrate (30d): ${((winrate || 0) * 100).toFixed(2)}%\n`;
     }
 

@@ -31,7 +31,7 @@ class WalletSearcherHandler extends BaseHandler {
             pnl_2x_5x_num: 0,
             pnl_gt_5x_num: 0,
             token_avg_cost: 0,
-            unrealized_pnl: 0
+            unrealized_profit: 0
         };
         
         // Human-readable names for criteria
@@ -46,7 +46,7 @@ class WalletSearcherHandler extends BaseHandler {
             pnl_2x_5x_num: '2x-5x',
             pnl_gt_5x_num: '5x+',
             token_avg_cost: 'Avg Buy',
-            unrealized_pnl: 'uPnL'
+            unrealized_profit: 'uPnL'
         };
         
         // Criteria units for display
@@ -61,7 +61,7 @@ class WalletSearcherHandler extends BaseHandler {
             pnl_2x_5x_num: '',
             pnl_gt_5x_num: '',
             token_avg_cost: '$',
-            unrealized_pnl: '$'
+            unrealized_profit: '$'
         };
         
         // Maximum results to return
@@ -545,7 +545,7 @@ class WalletSearcherHandler extends BaseHandler {
                     // Format values based on type
                     if (key === 'winrate') {
                         displayValue = `${displayValue}${unit}`;
-                    } else if (['total_value', 'realized_profit_30d', 'token_avg_cost', 'unrealized_pnl'].includes(key)) {
+                    } else if (['total_value', 'realized_profit_30d', 'token_avg_cost', 'unrealized_profit'].includes(key)) {
                         displayValue = `${unit}${formatNumber(displayValue, 0, false, true)}`;
                     } else if (key === 'sol_balance') {
                         displayValue = `${displayValue} ${unit}`;
@@ -641,7 +641,7 @@ class WalletSearcherHandler extends BaseHandler {
                     let valueDisplay = '';
                     if (key === 'winrate') {
                         valueDisplay = `${criteria[key]}${unit}`;
-                    } else if (['total_value', 'realized_profit_30d', 'token_avg_cost', 'unrealized_pnl'].includes(key)) {
+                    } else if (['total_value', 'realized_profit_30d', 'token_avg_cost', 'unrealized_profit'].includes(key)) {
                         valueDisplay = `${unit}${formatNumber(criteria[key], 0, false, false)}`;
                     } else if (key === 'sol_balance') {
                         valueDisplay = `${criteria[key]} ${unit}`;
@@ -890,9 +890,9 @@ class WalletSearcherHandler extends BaseHandler {
             query.token_avg_cost = { $gte: criteria.token_avg_cost };
         }
         
-        if (criteria.unrealized_pnl > 0) {
-            // Now treat it as a dollar value, not a percentage
-            query.unrealized_pnl = { $gte: criteria.unrealized_pnl };
+        if (criteria.unrealized_profit > 0) {
+            // Use unrealized_profit as a dollar value
+            query.unrealized_profit = { $gte: criteria.unrealized_profit };
         }
         
         return query;
@@ -1006,7 +1006,7 @@ class WalletSearcherHandler extends BaseHandler {
                     displayValue = `≥ ${value}${unit}`;
                 } 
                 // Format dollar amounts
-                else if (['total_value', 'realized_profit_30d', 'token_avg_cost', 'unrealized_pnl'].includes(key)) {
+                else if (['total_value', 'realized_profit_30d', 'token_avg_cost', 'unrealized_profit'].includes(key)) {
                     displayValue = `≥ ${unit}${formatNumber(value, 0, false, true)}`;
                 }
                 // Format SOL amounts
@@ -1145,10 +1145,9 @@ class WalletSearcherHandler extends BaseHandler {
                     
                 // Unrealized PnL if significant
                 let unrealPnl = '';
-                if (wallet.unrealized_pnl !== null && Math.abs(wallet.unrealized_pnl) > 0.05) {
-                    const pnlPercent = (wallet.unrealized_pnl * 100).toFixed(0);
-                    const pnlSymbol = wallet.unrealized_pnl > 0 ? '📈' : '📉';
-                    unrealPnl = `${pnlSymbol} uPnL: $${formatNumber(wallet.unrealized_pnl, 0, false, true)}`;
+                if (wallet.unrealized_profit !== null && wallet.unrealized_profit !== undefined) {
+                    const pnlSymbol = wallet.unrealized_profit > 0 ? '📈' : '📉';
+                    unrealPnl = `${pnlSymbol} uPnL: $${formatNumber(wallet.unrealized_profit, 0, false, true)}`;
                 }
                 
                 // Add to line 3

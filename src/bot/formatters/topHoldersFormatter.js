@@ -103,7 +103,7 @@ const formatSingleWallet = (wallet, index, tokenInfo) => {
     info += `├ 💼 Port: ${formatNumber(portfolioValue)} (SOL: ${formatNumber(wallet.solBalance, 2)})\n`;
 
     if (wallet.pnl30d !== undefined && wallet.unrealizedPnl !== undefined) {
-      info += `├ 💰 P/L (30d): ${formatNumber(wallet.pnl30d)} 📈 uP/L: ${formatNumber(wallet.unrealizedPnl)}\n`;
+      info += `├ 💰 P/L (30d): ${formatNumber(wallet.pnl30d)} 📈 uPnL: ${formatNumber(wallet.unrealizedPnl)}\n`;
     }
 
     if (wallet.winrate !== undefined) {

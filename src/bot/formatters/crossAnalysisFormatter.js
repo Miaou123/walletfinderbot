@@ -77,7 +77,7 @@ const formatCrossAnalysisWallet = (wallet, contractAddresses, tokenInfos, rank) 
             const winratePercentage = (winrate * 100).toFixed(2);
 
             result += `├ 💼 Port: $<b>${formatNumber(total_value, 0)}</b> (SOL: <b>${formatNumber(sol_balance, 2)}</b>)\n`;
-            result += `├ 💰 P/L (30d): $<b>${formatNumber(realized_profit_30d, 0)}</b> 📈 uP/L: $<b>${formatNumber(unrealized_profit, 0)}</b>\n`;
+            result += `├ 💰 P/L (30d): $<b>${formatNumber(realized_profit_30d, 0)}</b> 📈 uPnL: $<b>${formatNumber(unrealized_profit, 0)}</b>\n`;
             result += `├ 📊 Winrate (30d): <b>${winratePercentage}%</b>\n`;
         }
 

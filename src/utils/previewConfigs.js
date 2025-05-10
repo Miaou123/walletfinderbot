@@ -153,12 +153,12 @@ Boost: ❌`
 
 1.  <a href="https://solscan.io/account/4NfwPyCRv81vmhWhTgbrvT6StNfFny9PCuuVq1efcUz9">4NfwP...cUz9</a> → <code>0.68%</code> <a href="https://gmgn.ai/sol/address/4NfwPyCRv81vmhWhTgbrvT6StNfFny9PCuuVq1efcUz9">gmgn</a>/<a href="https://app.cielo.finance/profile/4NfwPyCRv81vmhWhTgbrvT6StNfFny9PCuuVq1efcUz9/pnl/tokens">cielo</a>
 ├ 💼 Port: <code>53374.7M</code> (SOL: <code>0.05</code>)
-├ 💰 P/L (30d): <code>-18k</code> 📈 uP/L: <code>3.2M</code>
+├ 💰 P/L (30d): <code>-18k</code> 📈 uPnL: <code>3.2M</code>
 └ 📊 Winrate (30d): <code>5.13%</code> (<a href="https://dexscreener.com/solana/3FkVTy1c7SE6RqfK7v3bW2jbc1B25je86D3gBG2Zyfmc?maker=4NfwPyCRv81vmhWhTgbrvT6StNfFny9PCuuVq1efcUz9">LOCKIN</a> <code>53364.2M</code>, <a href="https://dexscreener.com/solana/BNbERcAV1JakxB3uDpvRqvvimMvGLsmLf4k5bLjXpump?maker=4NfwPyCRv81vmhWhTgbrvT6StNfFny9PCuuVq1efcUz9">BERA</a> <code>6.9M</code>, <a href="https://dexscreener.com/solana/9BB6NFEcjBCtnNLFko2FqVQBq8HHM13kCyYcdQbgpump?maker=4NfwPyCRv81vmhWhTgbrvT6StNfFny9PCuuVq1efcUz9">Fartcoin</a> <code>3.6M</code>)
 
 2.  <a href="https://solscan.io/account/7WUzqEfQqK2sRbweM7h2BHJVyam3q487MTUj1AxNc6fZ">7WUzq...c6fZ</a> → <code>0.56%</code> <a href="https://gmgn.ai/sol/address/7WUzqEfQqK2sRbweM7h2BHJVyam3q487MTUj1AxNc6fZ">gmgn</a>/<a href="https://app.cielo.finance/profile/7WUzqEfQqK2sRbweM7h2BHJVyam3q487MTUj1AxNc6fZ/pnl/tokens">cielo</a>
 ├ 💼 Port: <code>10855.1M</code> (SOL: <code>0.01</code>)
-├ 💰 P/L (30d): <code>6.5M</code> 📈 uP/L: <code>-97.9k</code>
+├ 💰 P/L (30d): <code>6.5M</code> 📈 uPnL: <code>-97.9k</code>
 └ 📊 Winrate (30d): <code>45.45%</code> (<a href="https://dexscreener.com/solana/9PqwECrkoFtZPWqLa3o1LPoSspn717RK5SVdeakNw1Fr?maker=7WUzqEfQqK2sRbweM7h2BHJVyam3q487MTUj1AxNc6fZ">Lessin</a> <code>10101.9M</code>, <a href="https://dexscreener.com/solana/D7ddyCWBihGeHfkPi54WJSieQTd83oMWDuhcgE8yrq3d?maker=7WUzqEfQqK2sRbweM7h2BHJVyam3q487MTUj1AxNc6fZ">Pain</a> <code>736.6M</code>, <a href="https://dexscreener.com/solana/5hz7T5w6Qvh32oMrrw98msB5kRHwnNtCa936sAGLbLoV?maker=7WUzqEfQqK2sRbweM7h2BHJVyam3q487MTUj1AxNc6fZ">Anthropic</a> <code>9.7M</code>)`,
         },
         features: [
@@ -210,17 +210,17 @@ Click /bt to customize these values
                     
 1. <a href="https://solscan.io/account/4pZB2v8g8c723e2MVe6pujLuMkn24VPriJCKocGbr4fB">4pZB2...r4fB</a> 🐳 <a href="https://gmgn.ai/sol/address/4pZB2v8g8c723e2MVe6pujLuMkn24VPriJCKocGbr4fB">gmgn</a>/<a href="https://app.cielo.finance/profile/4pZB2v8g8c723e2MVe6pujLuMkn24VPriJCKocGbr4fB/pnl/tokens">cielo</a>
 ├ 💼 Port: <code>$2M</code> (SOL: <code>0.40</code>)
-├ 💰 P/L (30d): <code>$1M</code> 📈 uP/L: <code>$-141k</code>
+├ 💰 P/L (30d): <code>$1M</code> 📈 uPnL: <code>$-141k</code>
 └ 📊 Winrate (30d): <code>100.00%</code>
 
 2. <a href="https://solscan.io/account/D4L6BMJRAsYcmtUCkvVhoJ82HqhieHZ8JmwvZQhZRtRC">D4L6B...RtRC</a> 🐳 <a href="https://gmgn.ai/sol/address/D4L6BMJRAsYcmtUCkvVhoJ82HqhieHZ8JmwvZQhZRtRC">gmgn</a>/<a href="https://app.cielo.finance/profile/D4L6BMJRAsYcmtUCkvVhoJ82HqhieHZ8JmwvZQhZRtRC/pnl/tokens">cielo</a>
 ├ 💼 Port: <code>$133k</code> (SOL: <code>0.16</code>)
-├ 💰 P/L (30d): <code>$998k</code> 📈 uP/L: <code>$-238k</code>
+├ 💰 P/L (30d): <code>$998k</code> 📈 uPnL: <code>$-238k</code>
 └ 📊 Winrate (30d): <code>100.00%</code>
 
 3. <a href="https://solscan.io/account/3NMDSDJm8p7N3BozWzVcKHKgRR4HeBWV4vgB6fzYx8A6">3NMDS...x8A6</a> 🐳 <a href="https://gmgn.ai/sol/address/3NMDSDJm8p7N3BozWzVcKHKgRR4HeBWV4vgB6fzYx8A6">gmgn</a>/<a href="https://app.cielo.finance/profile/3NMDSDJm8p7N3BozWzVcKHKgRR4HeBWV4vgB6fzYx8A6/pnl/tokens">cielo</a>
 ├ 💼 Port: <code>$189k</code> (SOL: <code>330.45</code>)
-├ 💰 P/L (30d): <code>$156k</code> 📈 uP/L: <code>$-85k</code>
+├ 💰 P/L (30d): <code>$156k</code> 📈 uPnL: <code>$-85k</code>
 └ 📊 Winrate (30d): <code>100.00%</code>`
         },
         features: [
@@ -245,14 +245,14 @@ Fartcoin/FWOG: <b><code>216</code></b>
 1. <a href="https://solscan.io/account/FWznbcNXWQuHTawe9RxvQ2LdCENssh12dsznf4RiouN5">FWzn...ouN5</a> 🐳 <a href="https://gmgn.ai/sol/address/FWznbcNXWQuHTawe9RxvQ2LdCENssh12dsznf4RiouN5">gmgn</a>/<a href="https://app.cielo.finance/profile/FWznbcNXWQuHTawe9RxvQ2LdCENssh12dsznf4RiouN5/pnl/tokens">cielo</a>
 ├ 🪙 Tokens held: <b>2/2</b>
 ├ 💼 Port: $<b>1010M</b> (SOL: <b>1.20M</b>)
-├ 💰 P/L (30d): $<b>0</b> 📈 uP/L: $<b>0</b>
+├ 💰 P/L (30d): $<b>0</b> 📈 uPnL: $<b>0</b>
 ├ 📊 Winrate (30d): <b>0.00%</b>
 └ 🔗 Combined Value: $<b>15.1M</b> (<a href="https://solscan.io/token/9BB6NFEcjBCtnNLFko2FqVQBq8HHM13kCyYcdQbgpump">Fartcoin</a>: $<b>11M</b>, <a href="https://solscan.io/token/A8C3xuqscfmyLrte3VmTqrAq8kgMASius9AFNANwpump">FWOG</a>: $<b>4.2M</b>)
 
 2. <a href="https://solscan.io/account/ASTyfSima4LLAdDgoFGkgqoKowG1LZFDr9fAQrg7iaJZ">ASTy...iaJZ</a> 🦐 <a href="https://gmgn.ai/sol/address/ASTyfSima4LLAdDgoFGkgqoKowG1LZFDr9fAQrg7iaJZ">gmgn</a>/<a href="https://app.cielo.finance/profile/ASTyfSima4LLAdDgoFGkgqoKowG1LZFDr9fAQrg7iaJZ/pnl/tokens">cielo</a>
 ├ 🪙 Tokens held: <b>2/2</b>
 ├ 💼 Port: $<b>0</b> (SOL: <b>28.61k</b>)
-├ 💰 P/L (30d): $<b>N/A</b> 📈 uP/L: $<b>0</b>
+├ 💰 P/L (30d): $<b>N/A</b> 📈 uPnL: $<b>0</b>
 ├ 📊 Winrate (30d): <b>0.00%</b>
 └ 🔗 Combined Value: $<b>7.7M</b> (<a href="https://solscan.io/token/9BB6NFEcjBCtnNLFko2FqVQBq8HHM13kCyYcdQbgpump">Fartcoin</a>: $<b>6.5M</b>, <a href="https://solscan.io/token/A8C3xuqscfmyLrte3VmTqrAq8kgMASius9AFNANwpump">FWOG</a>: $<b>1.1M</b>)`,
         },
@@ -276,7 +276,7 @@ Analyzing top traders for 2 tokens:
 
 1. <a href="https://solscan.io/account/FWznbcNXWQuHTawe9RxvQ2LdCENssh12dsznf4RiouN5">FWznb...ouN5</a> 🐳 <a href="https://gmgn.ai/sol/address/FWznbcNXWQuHTawe9RxvQ2LdCENssh12dsznf4RiouN5">GMGN</a>/<a href="https://app.cielo.finance/profile/FWznbcNXWQuHTawe9RxvQ2LdCENssh12dsznf4RiouN5/pnl/tokens">Cielo</a>
 ├ 💼 Port: $<code>1010M</code> (SOL: <code>1.20M</code>)
-├ 💰 P/L (30d): $<code>0</code> 📈 uP/L: $<code>0</code>
+├ 💰 P/L (30d): $<code>0</code> 📈 uPnL: $<code>0</code>
 ├ 📊 Winrate (30d): <code>0.00%</code>
 └ 🏆 Stats:
    9BB6N...gpump: PNL $<code>11M</code>, <code>215.32%</code>
@@ -284,7 +284,7 @@ Analyzing top traders for 2 tokens:
 
 2. <a href="https://solscan.io/account/ASTyfSima4LLAdDgoFGkgqoKowG1LZFDr9fAQrg7iaJZ">ASTyf...iaJZ</a> 🦐 <a href="https://gmgn.ai/sol/address/ASTyfSima4LLAdDgoFGkgqoKowG1LZFDr9fAQrg7iaJZ">GMGN</a>/<a href="https://app.cielo.finance/profile/ASTyfSima4LLAdDgoFGkgqoKowG1LZFDr9fAQrg7iaJZ/pnl/tokens">Cielo</a>
 ├ 💼 Port: $<code>0</code> (SOL: <code>28.61k</code>)
-├ 💰 P/L (30d): $<code>N/A</code> 📈 uP/L: $<code>0</code>
+├ 💰 P/L (30d): $<code>N/A</code> 📈 uPnL: $<code>0</code>
 ├ 📊 Winrate (30d): <code>0.00%</code>
 └ 🏆 Stats:
    9BB6N...gpump: PNL $<code>6.5M</code>, <code>167.43%</code>

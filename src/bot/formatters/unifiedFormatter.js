@@ -431,7 +431,7 @@ class UnifiedFormatter {
           
           // Add portfolio and PnL info - keeping exactly the same format
           formattedString += `├ 💼 Port: $${formatNumber(total_value, 0)} (SOL: ${sol_balance ? formatNumber(sol_balance, 2) : 'N/A'})\n`;
-          formattedString += `├ 💰 P/L (30d): $${formatNumber(realized_profit_30d, 0)} 📈 uP/L: $${unrealized_profit ? formatNumber(unrealized_profit, 0) : 'N/A'}\n`;
+          formattedString += `├ 💰 P/L (30d): $${formatNumber(realized_profit_30d, 0)} 📈 uPnL: $${unrealized_profit ? formatNumber(unrealized_profit, 0) : 'N/A'}\n`;
           formattedString += `└ 📊 Winrate (30d): ${winratePercentage}%`;
 
           return formattedString;
