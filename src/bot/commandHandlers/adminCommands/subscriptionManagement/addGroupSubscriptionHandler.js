@@ -11,6 +11,7 @@ class AddGroupSubscriptionHandler extends BaseAdminHandler {
         const chatId = String(msg.chat.id);
         const userId = msg.from.id;
         const isGroup = msg.chat.type === 'supergroup' || msg.chat.type === 'group';
+        let normalizedDuration;
 
         try {
             logger.info(`Starting handleAddGroupSubscription for admin ID: ${userId} in chat: ${chatId}`);
@@ -40,9 +41,9 @@ class AddGroupSubscriptionHandler extends BaseAdminHandler {
             }
 
             // Normalisation des arguments
-            const duration = args[0].toLowerCase();
+            normalizedDuration = args[0].toLowerCase();
 
-            if (!['1month', '3month', '6month'].includes(duration)) {
+            if (!['1month', '3month', '6month'].includes(normalizedDuration)) {
                 await this.bot.sendMessage(
                     chatId,
                     "❌ Invalid duration. Available options:\n" +
@@ -53,101 +54,103 @@ class AddGroupSubscriptionHandler extends BaseAdminHandler {
                 return;
             }
 
-            // Générer un paiement fictif pour l'ajout manuel
-            const paymentId = `admin_payment_${Date.now()}`;
-            
-            // Calculate expiry date based on duration
-            const now = new Date();
-            let expiryDate = new Date(now);
-            
-            if (duration === '1month') {
-                expiryDate.setMonth(expiryDate.getMonth() + 1);
-            } else if (duration === '3month') {
-                expiryDate.setMonth(expiryDate.getMonth() + 3);
-            } else if (duration === '6month') {
-                expiryDate.setMonth(expiryDate.getMonth() + 6);
-            }
-            
-            // Set up transaction data
-            const transactionData = {
-                adminGranted: true,
-                amount: 0
-            };
-
-            // Création ou mise à jour de l'abonnement du groupe via direct database operations
-            const database = await getDatabase();
-            const collection = database.collection("group_subscriptions");
-            
-            logger.info(`Processing group subscription for group "${msg.chat.title}" (${chatId})`);
-            
-            // Check if a subscription already exists
-            const existingSubscription = await collection.findOne({ chatId });
-            
-            // Create payment entry
-            const paymentEntry = {
-                paymentId,
-                paymentDate: now,
-                paidByUserId: String(userId),
-                paidByUsername: msg.from.username || 'unknown',
-                duration: `Admin grant: ${duration}`,
-                amount: 0,
-                ...transactionData
-            };
-            
-            // If existing subscription hasn't expired yet, extend from that date
-            if (existingSubscription && 
-                existingSubscription.expiresAt && 
-                new Date(existingSubscription.expiresAt) > now) {
-                logger.info(`Extending existing group subscription for ${msg.chat.title}`);
-                expiryDate = new Date(existingSubscription.expiresAt);
-                expiryDate.setMonth(expiryDate.getMonth() + 
-                    (duration === '1month' ? 1 : (duration === '3month' ? 3 : 6)));
-            }
-            
-            // Create a document that matches schema requirements
-            const document = {
-                chatId,
-                groupName: msg.chat.title,
-                adminUserId: String(userId),  // Required by schema
-                expiresAt: expiryDate,
-                lastUpdated: now,
-                active: true,
-                startDate: existingSubscription ? existingSubscription.startDate : now
-            };
-            
-            // Update or create subscription
-            const result = await collection.findOneAndUpdate(
-                { chatId },
-                {
-                    $set: document,
-                    $push: { paymentHistory: paymentEntry }
-                },
-                { 
-                    upsert: true, 
-                    returnDocument: 'after' 
+            // Use the SubscriptionService directly
+            try {
+                const database = await getDatabase();
+                const collection = database.collection("group_subscriptions");
+                
+                // Generate payment ID
+                const paymentId = `admin_payment_${Date.now()}`;
+                const amount = SubscriptionService.SUBSCRIPTION_TYPES.GROUP.price;
+                
+                // Calculate expiry date
+                const now = new Date();
+                let expiryDate = new Date(now);
+                const monthsToAdd = normalizedDuration === '1month' ? 1 : 
+                                  (normalizedDuration === '3month' ? 3 : 6);
+                expiryDate.setMonth(expiryDate.getMonth() + monthsToAdd);
+                
+                // Create payment record
+                const paymentRecord = {
+                    paidByUserId: String(userId),
+                    paidByUsername: msg.from.username || 'unknown',
+                    paymentId,
+                    duration: normalizedDuration,
+                    paymentDate: now,
+                    paymentStatus: 'completed',
+                    amount,
+                    transactionHash: '',
+                    transferHash: '',
+                    adminGranted: true
+                };
+                
+                // Check if subscription exists
+                const existingSubscription = await collection.findOne({ chatId });
+                
+                if (existingSubscription) {
+                    // If existing subscription is still active, extend from that date
+                    if (existingSubscription.expiresAt && new Date(existingSubscription.expiresAt) > now) {
+                        expiryDate = new Date(existingSubscription.expiresAt);
+                        expiryDate.setMonth(expiryDate.getMonth() + monthsToAdd);
+                    }
+                    
+                    // Update subscription
+                    await collection.updateOne(
+                        { chatId },
+                        {
+                            $set: {
+                                expiresAt: expiryDate,
+                                active: true,
+                                lastUpdated: now
+                            },
+                            $push: {
+                                paymentHistory: paymentRecord
+                            }
+                        }
+                    );
+                    
+                    logger.info(`Updated group subscription for group ${msg.chat.title} (${chatId})`);
+                } else {
+                    // Create new subscription
+                    const newSubscription = {
+                        chatId,
+                        groupName: msg.chat.title,
+                        adminUserId: String(userId),
+                        active: true,
+                        startDate: now,
+                        expiresAt: expiryDate,
+                        lastUpdated: now,
+                        paymentHistory: [paymentRecord]
+                    };
+                    
+                    await collection.insertOne(newSubscription);
+                    logger.info(`Created new group subscription for group ${msg.chat.title} (${chatId})`);
                 }
-            );
-            
-            logger.info(`Group subscription successfully processed for ${msg.chat.title}`);
-            const groupSubscription = result.value;
-            
-            // Vérification pour éviter une erreur si l'abonnement n'est pas trouvé
-            if (!groupSubscription) {
+                
+                // Success message - don't rely on database lookup for confirmation
                 await this.bot.sendMessage(
                     chatId,
-                    `⚠️ Group subscription could not be found for ${msg.chat.title} after creation.`
+                    `✅ Group Subscription created/updated\n\n` +
+                    `🏛 Group: ${msg.chat.title}\n` +
+                    `⏰ Duration: ${normalizedDuration}\n` +
+                    `📅 Expires: ${expiryDate.toLocaleDateString()}\n` +
+                    `🆔 Payment ID: ${paymentId}`
                 );
-                return;
+                
+            } catch (dbError) {
+                logger.error('Database error in addgroupsub command:', {
+                    errorMessage: dbError.message,
+                    errorStack: dbError.stack,
+                    groupName: msg.chat.title,
+                    chatId: chatId
+                });
+                
+                await this.bot.sendMessage(
+                    chatId,
+                    "❌ Database error while processing group subscription.\n" +
+                    "Error: " + dbError.message
+                );
             }
-
-            await this.bot.sendMessage(
-                chatId,
-                `✅ Group Subscription created/updated\n\n` +
-                `🏛 Group: ${msg.chat.title}\n` +
-                `⏰ Duration: ${duration}\n` +
-                `📅 Expires: ${new Date(groupSubscription.expiresAt).toLocaleDateString()}\n` +
-                `🆔 Payment ID: ${paymentId}`
-            );
 
         } catch (error) {
             logger.error('Error in addgroupsub command:', {
@@ -155,8 +158,9 @@ class AddGroupSubscriptionHandler extends BaseAdminHandler {
                 errorStack: error.stack,
                 groupName: msg.chat.title,
                 chatId: chatId,
-                duration: duration
+                duration: normalizedDuration
             });
+            
             await this.bot.sendMessage(
                 chatId,
                 "❌ An error occurred while creating the group subscription.\n" +
