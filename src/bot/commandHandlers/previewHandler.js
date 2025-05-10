@@ -40,7 +40,7 @@ Discover our powerful trading analysis tools that help over 10,000 traders make 
             'free': { emoji: '🆓', commands: [] },
             'advanced': { emoji: '💫', commands: [] }
         };
-
+    
         // Sort commands into categories
         Object.entries(commandConfigs).forEach(([cmdName, config]) => {
             if (['scan', 'bundle', 'walletchecker', 'dexpaid'].includes(cmdName)) {
@@ -51,10 +51,10 @@ Discover our powerful trading analysis tools that help over 10,000 traders make 
                 categories.free.commands.push({ name: cmdName, config });
             }
         });
-
+    
         // Create keyboard layout
         const keyboard = [];
-
+    
         // Add category buttons
         const commandEmojis = {
             'scan': '🔍', 'bundle': '📦', 'walletchecker': '📊',
@@ -62,12 +62,32 @@ Discover our powerful trading analysis tools that help over 10,000 traders make 
             'team': '👥', 'entrymap': '📈', 'freshratio': '📊',
             'earlybuyers': '⚡', 'besttraders': '🏆', 'cross': '🔄',
             'crossbt': '🔄', 'search': '🔎', 'tracker': '👁️',
-            'subscribe': '💫', 'referral': '🔗'
+            'walletsearch': '🔍', 'subscribe': '💫', 'referral': '🔗'
         };
-
+    
+        // For the BETA feature, consider placing it at the top
+        // Create a special beta row first if walletsearch is in the commands
+        if (categories.advanced.commands.some(cmd => cmd.name === 'walletsearch')) {
+            const wsCommand = categories.advanced.commands.find(cmd => cmd.name === 'walletsearch');
+            const displayName = wsCommand.config.aliases && wsCommand.config.aliases.length > 0 
+                ? `${wsCommand.name} (/${wsCommand.config.aliases[0]})` 
+                : wsCommand.name;
+                
+            keyboard.push([{
+                text: `🔥 ${commandEmojis['walletsearch']} ${displayName} BETA 🔥`,
+                callback_data: `preview:walletsearch`
+            }]);
+            
+            // Remove walletsearch from advanced commands to avoid duplication
+            categories.advanced.commands = categories.advanced.commands.filter(cmd => cmd.name !== 'walletsearch');
+        }
+    
         let currentRow = [];
         Object.entries(categories).forEach(([category, { commands }]) => {
             commands.forEach(({ name, config }) => {
+                // Skip walletsearch as we've already handled it
+                if (name === 'walletsearch') return;
+                
                 const displayName = config.aliases && config.aliases.length > 0 
                     ? `${name} (/${config.aliases[0]})` 
                     : name;
@@ -76,7 +96,7 @@ Discover our powerful trading analysis tools that help over 10,000 traders make 
                     text: `${commandEmojis[name] || '🔹'} ${displayName}`,
                     callback_data: `preview:${name}`
                 });
-
+    
                 if (currentRow.length === 2) {
                     keyboard.push(currentRow);
                     currentRow = [];
@@ -88,7 +108,7 @@ Discover our powerful trading analysis tools that help over 10,000 traders make 
                 currentRow = [];
             }
         });
-
+    
         return keyboard;
     }
 

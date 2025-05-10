@@ -53,6 +53,52 @@ Boost: ❌`
         ],
         note: '💡 Essential for verifying token legitimacy and marketing efforts!'
     },
+
+    'walletsearch': {
+        title: '🔍 Wallet Search 🔥BETA',
+        description: 'Search the entire Noesis database for wallets matching specific criteria',
+        preview: {
+            command: '/ws',
+            response: `<b>🔍 Wallet Search</b>
+    
+    Set criteria and click Search to find matching wallets.
+    
+    <b>Current Criteria:</b>
+    - Win Rate: 70% | Total Value: $50,000
+    - SOL: 100 | PnL (30d): $5,000
+    
+    <b>Example Searches:</b>
+    - Win Rate + Total Value = Top performers
+    - 5x+ + 2x-5x = Big winners
+    - Low Hold Time + High Buys/Sells = Active traders
+    
+    <b>Search Results:</b>
+    
+    1. <a href="https://solscan.io/account/AB32YWz7KkrAYbGz3ADbD1NZSgKkAmgHPFYi18xJpump">AB32Y...pump</a> <a href="https://gmgn.ai">GMGN</a>/<a href="https://app.cielo.finance">Cielo</a>
+    ├ 💼 $2.5M | SOL: 205 | WR: 83%
+    ├ 🔄 4.2B/3.1S | ⏱️ 13h
+    └ 🚀 2x-5x: 14 | 5x+: 7
+    
+    2. <a href="https://solscan.io/account/FRqu2AX7WeedFY2kuCgYGNmAA456gdXPXpump">FRqu2...pump</a> <a href="https://gmgn.ai">GMGN</a>/<a href="https://app.cielo.finance">Cielo</a>
+    ├ 💼 $1.8M | SOL: 420 | WR: 75%
+    ├ 🔄 2.1B/1.8S | ⏱️ 6h
+    └ 🚀 2x-5x: 8 | 5x+: 3
+    
+    3. <a href="https://solscan.io/account/9tz4HsZLQ4De4Axx8n14WK9LE7BvBxpump">9tz4H...pump</a> <a href="https://gmgn.ai">GMGN</a>/<a href="https://app.cielo.finance">Cielo</a>
+    ├ 💼 $980k | SOL: 155 | WR: 72%
+    ├ 🔄 5.7B/3.9S | ⏱️ 4h
+    └ 🚀 2x-5x: 21 | 5x+: 5`
+        },
+        features: [
+            '🔍 Filter by multiple criteria simultaneously',
+            '💰 Find wallets by portfolio value and SOL balance',
+            '📊 Sort by win rate, PnL, trading activity',
+            '🏆 Discover elite traders with specific performance metrics',
+            '⚡ Track wallets with significant 2x-5x and 5x+ trades',
+        ],
+        note: '💡 Premium subscribers only! Find the most successful wallets in the Solana ecosystem with custom search criteria.',
+        betaFeature: true
+    },
     'bundle': {
         title: '📦 Bundle Analysis',
         description: 'Analyze bundled trades and detect coordinated buying patterns',

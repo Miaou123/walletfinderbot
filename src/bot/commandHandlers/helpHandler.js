@@ -16,8 +16,10 @@ class HelpHandler {
 
     async sendGeneralHelp(bot, msg, messageThreadId) {
         const generalHelpMessage = `
-You can use "/help [command]", "[command] help" or "/[command]" for a full detail on how the command works.
-For example "/help /eb", "/eb help" or "/eb" with no arguments will give you a full explanation on how the early buyers command works.
+You can use "/help [command]" or "/[command]" for a full detail on how the command works.
+
+<b>🔥 NEW BETA FEATURE 🔥</b>
+/walletsearch (/ws) - Search for wallets based on criteria like winrate and portfolio value (Subscribers only)
 
 <b>Available commands:</b>
 
@@ -46,14 +48,13 @@ For example "/help /eb", "/eb help" or "/eb" with no arguments will give you a f
 /cross (/c) - Find common holders between multiple tokens
 /crossbt (/cbt) - Find common holders between the top traders of multiple tokens (realized and unrealized PnL)
 /search (/sh) - Search for specific wallets with only a part of their address
-/walletsearch (/ws) - Search for wallets based on criteria like winrate and portfolio value
 /tracker - Show tracked supplies
 
 For more information on how to use each command and how they work, please consult our <a href="https://smp-team.gitbook.io/noesis-bot">documentation</a>.
 
 If you have any questions, want to report a bug, or have any suggestions on new features, feel free to DM @Rengon0x on Telegram or Twitter!
-
-`;
+    
+    `;
         await bot.sendLongMessage(msg.chat.id, generalHelpMessage, {
             parse_mode: 'HTML',
             disable_web_page_preview: true,
