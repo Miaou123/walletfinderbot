@@ -58,13 +58,14 @@ class AccessControlDB {
        }
    }
 
-   /**
-    * Check if user has an active subscription by userId or username
-    * @param {string} userId - User ID from Telegram
-    * @param {string} username - Username from Telegram (optional)
-    * @returns {Promise<boolean>} Whether the user has an active subscription
-    */
-   async hasActiveSubscription(userId, username = null) {
+    /**
+     * Check if user has an active subscription by userId or username
+     * Only checks by username if the subscription was created by an admin
+     * @param {string} userId - User ID from Telegram
+     * @param {string} username - Username from Telegram (optional)
+     * @returns {Promise<boolean>} Whether the user has an active subscription
+     */
+    async hasActiveSubscription(userId, username = null) {
         if (!userId) return false;
         
         try {
@@ -75,14 +76,19 @@ class AccessControlDB {
                 return true;
             }
             
-            // If not found and username is provided, check by username
+            // If not found and username is provided, check by username ONLY for admin-created subscriptions
             if (username) {
                 const normalizedUsername = this.normalizeUsername(username);
                 
-                // Use direct database query since SubscriptionService doesn't have a getByUsername method
+                // Query subscriptions by username with admin payment history
                 const subscriptionByUsername = await this.db.collection('subscriptions').findOne({
                     username: normalizedUsername,
-                    expiresAt: { $gt: new Date() }
+                    expiresAt: { $gt: new Date() },
+                    // Check for admin-created payments
+                    $or: [
+                        { "paymentHistory.paymentId": { $regex: /^admin_payment_/ } },
+                        { "paymentHistory.adminGranted": true }
+                    ]
                 });
                 
                 return Boolean(subscriptionByUsername);

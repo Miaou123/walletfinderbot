@@ -1,6 +1,7 @@
 const BaseAdminHandler = require('../baseAdminHandler');
 const logger = require('../../../../utils/logger');
 const { SubscriptionService } = require('../../../../database');
+const UserService = require('../../../../database/services/userService');
 
 class AddSubscriptionHandler extends BaseAdminHandler {
     constructor(accessControl, bot) {
@@ -9,16 +10,16 @@ class AddSubscriptionHandler extends BaseAdminHandler {
 
     async handle(msg, args) {
         const chatId = String(msg.chat.id);
-        const userId = msg.from.id;
+        const adminUserId = msg.from.id;
 
         // Declare fallback-safe variables
         let normalizedUsername = 'unknown';
         let normalizedDuration = 'unknown';
 
         try {
-            logger.info(`Starting handleAddSubscription for admin ID: ${userId}`);
+            logger.info(`Starting handleAddSubscription for admin ID: ${adminUserId}`);
 
-            if (!await this.checkAdmin(userId)) {
+            if (!await this.checkAdmin(adminUserId)) {
                 return;
             }
 
@@ -27,33 +28,35 @@ class AddSubscriptionHandler extends BaseAdminHandler {
                 await this.bot.sendMessage(
                     chatId,
                     "Usage: /addsub <username> <duration>\n" +
-                    "Example: /addsub username 3month\n" +
-                    "Available durations: 1week, 1month, 3month, 6month"
+                    "Example: /addsub username 30\n" +
+                    "The duration is in days (e.g., 30 for one month)"
                 );
                 return;
             }
 
             // Normalisation des arguments
             const [username, duration] = args;
-            const normalizedUsername = username.replace(/^@/, '').toLowerCase();
-            const normalizedDuration = duration.toLowerCase();
+            normalizedUsername = username.replace(/^@/, '').toLowerCase();
+            normalizedDuration = duration.toLowerCase();
 
             const daysToAdd = parseInt(normalizedDuration, 10);
             if (isNaN(daysToAdd) || daysToAdd <= 0) {
                 await this.bot.sendMessage(
                     chatId,
                     "❌ Invalid duration. Please provide a number of days greater than 0.\n" +
-                    "Example: /addsub username 10"
+                    "Example: /addsub username 30"
                 );
                 return;
             }
 
+            // Verify if the user exists in our database and get their actual userId
+            const user = await UserService.getUser(normalizedUsername);
+            
             // Générer un paiement fictif pour l'ajout manuel
             const paymentId = `admin_payment_${Date.now()}`;
             const amount = SubscriptionService.SUBSCRIPTION_TYPES.USER.price;
             
-            // Instead of using the service, we'll create the subscription document directly
-            // to ensure it matches the required schema
+            // Get database connection
             const database = await require('../../../../database/config/connection').getDatabase();
             const collection = database.collection("subscriptions");
             
@@ -76,14 +79,15 @@ class AddSubscriptionHandler extends BaseAdminHandler {
                 
                 const paymentRecord = {
                     userId: existingSubscription.userId,
-                    paymentId,
-                    duration: normalizedDuration,
+                    paymentId,  // This will start with admin_payment_
+                    duration: `${daysToAdd} days`,
                     amount,
                     paymentDate: now,
                     paymentStatus: 'completed',
                     transactionHash: '',
                     transferHash: '',
-                    adminGranted: true
+                    adminGranted: true,  // Mark this explicitly as admin-granted
+                    grantedBy: `admin_${adminUserId}`
                 };
                 
                 // If the existing subscription hasn't expired, extend from that date
@@ -98,7 +102,8 @@ class AddSubscriptionHandler extends BaseAdminHandler {
                         $set: {
                             expiresAt: expiryDate,
                             active: true,
-                            lastUpdated: now
+                            lastUpdated: now,
+                            adminGranted: true  // Add flag at the subscription level too
                         },
                         $push: {
                             paymentHistory: paymentRecord
@@ -111,27 +116,31 @@ class AddSubscriptionHandler extends BaseAdminHandler {
                 // Create new subscription
                 logger.info(`Creating new subscription for user @${normalizedUsername}`);
                 
-                // Generate a unique userId
-                const userId = `user_${Date.now()}`;
+                // Use the user's actual userId and chatId if available
+                // Otherwise generate temporary IDs
+                const userId = user ? user.userId : `admin_generated_${Date.now()}`;
+                const realChatId = user ? user.chatId : `admin_added_${normalizedUsername}`;
                 
                 const newSubscription = {
-                    userId: userId,
-                    chatId: `admin_added_${normalizedUsername}`,
+                    userId,
+                    chatId: realChatId,
                     username: normalizedUsername,
                     active: true,
                     startDate: now,
                     expiresAt: expiryDate,
                     lastUpdated: now,
+                    adminGranted: true,  // Flag subscription as admin-granted
                     paymentHistory: [{
-                        userId: userId,
-                        paymentId,
-                        duration: normalizedDuration,
+                        userId,
+                        paymentId,  // This will start with admin_payment_
+                        duration: `${daysToAdd} days`,
                         amount,
                         paymentDate: now,
                         paymentStatus: 'completed',
                         transactionHash: '',
                         transferHash: '',
-                        adminGranted: true
+                        adminGranted: true,  // Mark this payment explicitly as admin-granted
+                        grantedBy: `admin_${adminUserId}`
                     }]
                 };
                 
@@ -148,13 +157,17 @@ class AddSubscriptionHandler extends BaseAdminHandler {
                 return;
             }
 
+            const userStatus = user ? "Found in database" : "Not found in database";
+            
             await this.bot.sendMessage(
                 chatId,
                 `✅ Subscription created/updated\n\n` +
-                `👤 User: @${normalizedUsername}\n` +
+                `👤 User: @${normalizedUsername} (${userStatus})\n` +
                 `⏰ Duration: ${daysToAdd} day(s)\n` +
                 `📅 Expires: ${new Date(finalSubscription.expiresAt).toLocaleDateString()}\n` +
-                `🆔 Payment ID: ${paymentId}`
+                `🆔 UserID: ${finalSubscription.userId}\n` +
+                `🆔 Payment ID: ${paymentId}\n` +
+                `🔑 Admin granted: Yes`
             );
 
         } catch (error) {
