@@ -224,205 +224,205 @@ class WalletSearchFormatter {
     }
 
     /**
-     * Format search results message
-     * @param {Array} results - Page of search results
-     * @param {Object} criteria - Search criteria used
-     * @param {number} page - Current page number
-     * @param {number} totalPages - Total number of pages
-     * @param {number} totalResults - Total number of results
-     * @param {number} maxResults - Maximum results per page
-     * @returns {string} Formatted message
-     */
-    formatResultsMessage(results, criteria, page, totalPages, totalResults, maxResults) {
-        if (results.length === 0) {
-            return '<b>🔍 Wallet Search Results</b>\n\nNo wallets found matching your criteria. Try adjusting your search parameters.';
-        }
-        
-        let message = '<b>🔍 Wallet Search Results</b>\n\n';
-        
-        // Show criteria used
-        message += '<b>Search Criteria:</b>\n';
-        let activeCriteriaCount = 0;
-        for (const [key, value] of Object.entries(criteria)) {
-            if (value > 0) {
-                activeCriteriaCount++;
-                const name = this.criteriaNames[key] || key;
-                const unit = this.criteriaUnits[key] || '';
-                let displayValue = value;
-                
-                // Format display value based on criteria type
-                if (key === 'winrate') {
-                    displayValue = `≥ ${value}${unit}`;
-                } 
-                // Format dollar amounts
-                else if (['total_value', 'realized_profit_30d', 'token_avg_cost', 'unrealized_profit'].includes(key)) {
-                    displayValue = `≥ ${unit}${formatNumber(value, 0, false, true)}`;
-                }
-                // Format SOL amounts
-                else if (key === 'sol_balance') {
-                    displayValue = `≥ ${displayValue} ${unit}`;
-                }
-                // Format holding period
-                else if (key === 'avg_holding_peroid') {
-                    if (value < 1) {
-                        displayValue = `≤ ${Math.round(value * 60)}m`;
-                    } else if (value >= 24) {
-                        displayValue = `≥ ${(value / 24).toFixed(1)}d`;
-                    } else {
-                        const hours = Math.floor(value);
-                        const minutes = Math.round((value - hours) * 60);
-                        displayValue = `≥ ${minutes > 0 ? `${hours}h${minutes}m` : `${hours}h`}`;
-                    }
-                }
-                
-                message += `• ${name}: ${displayValue}\n`;
-            }
-        }
-        
-        if (activeCriteriaCount === 0) {
-            message += `• No filters applied (showing all wallets)\n`;
-        }
-        
-        message += `\n<b>Found ${totalResults} wallets</b> (Showing ${page * maxResults + 1}-${Math.min((page + 1) * maxResults, totalResults)})\n\n`;
-        
-        // Format each result
-        results.forEach((wallet, index) => {
-            const position = page * maxResults + index + 1;
-            
-            try {
-                // Handle missing address
-                if (!wallet.address) {
-                    message += `<b>${position}. Invalid wallet data</b>\n\n`;
-                    return;
-                }
-                
-                // Format address
-                const truncatedAddress = wallet.address.substring(0, 6) + '...' + wallet.address.substring(wallet.address.length - 4);
-                message += `<b>${position}. <a href="https://solscan.io/account/${wallet.address}">${truncatedAddress}</a></b>`;
-                
-                // Add GMGN & Cielo links
-                message += ` <a href="https://gmgn.ai/sol/address/${wallet.address}">GMGN</a>/<a href="https://app.cielo.finance/profile/${wallet.address}/pnl/tokens">Cielo</a>\n`;
-                
-                // Line 1: Portfolio, SOL & Win Rate
-                const portfolioValue = wallet.total_value !== null && wallet.total_value !== undefined 
-                    ? `💼 $${formatNumber(wallet.total_value, 0, false, true)}` : '';
-                
-                // Parse SOL balance
-                let solBalance = '';
-                if (wallet.sol_balance) {
-                    try {
-                        const solValue = typeof wallet.sol_balance === 'string' 
-                            ? parseFloat(wallet.sol_balance) : wallet.sol_balance;
-                            
-                        if (!isNaN(solValue)) {
-                            solBalance = `SOL: ${formatNumber(solValue, 1)}`;
-                        }
-                    } catch (e) {
-                        logger.warn(`Failed to parse SOL balance: ${wallet.sol_balance}`, e);
-                    }
-                }
-                
-                // Win rate
-                const winrateValue = wallet.winrate !== null && wallet.winrate !== undefined
-                    ? `WR: ${typeof wallet.winrate === 'number' ? (wallet.winrate * 100).toFixed(0) : 'N/A'}%` 
-                    : '';
-                
-                // Combine for first line
-                let line1 = '';
-                if (portfolioValue) line1 += portfolioValue;
-                if (solBalance) line1 += line1 ? ` | ${solBalance}` : solBalance;
-                if (winrateValue) line1 += line1 ? ` | ${winrateValue}` : winrateValue;
-                
-                if (line1) {
-                    message += `├ ${line1}\n`;
-                }
-                
-                // Line 2: PnL & Trading stats
-                const pnl30d = wallet.realized_profit_30d
-                    ? `💸 PnL: $${formatNumber(wallet.realized_profit_30d, 0, false, true)}` : '';
-                
-                const trades = (wallet.buy_30d !== null && wallet.sell_30d !== null)
-                    ? `${wallet.buy_30d}B/${wallet.sell_30d}S` : '';
-                
-                // Holding time with minutes format for < 1h
-                let holdingTime = '';
-                if (wallet.avg_holding_peroid !== null && wallet.avg_holding_peroid !== undefined) {
-                    const holdingSeconds = wallet.avg_holding_peroid;
-                    const holdingMinutes = holdingSeconds / 60;
-                    const holdingHours = holdingMinutes / 60;
-                    
-                    if (holdingHours < 1) {
-                        // Format as minutes if less than 1 hour
-                        holdingTime = `${Math.round(holdingMinutes)}min`;
-                    } else if (holdingHours >= 24) {
-                        // Format as days if 24+ hours
-                        holdingTime = `${(holdingHours / 24).toFixed(1)}d`;
-                    } else {
-                        // Format as hours and minutes
-                        const hours = Math.floor(holdingHours);
-                        const minutes = Math.round((holdingHours - hours) * 60);
-                        holdingTime = minutes > 0 ? `${hours}h${minutes}min` : `${hours}h`;
-                    }
-                }
-                
-                // Combine for second line
-                let line2 = '';
-                if (pnl30d) line2 += pnl30d;
-                if (trades) line2 += line2 ? ` | 🔄 ${trades}` : `🔄 ${trades}`;
-                if (holdingTime) line2 += line2 ? ` | ⏱️ ${holdingTime}` : `⏱️ ${holdingTime}`;
-                
-                if (line2) {
-                    message += `├ ${line2}\n`;
-                }
-                
-                // Line 3: Performance indicators
-                let line3 = '';
-                
-                // 2x-5x & 5x+ trades
-                if (wallet.pnl_2x_5x_num > 0 || wallet.pnl_gt_5x_num > 0) {
-                    let tradeStats = '';
-                    if (wallet.pnl_2x_5x_num > 0) tradeStats += `2x-5x: ${wallet.pnl_2x_5x_num}`;
-                    if (wallet.pnl_gt_5x_num > 0) {
-                        tradeStats += tradeStats ? ` | 5x+: ${wallet.pnl_gt_5x_num}` : `5x+: ${wallet.pnl_gt_5x_num}`;
-                    }
-                    line3 += tradeStats ? `🚀 ${tradeStats}` : '';
-                }
-                
-                // Avg Buy & Unrealized PnL
-                const avgBuy = wallet.token_avg_cost > 0 
-                    ? `Avg Buy: $${formatNumber(wallet.token_avg_cost, 0, false, true)}` : '';
-                    
-                // Unrealized PnL if significant
-                let unrealPnl = '';
-                if (wallet.unrealized_profit !== null && wallet.unrealized_profit !== undefined) {
-                    const pnlSymbol = wallet.unrealized_profit > 0 ? '📈' : '📉';
-                    unrealPnl = `${pnlSymbol} uPnL: $${formatNumber(wallet.unrealized_profit, 0, false, true)}`;
-                }
-                
-                // Add to line 3
-                if (avgBuy) line3 += line3 ? ` | ${avgBuy}` : avgBuy;
-                if (unrealPnl) line3 += line3 ? ` | ${unrealPnl}` : unrealPnl;
-                
-                if (line3) {
-                    message += `└ ${line3}\n`;
-                }
-                
-                // Use code formatting for clarity
-                message += `📊 <b>Show Details:</b> <code>/wc ${wallet.address}</code>\n\n`;
-                
-            } catch (error) {
-                logger.error(`Error formatting wallet at index ${index}:`, error);
-                message += `<b>${position}. Error formatting wallet data</b>\n\n`;
-            }
-        });
-        
-        // Add pagination info
-        if (totalPages > 1) {
-            message += `<i>Page ${page + 1} of ${totalPages}</i>`;
-        }
-        
-        return message;
+ * Format search results message
+ * @param {Array} results - Page of search results
+ * @param {Object} criteria - Search criteria used
+ * @param {number} page - Current page number
+ * @param {number} totalPages - Total number of pages
+ * @param {number} totalResults - Total number of results
+ * @param {number} maxResults - Maximum results per page
+ * @returns {string} Formatted message
+ */
+formatResultsMessage(results, criteria, page, totalPages, totalResults, maxResults) {
+    if (results.length === 0) {
+        return '<b>🔍 Wallet Search Results</b>\n\nNo wallets found matching your criteria. Try adjusting your search parameters.';
     }
+    
+    let message = '<b>🔍 Wallet Search Results</b>\n\n';
+    
+    // Show criteria used
+    message += '<b>Search Criteria:</b>\n';
+    let activeCriteriaCount = 0;
+    for (const [key, value] of Object.entries(criteria)) {
+        if (value > 0) {
+            activeCriteriaCount++;
+            const name = this.criteriaNames[key] || key;
+            const unit = this.criteriaUnits[key] || '';
+            let displayValue = value;
+            
+            // Format display value based on criteria type
+            if (key === 'winrate') {
+                displayValue = `≥ ${value}${unit}`;
+            } 
+            // Format dollar amounts
+            else if (['total_value', 'realized_profit_30d', 'token_avg_cost', 'unrealized_profit'].includes(key)) {
+                displayValue = `≥ ${unit}${formatNumber(value, 0, false, true)}`;
+            }
+            // Format SOL amounts
+            else if (key === 'sol_balance') {
+                displayValue = `≥ ${displayValue} ${unit}`;
+            }
+            // Format holding period
+            else if (key === 'avg_holding_peroid') {
+                if (value < 1) {
+                    displayValue = `≤ ${Math.round(value * 60)}m`;
+                } else if (value >= 24) {
+                    displayValue = `≥ ${(value / 24).toFixed(1)}d`;
+                } else {
+                    const hours = Math.floor(value);
+                    const minutes = Math.round((value - hours) * 60);
+                    displayValue = `≥ ${minutes > 0 ? `${hours}h${minutes}m` : `${hours}h`}`;
+                }
+            }
+            
+            message += `• ${name}: ${displayValue}\n`;
+        }
+    }
+    
+    if (activeCriteriaCount === 0) {
+        message += `• No filters applied (showing all wallets)\n`;
+    }
+    
+    message += `\n<b>Found ${totalResults} wallets</b> (Showing ${page * maxResults + 1}-${Math.min((page + 1) * maxResults, totalResults)})\n\n`;
+    
+    // Format each result with full details
+    results.forEach((wallet, index) => {
+        const position = page * maxResults + index + 1;
+        
+        try {
+            // Handle missing address
+            if (!wallet.address) {
+                message += `<b>${position}. Invalid wallet data</b>\n\n`;
+                return;
+            }
+            
+            // Format address
+            const truncatedAddress = wallet.address.substring(0, 6) + '...' + wallet.address.substring(wallet.address.length - 4);
+            message += `<b>${position}. <a href="https://solscan.io/account/${wallet.address}">${truncatedAddress}</a></b>`;
+            
+            // Add GMGN & Cielo links
+            message += ` <a href="https://gmgn.ai/sol/address/${wallet.address}">GMGN</a>/<a href="https://app.cielo.finance/profile/${wallet.address}/pnl/tokens">Cielo</a>\n`;
+            
+            // Line 1: Portfolio, SOL & Win Rate
+            const portfolioValue = wallet.total_value !== null && wallet.total_value !== undefined 
+                ? `💼 $${formatNumber(wallet.total_value, 0, false, true)}` : '';
+            
+            // Parse SOL balance
+            let solBalance = '';
+            if (wallet.sol_balance) {
+                try {
+                    const solValue = typeof wallet.sol_balance === 'string' 
+                        ? parseFloat(wallet.sol_balance) : wallet.sol_balance;
+                        
+                    if (!isNaN(solValue)) {
+                        solBalance = `SOL: ${formatNumber(solValue, 1)}`;
+                    }
+                } catch (e) {
+                    logger.warn(`Failed to parse SOL balance: ${wallet.sol_balance}`, e);
+                }
+            }
+            
+            // Win rate
+            const winrateValue = wallet.winrate !== null && wallet.winrate !== undefined
+                ? `WR: ${typeof wallet.winrate === 'number' ? (wallet.winrate * 100).toFixed(0) : 'N/A'}%` 
+                : '';
+            
+            // Combine for first line
+            let line1 = '';
+            if (portfolioValue) line1 += portfolioValue;
+            if (solBalance) line1 += line1 ? ` | ${solBalance}` : solBalance;
+            if (winrateValue) line1 += line1 ? ` | ${winrateValue}` : winrateValue;
+            
+            if (line1) {
+                message += `├ ${line1}\n`;
+            }
+            
+            // Line 2: PnL & Trading stats
+            const pnl30d = wallet.realized_profit_30d
+                ? `💸 PnL: $${formatNumber(wallet.realized_profit_30d, 0, false, true)}` : '';
+            
+            const trades = (wallet.buy_30d !== null && wallet.sell_30d !== null)
+                ? `${wallet.buy_30d}B/${wallet.sell_30d}S` : '';
+            
+            // Holding time with minutes format for < 1h
+            let holdingTime = '';
+            if (wallet.avg_holding_peroid !== null && wallet.avg_holding_peroid !== undefined) {
+                const holdingSeconds = wallet.avg_holding_peroid;
+                const holdingMinutes = holdingSeconds / 60;
+                const holdingHours = holdingMinutes / 60;
+                
+                if (holdingHours < 1) {
+                    // Format as minutes if less than 1 hour
+                    holdingTime = `${Math.round(holdingMinutes)}min`;
+                } else if (holdingHours >= 24) {
+                    // Format as days if 24+ hours
+                    holdingTime = `${(holdingHours / 24).toFixed(1)}d`;
+                } else {
+                    // Format as hours and minutes
+                    const hours = Math.floor(holdingHours);
+                    const minutes = Math.round((value - hours) * 60);
+                    holdingTime = minutes > 0 ? `${hours}h${minutes}min` : `${hours}h`;
+                }
+            }
+            
+            // Combine for second line
+            let line2 = '';
+            if (pnl30d) line2 += pnl30d;
+            if (trades) line2 += line2 ? ` | 🔄 ${trades}` : `🔄 ${trades}`;
+            if (holdingTime) line2 += line2 ? ` | ⏱️ ${holdingTime}` : `⏱️ ${holdingTime}`;
+            
+            if (line2) {
+                message += `├ ${line2}\n`;
+            }
+            
+            // Line 3: Performance indicators
+            let line3 = '';
+            
+            // 2x-5x & 5x+ trades
+            if (wallet.pnl_2x_5x_num > 0 || wallet.pnl_gt_5x_num > 0) {
+                let tradeStats = '';
+                if (wallet.pnl_2x_5x_num > 0) tradeStats += `2x-5x: ${wallet.pnl_2x_5x_num}`;
+                if (wallet.pnl_gt_5x_num > 0) {
+                    tradeStats += tradeStats ? ` | 5x+: ${wallet.pnl_gt_5x_num}` : `5x+: ${wallet.pnl_gt_5x_num}`;
+                }
+                line3 += tradeStats ? `🚀 ${tradeStats}` : '';
+            }
+            
+            // Avg Buy & Unrealized PnL
+            const avgBuy = wallet.token_avg_cost > 0 
+                ? `Avg Buy: $${formatNumber(wallet.token_avg_cost, 0, false, true)}` : '';
+                
+            // Unrealized PnL if significant
+            let unrealPnl = '';
+            if (wallet.unrealized_profit !== null && wallet.unrealized_profit !== undefined) {
+                const pnlSymbol = wallet.unrealized_profit > 0 ? '📈' : '📉';
+                unrealPnl = `${pnlSymbol} uPnL: $${formatNumber(wallet.unrealized_profit, 0, false, true)}`;
+            }
+            
+            // Add to line 3
+            if (avgBuy) line3 += line3 ? ` | ${avgBuy}` : avgBuy;
+            if (unrealPnl) line3 += line3 ? ` | ${unrealPnl}` : unrealPnl;
+            
+            if (line3) {
+                message += `└ ${line3}\n`;
+            }
+            
+            // Use code formatting for clarity
+            message += `📊 <b>Show Details:</b> <code>/wc ${wallet.address}</code>\n\n`;
+            
+        } catch (error) {
+            logger.error(`Error formatting wallet at index ${index}:`, error);
+            message += `<b>${position}. Error formatting wallet data</b>\n\n`;
+        }
+    });
+    
+    // Add pagination info
+    if (totalPages > 1) {
+        message += `<i>Page ${page + 1} of ${totalPages}</i>`;
+    }
+    
+    return message;
+}
 
     /**
      * Create a shorter version of the results message to avoid Telegram length limits

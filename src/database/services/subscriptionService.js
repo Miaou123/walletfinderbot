@@ -311,9 +311,38 @@ class SubscriptionService {
         return subscription;
     }
 
-    static async hasActiveSubscription(userId) {
-        const subscription = await this.getUserSubscription(userId);
-        return subscription && subscription.active;
+    /**
+     * Check if user has an active subscription by userId or username
+     * @param {string} userId - User ID from Telegram
+     * @param {string} username - Username from Telegram (optional)
+     * @returns {Promise<boolean>} Whether the user has an active subscription
+     */
+    static async hasActiveSubscription(userId, username = null) {
+        try {
+            const database = await getDatabase();
+            const collection = database.collection("subscriptions");
+            const now = new Date();
+            
+            // First try to find by userId
+            let subscription = await collection.findOne({
+                userId: userId.toString(),
+                expiresAt: { $gt: now }
+            });
+            
+            // If not found and username is provided, try to find by username
+            if (!subscription && username) {
+                const normalizedUsername = username.toLowerCase();
+                subscription = await collection.findOne({
+                    username: normalizedUsername,
+                    expiresAt: { $gt: now }
+                });
+            }
+            
+            return !!subscription;
+        } catch (error) {
+            logger.error(`Error checking subscription status for user ${userId}:`, error);
+            return false;
+        }
     }
 
     static async getSubscriptionList() {

@@ -127,9 +127,12 @@ class WalletSearcherHandler extends BaseHandler {
             const chatId = query.message.chat.id;
             const userId = query.from.id;
             
-            const [category, action, criteriaName, value, page] = query.data.split(':');
+            const parts = query.data.split(':');
+            const category = parts[0];
+            const action = parts[1];
             
-            logger.debug('Wallet search callback:', { action, criteriaName, value, page });
+            // Log the full callback data for debugging
+            logger.debug(`Full callback data: ${query.data}`);
             
             // Get current search state from user state
             const userState = this.stateManager.getUserState(userId);
@@ -142,12 +145,16 @@ class WalletSearcherHandler extends BaseHandler {
             
             // Handle 'none' action - do nothing but acknowledge the query
             if (action === 'none') {
-                await bot.answerCallbackQuery(query.id);
+                await bot.answerCallbackQuery(query.id, {
+                    text: "No action available for this button"
+                });
                 return;
             }
             
             if (action === 'set') {
-                // Set a criteria value
+                const criteriaName = parts[2];
+                const value = parts[3];
+                
                 if (criteriaName && value !== undefined) {
                     searchState.criteria[criteriaName] = parseFloat(value);
                     // Store message ID in state to help with message editing
@@ -161,8 +168,8 @@ class WalletSearcherHandler extends BaseHandler {
                     await this.updateSearchPanel(bot, query.message, searchState.criteria);
                 }
             } else if (action === 'custom') {
-                // In our new UI, clicking on a criteria directly goes to custom input
-                // Handle custom input request
+                const criteriaName = parts[2];
+                
                 if (criteriaName) {
                     // Store the message ID and criteria name for later
                     searchState.messageId = query.message.message_id;
@@ -191,8 +198,30 @@ class WalletSearcherHandler extends BaseHandler {
                 // Execute search
                 await this.executeSearch(bot, query.message, searchState.criteria, userId);
             } else if (action === 'page') {
-                // Handle pagination - use the message that triggered the callback
-                const pageNum = parseInt(page) || 0;
+                // For pagination, the page number is in parts[2]
+                const pageNumStr = parts[2];
+                const pageNum = parseInt(pageNumStr, 10);
+                
+                // Sanity check to ensure we have a valid page number
+                if (isNaN(pageNum)) {
+                    logger.warn(`Invalid page number in callback data: ${pageNumStr}`);
+                    await bot.answerCallbackQuery(query.id, {
+                        text: "Invalid page number"
+                    });
+                    return;
+                }
+                
+                logger.debug(`Pagination request for page ${pageNum}, raw data: ${query.data}`);
+                
+                // Check if this is the same page we're already on
+                const currentPage = searchState.currentPage !== undefined ? searchState.currentPage : 0;
+                if (pageNum === currentPage) {
+                    await bot.answerCallbackQuery(query.id, {
+                        text: `Already on page ${pageNum + 1}`
+                    });
+                    return;
+                }
+                
                 await this.showResultsPage(bot, query.message, searchState.criteria, pageNum, userId);
             } else if (action === 'back') {
                 // Go back to search panel - try to edit current message
@@ -231,7 +260,7 @@ class WalletSearcherHandler extends BaseHandler {
                 await this.sendSearchPanel(bot, chatId, searchState.criteria);
             }
             
-            // Always acknowledge callback query
+            // Always acknowledge callback query if not already handled
             await bot.answerCallbackQuery(query.id);
         } catch (error) {
             logger.error('Error in wallet search callback:', error);
@@ -475,97 +504,207 @@ class WalletSearcherHandler extends BaseHandler {
         });
     }
 
-    /**
-     * Execute search with current criteria
-     * @param {Object} bot - The telegram bot instance
-     * @param {Object} message - The message to update
-     * @param {Object} criteria - Search criteria to use
-     * @param {number|string} userId - User ID for state storage
-     */
-    async executeSearch(bot, message, criteria, userId) {
-        const chatId = message.chat.id;
+ /**
+ * Execute search with current criteria
+ * @param {Object} bot - The telegram bot instance
+ * @param {Object} message - The message to update
+ * @param {Object} criteria - Search criteria to use
+ * @param {number|string} userId - User ID for state storage
+ */
+async executeSearch(bot, message, criteria, userId) {
+    const chatId = message.chat.id;
+    
+    try {
+        // Send a new loading message instead of editing
+        const loadingMsg = await bot.sendMessage(
+            chatId,
+            '<b>🔍 Searching wallets...</b>\n\nPlease wait while we find matches for your criteria.',
+            { parse_mode: 'HTML' }
+        );
         
-        try {
-            // Send a new loading message instead of editing
-            const loadingMsg = await bot.sendMessage(
-                chatId,
-                '<b>🔍 Searching wallets...</b>\n\nPlease wait while we find matches for your criteria.',
-                { parse_mode: 'HTML' }
-            );
-            
-            // Store the new message ID for potential future reference
-            const loadingMessageId = loadingMsg.message_id;
-            
-            // Convert criteria to MongoDB query format
-            const query = this.buildQuery(criteria);
-            
-            // Execute search
-            const startTime = Date.now();
-            const results = await WalletService.getWalletsByCriteria(query);
-            const endTime = Date.now();
-            const searchTime = (endTime - startTime) / 1000;
-            
-            logger.info(`Wallet search executed: ${results.length} results found in ${searchTime}s`, {
-                criteria: query,
-                resultCount: results.length
-            });
-            
-            // Store results in state for pagination
-            const userState = this.stateManager.getUserState(userId);
-            const searchState = (userState?.context === 'walletSearch' && userState.data)
-                ? userState.data
-                : {
-                    criteria: { ...criteria },
-                    timestamp: new Date().getTime()
-                };
-            
-            searchState.results = results;
-            searchState.currentPage = 0; // Start at first page
-            this.stateManager.setUserState(userId, {
-                context: 'walletSearch',
-                data: searchState
-            });
-            
-            // Try to delete the loading message first
-            try {
-                await bot.deleteMessage(chatId, loadingMessageId);
-            } catch (deleteError) {
-                logger.warn('Could not delete loading message, it may have been deleted already', deleteError);
-            }
-            
-            // Calculate the first page data
-            const totalPages = Math.ceil(results.length / this.maxResults);
-            const firstPageResults = results.slice(0, this.maxResults);
-            
-            // Format the message
-            let resultsMessage = this.formatter.formatResultsMessage(
-                firstPageResults, 
-                criteria, 
-                0, 
-                totalPages, 
+        // Store the new message ID for potential future reference
+        const loadingMessageId = loadingMsg.message_id;
+        
+        // Convert criteria to MongoDB query format
+        const query = this.buildQuery(criteria);
+        
+        // Execute search
+        const startTime = Date.now();
+        const results = await WalletService.getWalletsByCriteria(query);
+        const endTime = Date.now();
+        const searchTime = (endTime - startTime) / 1000;
+        
+        logger.info(`Wallet search executed: ${results.length} results found in ${searchTime}s`, {
+            criteria: query,
+            resultCount: results.length
+        });
+        
+        // Store all results in state for pagination
+        const userState = this.stateManager.getUserState(userId);
+        const searchState = (userState?.context === 'walletSearch' && userState.data)
+            ? userState.data
+            : {
+                criteria: { ...criteria },
+                timestamp: new Date().getTime()
+            };
+        
+        searchState.results = results;
+        
+        // Dynamically determine how many results we can fit per page
+        // Start with default and adjust if needed
+        let itemsPerPage = this.maxResults;
+        let walletTestBatch = results.slice(0, 5); // Test with 5 items first
+        
+        // If we have results, calculate optimal items per page
+        if (results.length > 0) {
+            // Generate a test message with 5 items to estimate size per item
+            const testMessage = this.formatter.formatResultsMessage(
+                walletTestBatch,
+                criteria,
+                0,
+                Math.ceil(results.length / 5),
                 results.length,
-                this.maxResults
+                5
             );
             
-            // Check if message is too long
-            if (resultsMessage.length > 3800) {
-                resultsMessage = this.formatter.createTruncatedResultsMessage(
-                    firstPageResults,
-                    criteria,
-                    0,
-                    totalPages,
-                    results.length,
-                    this.maxResults
-                );
+            // Calculate average size per wallet and header size
+            const headerEndPos = testMessage.indexOf('\n\n<b>Found');
+            const headerEndResultsPos = testMessage.indexOf('\n\n', headerEndPos + 2);
+            
+            // Extract header and count its length
+            const headerSize = headerEndResultsPos !== -1 ? headerEndResultsPos + 2 : 500; // Default if can't find
+            
+            // Estimate size per wallet entry
+            const entrySizeEstimate = walletTestBatch.length > 0 
+                ? (testMessage.length - headerSize) / walletTestBatch.length 
+                : 400; // Default if no results
+            
+            // Calculate how many entries we can fit in one message (leave 200 chars for pagination info)
+            const maxSize = 3800; // Telegram limit with safety margin
+            const availableSize = maxSize - headerSize - 200; // Reserve space for pagination
+            
+            // Calculate optimal items per page based on size
+            itemsPerPage = Math.max(1, Math.floor(availableSize / entrySizeEstimate));
+            
+            // Log the calculation
+            logger.debug(`Dynamic pagination: header=${headerSize}, entry=${entrySizeEstimate}, optimal items=${itemsPerPage}`);
+            
+            // Cap at the default maximum
+            itemsPerPage = Math.min(itemsPerPage, this.maxResults);
+        }
+        
+        // Store the optimized items per page in the state
+        searchState.itemsPerPage = itemsPerPage;
+        searchState.currentPage = 0; // Start at first page
+        
+        this.stateManager.setUserState(userId, {
+            context: 'walletSearch',
+            data: searchState
+        });
+        
+        // Try to delete the loading message first
+        try {
+            await bot.deleteMessage(chatId, loadingMessageId);
+        } catch (deleteError) {
+            logger.warn('Could not delete loading message, it may have been deleted already', deleteError);
+        }
+        
+        // If no results found, show a message
+        if (results.length === 0) {
+            await bot.sendMessage(chatId, 
+                '<b>🔍 Wallet Search Results</b>\n\nNo wallets found matching your criteria. Try adjusting your search parameters.',
+                {
+                    parse_mode: 'HTML',
+                    reply_markup: {
+                        inline_keyboard: [[
+                            {
+                                text: "◀️ Back to Search",
+                                callback_data: this.generateCallbackData('back')
+                            }
+                        ]]
+                    }
+                }
+            );
+            return;
+        }
+        
+        // If we have results, calculate pagination
+        const totalPages = Math.ceil(results.length / itemsPerPage);
+        const firstPageResults = results.slice(0, itemsPerPage);
+        
+        // Format the first page message
+        const resultsMessage = this.formatter.formatResultsMessage(
+            firstPageResults, 
+            criteria, 
+            0, 
+            totalPages, 
+            results.length,
+            itemsPerPage
+        );
+        
+        // Create pagination keyboard
+        const keyboard = this.formatter.createResultsPaginationKeyboard(0, totalPages, (action, params = {}) => {
+            return this.generateCallbackData(action, params);
+        });
+        
+        // Send a new message with search results
+        const newMsg = await bot.sendMessage(chatId, resultsMessage, {
+            parse_mode: 'HTML',
+            disable_web_page_preview: true,
+            reply_markup: {
+                inline_keyboard: keyboard
             }
-            
-            // Create keyboard
-            const keyboard = this.formatter.createResultsPaginationKeyboard(0, totalPages, (action, params = {}) => {
-                return this.generateCallbackData(action, params);
-            });
-            
-            // Send a new message with search results
-            const newMsg = await bot.sendMessage(chatId, resultsMessage, {
+        });
+        
+        // Store the new message ID in state for pagination
+        searchState.messageId = newMsg.message_id;
+        this.stateManager.setUserState(userId, {
+            context: 'walletSearch',
+            data: searchState
+        });
+        
+    } catch (error) {
+        logger.error('Error executing wallet search:', error);
+        
+        // Send a new error message
+        await bot.sendMessage(chatId, 
+            '<b>❌ Search Error</b>\n\nAn error occurred while searching wallets. Please try again.',
+            {
+                parse_mode: 'HTML',
+                reply_markup: {
+                    inline_keyboard: [[
+                        {
+                            text: "◀️ Back to Search",
+                            callback_data: this.generateCallbackData('back')
+                        },
+                        {
+                            text: "🔍 Start New Search",
+                            callback_data: this.generateCallbackData('new')
+                        }
+                    ]]
+                }
+            }
+        );
+    }
+}
+
+/**
+ * Send paginated results, splitting into multiple messages if needed
+ * @param {Object} bot - The telegram bot instance
+ * @param {number|string} chatId - The chat ID
+ * @param {string} message - The message to send
+ * @param {Array} keyboard - The keyboard to attach
+ * @param {Object} searchState - The search state to update
+ * @param {number|string} userId - User ID for state storage
+ */
+async sendPaginatedResults(bot, chatId, message, keyboard, searchState, userId) {
+    // Send messages in chunks if needed to stay under Telegram limit
+    const maxMessageLength = 3800; // Safe limit for HTML messages
+    
+    try {
+        // If message is under the limit, send as one message
+        if (message.length <= maxMessageLength) {
+            const newMsg = await bot.sendMessage(chatId, message, {
                 parse_mode: 'HTML',
                 disable_web_page_preview: true,
                 reply_markup: {
@@ -579,88 +718,171 @@ class WalletSearcherHandler extends BaseHandler {
                 context: 'walletSearch',
                 data: searchState
             });
-        } catch (error) {
-            logger.error('Error executing wallet search:', error);
-            
-            // Send a new error message
-            await bot.sendMessage(chatId, 
-                '<b>❌ Search Error</b>\n\nAn error occurred while searching wallets. Please try again.',
-                {
-                    parse_mode: 'HTML',
-                    reply_markup: {
-                        inline_keyboard: [[
-                            {
-                                text: "◀️ Back to Search",
-                                callback_data: this.generateCallbackData('back')
-                            },
-                            {
-                                text: "🔍 Start New Search",
-                                callback_data: this.generateCallbackData('new')
-                            }
-                        ]]
-                    }
-                }
-            );
+            return;
         }
+        
+        // Message is too long, need to split
+        // First, send header and criteria info
+        const headerEndIndex = message.indexOf('\n\n<b>Found');
+        if (headerEndIndex === -1) {
+            // If we can't find a good split point, just send whatever fits
+            const headerPart = message.substring(0, maxMessageLength);
+            await bot.sendMessage(chatId, headerPart, { 
+                parse_mode: 'HTML',
+                disable_web_page_preview: true 
+            });
+        } else {
+            // Send header separately
+            const headerPart = message.substring(0, headerEndIndex + 2); // Include the \n\n
+            await bot.sendMessage(chatId, headerPart, { 
+                parse_mode: 'HTML',
+                disable_web_page_preview: true 
+            });
+        }
+        
+        // Now split the wallet list into smaller chunks
+        const resultsStartIndex = message.indexOf('\n\n<b>Found') + 2;
+        const walletListStart = message.indexOf('\n\n', resultsStartIndex) + 2;
+        
+        // Extract the "Found X wallets" line
+        const foundWalletsLine = message.substring(resultsStartIndex, walletListStart);
+        
+        // Get the wallet list part
+        const walletListEndIndex = message.lastIndexOf('\n\n<i>Page');
+        const walletListPart = walletListEndIndex !== -1 
+            ? message.substring(walletListStart, walletListEndIndex)
+            : message.substring(walletListStart);
+        
+        // Get the pagination info if it exists
+        const paginationInfo = walletListEndIndex !== -1
+            ? message.substring(walletListEndIndex)
+            : '';
+        
+        // Split wallet list into chunks of addresses
+        const walletEntries = walletListPart.split('\n\n');
+        
+        // Group wallets into chunks that will fit in messages
+        const chunks = [];
+        let currentChunk = foundWalletsLine + '\n';
+        
+        for (const entry of walletEntries) {
+            // Check if adding this entry would exceed the limit
+            if (currentChunk.length + entry.length + 2 > maxMessageLength) {
+                // Current chunk is full, start a new one
+                chunks.push(currentChunk);
+                currentChunk = `${foundWalletsLine} (continued)\n\n${entry}\n\n`;
+            } else {
+                // Add to current chunk
+                currentChunk += `\n${entry}\n\n`;
+            }
+        }
+        
+        // Add the last chunk if not empty
+        if (currentChunk.trim() !== '') {
+            chunks.push(currentChunk);
+        }
+        
+        // Send all chunks except the last one
+        for (let i = 0; i < chunks.length - 1; i++) {
+            await bot.sendMessage(chatId, chunks[i], {
+                parse_mode: 'HTML',
+                disable_web_page_preview: true
+            });
+        }
+        
+        // Send the last chunk with the pagination buttons
+        const lastChunk = chunks[chunks.length - 1] + paginationInfo;
+        const newMsg = await bot.sendMessage(chatId, lastChunk, {
+            parse_mode: 'HTML',
+            disable_web_page_preview: true,
+            reply_markup: {
+                inline_keyboard: keyboard
+            }
+        });
+        
+        // Store the new message ID in state for pagination
+        searchState.messageId = newMsg.message_id;
+        this.stateManager.setUserState(userId, {
+            context: 'walletSearch',
+            data: searchState
+        });
+    } catch (error) {
+        logger.error('Error sending paginated results:', error);
+        // Fallback to a simpler message
+        await bot.sendMessage(chatId, 
+            '<b>🔍 Search Results</b>\n\nFound results but the message is too large to display in full. Try using more filters to narrow down results.',
+            {
+                parse_mode: 'HTML',
+                reply_markup: {
+                    inline_keyboard: keyboard
+                }
+            }
+        );
     }
+}
 
-    /**
-     * Show a page of search results
-     * @param {Object} bot - The telegram bot instance
-     * @param {Object} message - The message to update
-     * @param {Object} criteria - Search criteria used
-     * @param {number} page - Page number to show
-     * @param {number|string} userId - User ID for state retrieval
-     */
-    async showResultsPage(bot, message, criteria, page = 0, userId) {
-        const chatId = message.chat.id;
-        const messageId = message.message_id;
+ /**
+ * Show a page of search results
+ * @param {Object} bot - The telegram bot instance
+ * @param {Object} message - The message to update
+ * @param {Object} criteria - Search criteria used
+ * @param {number} page - Page number to show
+ * @param {number|string} userId - User ID for state retrieval
+ */
+async showResultsPage(bot, message, criteria, page = 0, userId) {
+    const chatId = message.chat.id;
+    const messageId = message.message_id;
+    
+    try {
+        // Get user state to retrieve results
+        const userState = this.stateManager.getUserState(userId);
+        
+        if (!userState || userState.context !== 'walletSearch' || !userState.data || !userState.data.results) {
+            throw new Error('No search results found');
+        }
+        
+        const results = userState.data.results;
+        
+        // Get current page and items per page from state
+        const currentPage = userState.data.currentPage !== undefined ? userState.data.currentPage : 0;
+        const itemsPerPage = userState.data.itemsPerPage || this.maxResults;
+        
+        // Skip updating if the requested page is the same as the current page
+        if (page === currentPage) {
+            logger.debug('Skipping page update - already on page', page);
+            return;
+        }
+        
+        // Calculate pagination
+        const totalResults = results.length;
+        const totalPages = Math.ceil(totalResults / itemsPerPage);
+        
+        // Validate page number
+        if (page < 0 || page >= totalPages) {
+            logger.warn(`Invalid page number: ${page}, totalPages: ${totalPages}`);
+            page = Math.max(0, Math.min(page, totalPages - 1));
+        }
+        
+        const startIndex = page * itemsPerPage;
+        const endIndex = Math.min(startIndex + itemsPerPage, totalResults);
+        const pageResults = results.slice(startIndex, endIndex);
+        
+        // Format results message
+        const formattedMessage = this.formatter.formatResultsMessage(
+            pageResults, 
+            criteria, 
+            page, 
+            totalPages, 
+            totalResults,
+            itemsPerPage
+        );
+        
+        // Create pagination keyboard
+        const keyboard = this.formatter.createResultsPaginationKeyboard(page, totalPages, (action, params = {}) => {
+            return this.generateCallbackData(action, params);
+        });
         
         try {
-            // Get user state to retrieve results
-            const userState = this.stateManager.getUserState(userId);
-            
-            if (!userState || userState.context !== 'walletSearch' || !userState.data || !userState.data.results) {
-                throw new Error('No search results found');
-            }
-            
-            const results = userState.data.results;
-            
-            // Calculate pagination
-            const totalResults = results.length;
-            const totalPages = Math.ceil(totalResults / this.maxResults);
-            const startIndex = page * this.maxResults;
-            const endIndex = Math.min(startIndex + this.maxResults, totalResults);
-            const pageResults = results.slice(startIndex, endIndex);
-            
-            // Format results message
-            let formattedMessage = this.formatter.formatResultsMessage(
-                pageResults, 
-                criteria, 
-                page, 
-                totalPages, 
-                totalResults,
-                this.maxResults
-            );
-            
-            // Check message length to avoid Telegram error
-            if (formattedMessage.length > 3800) { // Leave some buffer
-                // If too long, reduce content and add a warning
-                formattedMessage = this.formatter.createTruncatedResultsMessage(
-                    pageResults, 
-                    criteria, 
-                    page, 
-                    totalPages, 
-                    totalResults,
-                    this.maxResults
-                );
-            }
-            
-            // Create pagination keyboard
-            const keyboard = this.formatter.createResultsPaginationKeyboard(page, totalPages, (action, params = {}) => {
-                return this.generateCallbackData(action, params);
-            });
-            
             // Update existing message with the new page content
             await bot.editMessageText(formattedMessage, {
                 chat_id: chatId,
@@ -677,87 +899,122 @@ class WalletSearcherHandler extends BaseHandler {
             this.stateManager.setUserState(userId, userState);
             
         } catch (error) {
-            logger.error('Error showing results page:', error);
+            // If the error is because the message content is the same, just ignore it
+            if (error.code === 'ETELEGRAM' && 
+                error.response && 
+                error.response.body && 
+                error.response.body.description && 
+                error.response.body.description.includes('message is not modified')) {
+                
+                logger.debug('Message content not changed, skipping update');
+                return;
+            }
             
-            // If we can't edit (message might be too old), send a new one
-            try {
-                await bot.sendMessage(chatId, 
-                    '<b>❌ Error</b>\n\nCannot update results. Starting a new results page.',
-                    {
-                        parse_mode: 'HTML',
-                        reply_markup: {
-                            inline_keyboard: [[
-                                {
-                                    text: "◀️ Back to Search",
-                                    callback_data: this.generateCallbackData('back')
-                                },
-                                {
-                                    text: "🔍 Start New Search",
-                                    callback_data: this.generateCallbackData('new')
-                                }
-                            ]]
-                        }
-                    }
+            // If message is too long for Telegram, send a new message with fewer results per page
+            if (error.code === 'ETELEGRAM' && 
+                error.response && 
+                error.response.body && 
+                error.response.body.description && 
+                error.response.body.description.includes('message is too long')) {
+                
+                logger.warn('Message too long, reducing items per page and trying again');
+                
+                // Reduce items per page by approximately 25%
+                const newItemsPerPage = Math.max(1, Math.floor(itemsPerPage * 0.75));
+                userState.data.itemsPerPage = newItemsPerPage;
+                
+                // Recalculate pagination
+                const newTotalPages = Math.ceil(totalResults / newItemsPerPage);
+                const newPage = Math.min(page, newTotalPages - 1);
+                
+                const newStartIndex = newPage * newItemsPerPage;
+                const newEndIndex = Math.min(newStartIndex + newItemsPerPage, totalResults);
+                const newPageResults = results.slice(newStartIndex, newEndIndex);
+                
+                // Format with fewer results
+                const newMessage = this.formatter.formatResultsMessage(
+                    newPageResults, 
+                    criteria, 
+                    newPage, 
+                    newTotalPages, 
+                    totalResults,
+                    newItemsPerPage
                 );
                 
-                // If we have results, try sending a new results message
-                const userState = this.stateManager.getUserState(userId);
-                if (userState?.context === 'walletSearch' && userState.data?.results) {
-                    const results = userState.data.results;
-                    const totalPages = Math.ceil(results.length / this.maxResults);
-                    
-                    if (page >= totalPages) page = 0; // Reset page if out of range
-                    
-                    const startIndex = page * this.maxResults;
-                    const endIndex = Math.min(startIndex + this.maxResults, results.length);
-                    const pageResults = results.slice(startIndex, endIndex);
-                    
-                    // Format the message
-                    let formattedMessage = this.formatter.formatResultsMessage(
-                        pageResults, 
-                        criteria, 
-                        page, 
-                        totalPages, 
-                        results.length,
-                        this.maxResults
-                    );
-                    
-                    // Check if message is too long
-                    if (formattedMessage.length > 3800) {
-                        formattedMessage = this.formatter.createTruncatedResultsMessage(
-                            pageResults,
-                            criteria,
-                            page,
-                            totalPages,
-                            results.length,
-                            this.maxResults
-                        );
+                // Create new keyboard
+                const newKeyboard = this.formatter.createResultsPaginationKeyboard(newPage, newTotalPages, (action, params = {}) => {
+                    return this.generateCallbackData(action, params);
+                });
+                
+                // Send as a new message
+                const newMsg = await bot.sendMessage(chatId, newMessage, {
+                    parse_mode: 'HTML',
+                    disable_web_page_preview: true,
+                    reply_markup: {
+                        inline_keyboard: newKeyboard
                     }
-                    
-                    // Create keyboard
-                    const keyboard = this.formatter.createResultsPaginationKeyboard(page, totalPages, (action, params = {}) => {
-                        return this.generateCallbackData(action, params);
-                    });
-                    
-                    // Send a new message with the updated results
-                    const newMsg = await bot.sendMessage(chatId, formattedMessage, {
-                        parse_mode: 'HTML',
-                        disable_web_page_preview: true,
-                        reply_markup: {
-                            inline_keyboard: keyboard
-                        }
-                    });
-                    
-                    // Update message ID in state for future pagination
-                    userState.data.messageId = newMsg.message_id;
-                    userState.data.currentPage = page;
-                    this.stateManager.setUserState(userId, userState);
+                });
+                
+                // Update state with new values
+                userState.data.messageId = newMsg.message_id;
+                userState.data.currentPage = newPage;
+                this.stateManager.setUserState(userId, userState);
+                
+                // Try to delete the old message
+                try {
+                    await bot.deleteMessage(chatId, messageId);
+                } catch (deleteError) {
+                    logger.warn('Could not delete old message:', deleteError);
                 }
-            } catch (sendError) {
-                logger.error('Failed to send new message after pagination error:', sendError);
+                
+                return;
             }
+            
+            // For other errors, log and continue
+            logger.error('Error updating page:', error);
+            
+            // If we can't edit (message might be too old), send a new one
+            const newMsg = await bot.sendMessage(chatId, formattedMessage, {
+                parse_mode: 'HTML',
+                disable_web_page_preview: true,
+                reply_markup: {
+                    inline_keyboard: keyboard
+                }
+            });
+            
+            // Update message ID in state for future pagination
+            userState.data.messageId = newMsg.message_id;
+            userState.data.currentPage = page;
+            this.stateManager.setUserState(userId, userState);
+        }
+    } catch (error) {
+        logger.error('Error showing results page:', error);
+        
+        // If we encounter an error, offer to start a new search
+        try {
+            await bot.sendMessage(chatId, 
+                '<b>❌ Error</b>\n\nUnable to display the requested page. Would you like to start over?',
+                {
+                    parse_mode: 'HTML',
+                    reply_markup: {
+                        inline_keyboard: [[
+                            {
+                                text: "◀️ Back to Search",
+                                callback_data: this.generateCallbackData('back')
+                            },
+                            {
+                                text: "🔍 Start New Search",
+                                callback_data: this.generateCallbackData('new')
+                            }
+                        ]]
+                    }
+                }
+            );
+        } catch (sendError) {
+            logger.error('Failed to send error message:', sendError);
         }
     }
+}
 
     /**
      * Build MongoDB query from criteria

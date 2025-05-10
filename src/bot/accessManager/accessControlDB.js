@@ -58,15 +58,39 @@ class AccessControlDB {
        }
    }
 
-   async hasActiveSubscription(userId) {
+   /**
+    * Check if user has an active subscription by userId or username
+    * @param {string} userId - User ID from Telegram
+    * @param {string} username - Username from Telegram (optional)
+    * @returns {Promise<boolean>} Whether the user has an active subscription
+    */
+   async hasActiveSubscription(userId, username = null) {
         if (!userId) return false;
         
         try {
-            // Ici on appelle la méthode statique directement sur la classe
-            const subscription = await SubscriptionService.getUserSubscription(userId);
-            return Boolean(subscription?.active);
+            // First check by userId
+            const subscriptionByUserId = await SubscriptionService.getUserSubscription(userId);
+            
+            if (subscriptionByUserId?.active) {
+                return true;
+            }
+            
+            // If not found and username is provided, check by username
+            if (username) {
+                const normalizedUsername = this.normalizeUsername(username);
+                
+                // Use direct database query since SubscriptionService doesn't have a getByUsername method
+                const subscriptionByUsername = await this.db.collection('subscriptions').findOne({
+                    username: normalizedUsername,
+                    expiresAt: { $gt: new Date() }
+                });
+                
+                return Boolean(subscriptionByUsername);
+            }
+            
+            return false;
         } catch (error) {
-            logger.error(`Error checking subscription for "${userId}":`, error);
+            logger.error(`Error checking subscription for user "${userId}" / username "${username}":`, error);
             return false;
         }
     }
@@ -83,11 +107,12 @@ class AccessControlDB {
             return false;
         }
     }
-   async isAllowed(identifier, context = 'user') {
+    
+   async isAllowed(identifier, context = 'user', username = null) {
        try {
            if (context === 'admin') return await this.isAdmin(identifier);
            if (context === 'group') return await this.hasActiveGroupSubscription(identifier);
-           return await this.hasActiveSubscription(identifier);
+           return await this.hasActiveSubscription(identifier, username);
        } catch (error) {
            logger.error(`Error in isAllowed check for ${identifier} (${context}):`, error);
            return false;

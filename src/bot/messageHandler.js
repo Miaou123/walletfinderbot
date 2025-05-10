@@ -127,7 +127,7 @@ class MessageHandler {
 
             if (requiresAuth) {
                 if (isGroup) {
-                    // Exception pour la commande subscribe_group
+                    // Exception for the command subscribe_group
                     if (command !== 'subscribe_group') {
                         const hasActiveGroupSub = await this.accessControl.hasActiveGroupSubscription(chatId);
                         if (!hasActiveGroupSub) {
@@ -143,7 +143,10 @@ class MessageHandler {
                     }
                 } else {
                     // Vérification des utilisateurs individuels
-                    const hasActiveUserSub = await this.accessControl.hasActiveSubscription(userId);
+                    // Pass both userId and username for checking
+                    const username = msg.from.username;
+                    const hasActiveUserSub = await this.accessControl.hasActiveSubscription(userId, username);
+                    
                     if (!hasActiveUserSub && command !== 'subscribe') {
                         await this.bot.sendMessage(chatId,
                             "🔒 This command requires an active subscription\n\n" +
