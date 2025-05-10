@@ -11,6 +11,10 @@ class AddSubscriptionHandler extends BaseAdminHandler {
         const chatId = String(msg.chat.id);
         const userId = msg.from.id;
 
+        // Declare fallback-safe variables
+        let normalizedUsername = 'unknown';
+        let normalizedDuration = 'unknown';
+
         try {
             logger.info(`Starting handleAddSubscription for admin ID: ${userId}`);
 
@@ -24,7 +28,7 @@ class AddSubscriptionHandler extends BaseAdminHandler {
                     chatId,
                     "Usage: /addsub <username> <duration>\n" +
                     "Example: /addsub username 3month\n" +
-                    "Available durations: 1month, 3month, 6month"
+                    "Available durations: 1week, 1month, 3month, 6month"
                 );
                 return;
             }
@@ -34,13 +38,12 @@ class AddSubscriptionHandler extends BaseAdminHandler {
             const normalizedUsername = username.replace(/^@/, '').toLowerCase();
             const normalizedDuration = duration.toLowerCase();
 
-            if (!['1month', '3month', '6month'].includes(normalizedDuration)) {
+            const daysToAdd = parseInt(normalizedDuration, 10);
+            if (isNaN(daysToAdd) || daysToAdd <= 0) {
                 await this.bot.sendMessage(
                     chatId,
-                    "❌ Invalid duration. Available options:\n" +
-                    "• 1month\n" +
-                    "• 3month\n" +
-                    "• 6month"
+                    "❌ Invalid duration. Please provide a number of days greater than 0.\n" +
+                    "Example: /addsub username 10"
                 );
                 return;
             }
@@ -57,9 +60,8 @@ class AddSubscriptionHandler extends BaseAdminHandler {
             // Calculate expiry date based on duration
             const now = new Date();
             let expiryDate = new Date(now);
-            const monthsToAdd = normalizedDuration === '1month' ? 1 : 
-                               (normalizedDuration === '3month' ? 3 : 6);
-            expiryDate.setMonth(expiryDate.getMonth() + monthsToAdd);
+            expiryDate.setDate(expiryDate.getDate() + daysToAdd);
+            
             
             // Check if a subscription already exists
             const existingSubscription = await collection.findOne({ 
@@ -87,7 +89,7 @@ class AddSubscriptionHandler extends BaseAdminHandler {
                 // If the existing subscription hasn't expired, extend from that date
                 if (existingSubscription.expiresAt && new Date(existingSubscription.expiresAt) > now) {
                     expiryDate = new Date(existingSubscription.expiresAt);
-                    expiryDate.setMonth(expiryDate.getMonth() + monthsToAdd);
+                    expiryDate.setDate(expiryDate.getDate() + daysToAdd);
                 }
                 
                 await collection.updateOne(
@@ -114,7 +116,7 @@ class AddSubscriptionHandler extends BaseAdminHandler {
                 
                 const newSubscription = {
                     userId: userId,
-                    chatId: chatId,
+                    chatId: `admin_added_${normalizedUsername}`,
                     username: normalizedUsername,
                     active: true,
                     startDate: now,
@@ -150,7 +152,7 @@ class AddSubscriptionHandler extends BaseAdminHandler {
                 chatId,
                 `✅ Subscription created/updated\n\n` +
                 `👤 User: @${normalizedUsername}\n` +
-                `⏰ Duration: ${normalizedDuration}\n` +
+                `⏰ Duration: ${daysToAdd} day(s)\n` +
                 `📅 Expires: ${new Date(finalSubscription.expiresAt).toLocaleDateString()}\n` +
                 `🆔 Payment ID: ${paymentId}`
             );

@@ -54,6 +54,12 @@ class BaseHandler {
         ...options
       };
       
+      // If the bot has a sendLongMessage method, prefer using that
+      if (typeof bot.sendLongMessage === 'function') {
+        return await bot.sendLongMessage(chatId, messageText, messageOptions);
+      }
+      
+      // Otherwise, use our own chunking logic
       const messageChunks = responseFormatter.splitMessage(messageText);
       
       if (messageChunks.length === 1) {

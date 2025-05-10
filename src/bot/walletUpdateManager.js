@@ -3,6 +3,8 @@
  * 
  * This manager automatically updates wallet data that is older than a specified threshold
  * with a rate limit to avoid overloading the API. It runs as part of the bot process.
+ * 
+ * Also counts and reports the number of wallets needing updates on startup.
  */
 
 const { getDatabase } = require('../database/config/connection');
@@ -43,6 +45,49 @@ class WalletUpdateManager {
         const cutoffDate = new Date();
         cutoffDate.setDate(cutoffDate.getDate() - this.ageDays);
         return cutoffDate;
+    }
+    
+    /**
+     * Count wallets that need updating and total wallets
+     * @returns {Promise<Object>} Statistics about wallets needing updates
+     */
+    async countWalletsToUpdate() {
+        try {
+            // Connect to database
+            const database = await getDatabase();
+            
+            // Calculate cutoff date
+            const cutoffDate = this.getCutoffDate();
+            
+            logger.info(`Counting wallets last updated before: ${cutoffDate.toISOString()}`);
+            
+            // Count wallets needing update
+            const count = await database.collection('wallets')
+                .countDocuments({ lastUpdated: { $lt: cutoffDate } });
+            
+            // Count total wallets
+            const totalCount = await database.collection('wallets')
+                .countDocuments({});
+            
+            const percentNeedsUpdate = totalCount > 0 ? (count/totalCount)*100 : 0;
+            const percentUpToDate = totalCount > 0 ? ((totalCount-count)/totalCount)*100 : 0;
+            
+            logger.info(`Wallet Update Statistics:
+Total wallets in database: ${totalCount}
+Wallets older than ${this.ageDays} days: ${count} (${percentNeedsUpdate.toFixed(2)}%)
+Wallets up to date: ${totalCount - count} (${percentUpToDate.toFixed(2)}%)`);
+            
+            return {
+                total: totalCount,
+                needsUpdate: count,
+                upToDate: totalCount - count,
+                percentageNeedsUpdate: percentNeedsUpdate,
+                ageThreshold: this.ageDays
+            };
+        } catch (error) {
+            logger.error('Error counting wallets:', error);
+            return null;
+        }
     }
 
     /**
@@ -168,7 +213,7 @@ class WalletUpdateManager {
     /**
      * Start the wallet update manager
      */
-    start() {
+    async start() {
         if (this.running) {
             logger.warn('Wallet Update Manager is already running');
             return;
@@ -178,6 +223,9 @@ class WalletUpdateManager {
         this.stats.startTime = Date.now();
         logger.info(`Starting Wallet Update Manager - updating wallets older than ${this.ageDays} days`);
         logger.info(`Rate limit: ${this.walletsPerMinute} wallets per minute (one every ${this.updateInterval}ms)`);
+        
+        // Count and log wallets needing updates on startup
+        await this.countWalletsToUpdate();
         
         // Start processing wallets
         this.processNextWallet();

@@ -164,7 +164,7 @@ class TelegramBotService {
         });
         
         // Start the wallet update manager
-        this.walletUpdateManager.start();
+        await this.walletUpdateManager.start();
         this.logger.info('Wallet update manager started successfully');
         
         this.logger.info('All managers initialized successfully');
@@ -236,24 +236,30 @@ class TelegramBotService {
 
     /**
      * Méthode utilitaire pour scinder un message trop long en plusieurs.
+     * @returns {Object} The last message object sent, or null if no messages were sent
      */
     async sendLongMessage(chatId, message, options = {}) {
         if (!message) {
             this.logger.error('Attempted to send undefined or null message');
-            return;
+            return null;
         }
     
         const messages = this.splitMessage(String(message));
+        let lastSentMessage = null;
+        
         for (const msg of messages) {
             if (msg.trim().length > 0) {
-    
                 try {
-                    await this.bot.sendMessage(chatId, msg, {
+                    const sentMessage = await this.bot.sendMessage(chatId, msg, {
                         parse_mode: 'HTML',
                         disable_web_page_preview: true,
                         ...options,
                         message_thread_id: options.message_thread_id
                     });
+                    
+                    // Store this as the last message sent
+                    lastSentMessage = sentMessage;
+                    
                 } catch (error) {
                     // Log l'erreur si c'est une question de message trop long
                     if (
@@ -263,12 +269,15 @@ class TelegramBotService {
                         // Découpe encore en sous-chunks et log à nouveau
                         const subMessages = this.splitMessage(msg);
                         for (const subMsg of subMessages) {
-                            await this.bot.sendMessage(chatId, subMsg, {
+                            const sentSubMessage = await this.bot.sendMessage(chatId, subMsg, {
                                 parse_mode: 'HTML',
                                 disable_web_page_preview: true,
                                 ...options,
                                 message_thread_id: options.message_thread_id
                             });
+                            
+                            // Update the last message sent
+                            lastSentMessage = sentSubMessage;
                         }
                     } else {
                         this.logger.error('Error sending message:', error);
@@ -277,6 +286,9 @@ class TelegramBotService {
                 }
             }
         }
+        
+        // Return the last message we sent
+        return lastSentMessage;
     }
     
 

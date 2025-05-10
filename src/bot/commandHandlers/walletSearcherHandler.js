@@ -1,7 +1,7 @@
 const BaseHandler = require('./baseHandler');
 const logger = require('../../utils/logger');
 const WalletService = require('../../database/services/walletService');
-const { formatNumber } = require('../formatters/generalFormatters');
+const WalletSearchFormatter = require('../formatters/walletSearchFormatter');
 
 /**
  * Handler for searching wallets based on various criteria
@@ -19,6 +19,9 @@ class WalletSearcherHandler extends BaseHandler {
         // Get bot username for command links
         this.botUsername = '';
         
+        // Create formatter instance
+        this.formatter = new WalletSearchFormatter();
+        
         // Default search criteria
         this.defaultCriteria = {
             winrate: 0,
@@ -34,37 +37,7 @@ class WalletSearcherHandler extends BaseHandler {
             unrealized_profit: 0
         };
         
-        // Human-readable names for criteria
-        this.criteriaNames = {
-            winrate: 'Win Rate',
-            total_value: 'Total Value',
-            realized_profit_30d: 'PnL (30d)',
-            sol_balance: 'SOL',
-            avg_holding_peroid: 'Hold Time',
-            buy_30d: 'Buys',
-            sell_30d: 'Sells',
-            pnl_2x_5x_num: '2x-5x',
-            pnl_gt_5x_num: '5x+',
-            token_avg_cost: 'Avg Buy',
-            unrealized_profit: 'uPnL'
-        };
-        
-        // Criteria units for display
-        this.criteriaUnits = {
-            winrate: '%',
-            total_value: '$',
-            realized_profit_30d: '$',
-            sol_balance: 'SOL',
-            avg_holding_peroid: 'h',
-            buy_30d: '',
-            sell_30d: '',
-            pnl_2x_5x_num: '',
-            pnl_gt_5x_num: '',
-            token_avg_cost: '$',
-            unrealized_profit: '$'
-        };
-        
-        // Maximum results to return
+        // Maximum results to return per page
         this.maxResults = 20;
     }
 
@@ -118,9 +91,6 @@ class WalletSearcherHandler extends BaseHandler {
             
             logger.info(`WalletSearch command started by user ${username}`);
             
-            // NOTE: No access check needed here - it's handled by MessageHandler
-            // based on the requiresAuth setting in commandConfigs.js
-            
             // Initialize search state in stateManager
             const searchState = {
                 criteria: { ...this.defaultCriteria },
@@ -170,6 +140,12 @@ class WalletSearcherHandler extends BaseHandler {
                     timestamp: new Date().getTime()
                 };
             
+            // Handle 'none' action - do nothing but acknowledge the query
+            if (action === 'none') {
+                await bot.answerCallbackQuery(query.id);
+                return;
+            }
+            
             if (action === 'set') {
                 // Set a criteria value
                 if (criteriaName && value !== undefined) {
@@ -197,8 +173,8 @@ class WalletSearcherHandler extends BaseHandler {
                     });
                     
                     // Determine what kind of input to ask for
-                    let unit = this.criteriaUnits[criteriaName] || '';
-                    let inputRequest = `Please enter a minimum value for ${this.criteriaNames[criteriaName]}`;
+                    let unit = this.formatter.criteriaUnits[criteriaName] || '';
+                    let inputRequest = `Please enter a minimum value for ${this.formatter.criteriaNames[criteriaName]}`;
                     
                     if (criteriaName === 'winrate') {
                         inputRequest += ` (enter a number from 0-100)`;
@@ -215,11 +191,11 @@ class WalletSearcherHandler extends BaseHandler {
                 // Execute search
                 await this.executeSearch(bot, query.message, searchState.criteria, userId);
             } else if (action === 'page') {
-                // Handle pagination
+                // Handle pagination - use the message that triggered the callback
                 const pageNum = parseInt(page) || 0;
                 await this.showResultsPage(bot, query.message, searchState.criteria, pageNum, userId);
             } else if (action === 'back') {
-                // Go back to search panel
+                // Go back to search panel - try to edit current message
                 try {
                     await this.updateSearchPanel(bot, query.message, searchState.criteria);
                 } catch (error) {
@@ -255,6 +231,7 @@ class WalletSearcherHandler extends BaseHandler {
                 await this.sendSearchPanel(bot, chatId, searchState.criteria);
             }
             
+            // Always acknowledge callback query
             await bot.answerCallbackQuery(query.id);
         } catch (error) {
             logger.error('Error in wallet search callback:', error);
@@ -338,19 +315,17 @@ class WalletSearcherHandler extends BaseHandler {
                     // Store the value in hours
                     searchState.criteria[criteriaName] = valueInHours;
                     
-                    // Format display based on unit
-                    let displayValue;
-                    if (unit === 'm') {
-                        displayValue = `${value} minutes`;
-                    } else if (unit === 'h') {
-                        displayValue = `${value} hours`;
-                    } else if (unit === 'd') {
-                        displayValue = `${value} days`;
-                    }
+                    // Get confirmation message from formatter
+                    const confirmationMessage = this.formatter.formatCustomInputConfirmation(
+                        this.formatter.criteriaNames[criteriaName],
+                        valueInHours,
+                        '',
+                        'time'
+                    );
                     
                     await bot.sendMessage(
                         chatId, 
-                        `✅ ${this.criteriaNames[criteriaName]} set to minimum ${displayValue}.`,
+                        confirmationMessage,
                         { parse_mode: 'HTML' }
                     );
                     
@@ -377,7 +352,7 @@ class WalletSearcherHandler extends BaseHandler {
             let value = parseFloat(inputText.replace(/[$,%]/g, ''));
             
             if (isNaN(value) || value < 0) {
-                await bot.sendMessage(chatId, `Invalid input. Please enter a positive number for ${this.criteriaNames[criteriaName]}.`);
+                await bot.sendMessage(chatId, `Invalid input. Please enter a positive number for ${this.formatter.criteriaNames[criteriaName]}.`);
                 return true; // We handled this message
             }
             
@@ -387,40 +362,30 @@ class WalletSearcherHandler extends BaseHandler {
                 return true;
             }
             
-            // No special validation for unrealized_pnl since it's a dollar value now
+            // Store the value
+            searchState.criteria[criteriaName] = value;
             
-            // Handle zero value as a reset
-            if (value === 0) {
-                searchState.criteria[criteriaName] = 0;
-                await bot.sendMessage(
-                    chatId, 
-                    `${this.criteriaNames[criteriaName]} filter has been reset.`,
-                    { parse_mode: 'HTML' }
-                );
-            } else {
-                // Store the value
-                searchState.criteria[criteriaName] = value;
-                
-                // Format confirmation message based on criteria type
-                const unit = this.criteriaUnits[criteriaName] || '';
-                let displayValue;
-                
-                if (criteriaName === 'winrate') {
-                    displayValue = `${value}${unit}`;
-                } else if (['total_value', 'realized_profit_30d', 'token_avg_cost', 'unrealized_pnl'].includes(criteriaName)) {
-                    displayValue = `${unit}${formatNumber(value, 0)}`;
-                } else if (criteriaName === 'sol_balance') {
-                    displayValue = `${value} ${unit}`;
-                } else {
-                    displayValue = `${value}`;
-                }
-                
-                await bot.sendMessage(
-                    chatId, 
-                    `✅ ${this.criteriaNames[criteriaName]} set to minimum ${displayValue}.`,
-                    { parse_mode: 'HTML' }
-                );
+            // Determine display format for confirmation
+            let displayFormat = null;
+            if (criteriaName === 'winrate') {
+                displayFormat = 'percentage';
+            } else if (['total_value', 'realized_profit_30d', 'token_avg_cost', 'unrealized_profit'].includes(criteriaName)) {
+                displayFormat = 'money';
             }
+            
+            // Get confirmation message from formatter
+            const confirmationMessage = this.formatter.formatCustomInputConfirmation(
+                this.formatter.criteriaNames[criteriaName],
+                value,
+                this.formatter.criteriaUnits[criteriaName] || '',
+                displayFormat
+            );
+            
+            await bot.sendMessage(
+                chatId, 
+                confirmationMessage,
+                { parse_mode: 'HTML' }
+            );
             
             // Clear pending status
             delete searchState.pendingCriteria;
@@ -434,17 +399,7 @@ class WalletSearcherHandler extends BaseHandler {
             // Update the search panel if we have a stored message ID
             if (searchState.messageId) {
                 try {
-                    await bot.editMessageText(
-                        this.formatSearchPanelMessage(searchState.criteria),
-                        {
-                            chat_id: chatId,
-                            message_id: searchState.messageId,
-                            parse_mode: 'HTML',
-                            reply_markup: {
-                                inline_keyboard: this.createSearchPanelKeyboard(searchState.criteria)
-                            }
-                        }
-                    );
+                    await this.updateSearchPanel(bot, { chat_id: chatId, message_id: searchState.messageId }, searchState.criteria);
                 } catch (error) {
                     // If we can't edit the message, send a new one
                     if (error.message && error.message.includes('message to edit not found')) {
@@ -477,8 +432,10 @@ class WalletSearcherHandler extends BaseHandler {
      * @param {number|undefined} messageThreadId - The message thread ID if applicable
      */
     async sendSearchPanel(bot, chatId, criteria, messageThreadId) {
-        const message = this.formatSearchPanelMessage(criteria);
-        const keyboard = this.createSearchPanelKeyboard(criteria);
+        const message = this.formatter.formatSearchPanelMessage(criteria);
+        const keyboard = this.formatter.createSearchPanelKeyboard(criteria, (action, params = {}) => {
+            return this.generateCallbackData(action, params);
+        });
         
         await this.sendMessage(
             bot,
@@ -503,8 +460,10 @@ class WalletSearcherHandler extends BaseHandler {
     async updateSearchPanel(bot, message, criteria) {
         const chatId = message.chat_id || message.chat.id;
         const messageId = message.message_id;
-        const newMessage = this.formatSearchPanelMessage(criteria);
-        const keyboard = this.createSearchPanelKeyboard(criteria);
+        const newMessage = this.formatter.formatSearchPanelMessage(criteria);
+        const keyboard = this.formatter.createSearchPanelKeyboard(criteria, (action, params = {}) => {
+            return this.generateCallbackData(action, params);
+        });
         
         await bot.editMessageText(newMessage, {
             chat_id: chatId,
@@ -514,190 +473,6 @@ class WalletSearcherHandler extends BaseHandler {
                 inline_keyboard: keyboard
             }
         });
-    }
-
-    /**
-     * Format the search panel message
-     * @param {Object} criteria - Current search criteria
-     * @returns {string} Formatted message
-     */
-    formatSearchPanelMessage(criteria) {
-        let message = '<b>🔍 Wallet Search</b>\n\n';
-        message += 'Set criteria and click Search to find matching wallets.\n\n';
-        
-        // Count active criteria
-        let activeCriteriaCount = 0;
-        Object.values(criteria).forEach(value => {
-            if (value > 0) activeCriteriaCount++;
-        });
-        
-        if (activeCriteriaCount > 0) {
-            message += '<b>Current Criteria:</b>\n';
-            
-            // Group active criteria into pairs for compact display
-            const activeCriteria = [];
-            for (const [key, value] of Object.entries(criteria)) {
-                if (value > 0) {
-                    const name = this.criteriaNames[key] || key;
-                    const unit = this.criteriaUnits[key] || '';
-                    let displayValue = value;
-                    
-                    // Format values based on type
-                    if (key === 'winrate') {
-                        displayValue = `${displayValue}${unit}`;
-                    } else if (['total_value', 'realized_profit_30d', 'token_avg_cost', 'unrealized_profit'].includes(key)) {
-                        displayValue = `${unit}${formatNumber(displayValue, 0, false, true)}`;
-                    } else if (key === 'sol_balance') {
-                        displayValue = `${displayValue} ${unit}`;
-                    } else if (key === 'avg_holding_peroid') {
-                        // Convert hours to appropriate format
-                        if (value < 1) {
-                            displayValue = `${Math.round(value * 60)}m`;
-                        } else if (value >= 24) {
-                            displayValue = `${(value / 24).toFixed(1)}d`;
-                        } else {
-                            const hours = Math.floor(value);
-                            const minutes = Math.round((value - hours) * 60);
-                            displayValue = minutes > 0 ? `${hours}h${minutes}m` : `${hours}h`;
-                        }
-                    }
-                    
-                    activeCriteria.push({ key, name, displayValue });
-                }
-            }
-            
-            // Display criteria in two columns where possible
-            for (let i = 0; i < activeCriteria.length; i += 2) {
-                const first = activeCriteria[i];
-                const second = i + 1 < activeCriteria.length ? activeCriteria[i + 1] : null;
-                
-                if (second) {
-                    // Two criteria on one line
-                    message += `• ${first.name}: ${first.displayValue} | ${second.name}: ${second.displayValue}\n`;
-                } else {
-                    // Just one criteria on the line
-                    message += `• ${first.name}: ${first.displayValue}\n`;
-                }
-            }
-        } else {
-            message += '<b>No filters applied</b> (select criteria below)\n';
-        }
-        
-        // Add compact examples section
-        message += '\n<b>Example Searches:</b>\n';
-        message += '• Win Rate + Total Value = Top performers\n';
-        message += '• 5x+ + 2x-5x = Big winners\n';
-        message += '• Low Hold Time + High Buys/Sells = Active traders\n';
-        
-        return message;
-    }
-
-    /**
-     * Create the search panel keyboard with custom input option
-     * @param {Object} criteria - Current search criteria
-     * @returns {Array} Keyboard button rows
-     */
-    createSearchPanelKeyboard(criteria) {
-        const keyboard = [];
-        
-        // Group criteria into pairs for side-by-side layout
-        const criteriaPairs = [
-            // Performance metrics row 1
-            ["winrate", "realized_profit_30d"],
-            // Performance metrics row 2
-            ["unrealized_pnl", "total_value"],
-            // Balance and basic trading stats
-            ["sol_balance", "token_avg_cost"],
-            // Activity metrics
-            ["buy_30d", "sell_30d"],
-            // Trading performance metrics
-            ["pnl_2x_5x_num", "pnl_gt_5x_num"],
-            // Time-based metrics
-            ["avg_holding_peroid"]
-        ];
-        
-        // Add "Wallet Search" header
-        keyboard.push([
-            {
-                text: "🔍 Wallet Search",
-                callback_data: this.generateCallbackData('none')
-            }
-        ]);
-            
-        // Add criteria pairs
-        for (const pairKeys of criteriaPairs) {
-            const buttonRow = [];
-            
-            // Process each key in the pair
-            for (const key of pairKeys) {
-                const name = this.criteriaNames[key] || key;
-                const unit = this.criteriaUnits[key] || '';
-                
-                // Format the display of active criteria
-                let displayText = name;
-                
-                if (criteria[key] > 0) {
-                    // Format the value based on the type
-                    let valueDisplay = '';
-                    if (key === 'winrate') {
-                        valueDisplay = `${criteria[key]}${unit}`;
-                    } else if (['total_value', 'realized_profit_30d', 'token_avg_cost', 'unrealized_profit'].includes(key)) {
-                        valueDisplay = `${unit}${formatNumber(criteria[key], 0, false, false)}`;
-                    } else if (key === 'sol_balance') {
-                        valueDisplay = `${criteria[key]} ${unit}`;
-                    } else if (key === 'avg_holding_peroid') {
-                        // Format holding time appropriately
-                        const value = criteria[key];
-                        if (value < 1) {
-                            valueDisplay = `${Math.round(value * 60)}m`;
-                        } else if (value >= 24) {
-                            valueDisplay = `${(value / 24).toFixed(1)}d`;
-                        } else {
-                            const hours = Math.floor(value);
-                            const minutes = Math.round((value - hours) * 60);
-                            valueDisplay = minutes > 0 ? `${hours}h${minutes}m` : `${hours}h`;
-                        }
-                    } else {
-                        valueDisplay = `${criteria[key]}`;
-                    }
-                    
-                    displayText = `${name}: ${valueDisplay} ✅`;
-                }
-                
-                // Add button to row
-                buttonRow.push({
-                    text: displayText,
-                    callback_data: this.generateCallbackData('custom', { criteria: key })
-                });
-            }
-            
-            // Add the row of buttons
-            keyboard.push(buttonRow);
-        }
-        
-        // Add a separator
-        keyboard.push([
-            {
-                text: "───────────",
-                callback_data: this.generateCallbackData('none')
-            }
-        ]);
-        
-        // Add control buttons
-        const controlRow = [
-            {
-                text: "🔄 Reset All",
-                callback_data: this.generateCallbackData('reset')
-            },
-            {
-                text: "🔍 Search",
-                callback_data: this.generateCallbackData('search')
-            }
-        ];
-        
-        keyboard.push(controlRow);
-        
-        return keyboard;
     }
 
     /**
@@ -745,7 +520,7 @@ class WalletSearcherHandler extends BaseHandler {
                 };
             
             searchState.results = results;
-            // We no longer need to store the original message ID since we're sending a new one
+            searchState.currentPage = 0; // Start at first page
             this.stateManager.setUserState(userId, {
                 context: 'walletSearch',
                 data: searchState
@@ -758,20 +533,43 @@ class WalletSearcherHandler extends BaseHandler {
                 logger.warn('Could not delete loading message, it may have been deleted already', deleteError);
             }
             
-            // Send a new message with search results
-            const resultsMessage = this.formatResultsMessage(
-                results.slice(0, this.maxResults), 
+            // Calculate the first page data
+            const totalPages = Math.ceil(results.length / this.maxResults);
+            const firstPageResults = results.slice(0, this.maxResults);
+            
+            // Format the message
+            let resultsMessage = this.formatter.formatResultsMessage(
+                firstPageResults, 
                 criteria, 
                 0, 
-                Math.ceil(results.length / this.maxResults), 
-                results.length
+                totalPages, 
+                results.length,
+                this.maxResults
             );
             
+            // Check if message is too long
+            if (resultsMessage.length > 3800) {
+                resultsMessage = this.formatter.createTruncatedResultsMessage(
+                    firstPageResults,
+                    criteria,
+                    0,
+                    totalPages,
+                    results.length,
+                    this.maxResults
+                );
+            }
+            
+            // Create keyboard
+            const keyboard = this.formatter.createResultsPaginationKeyboard(0, totalPages, (action, params = {}) => {
+                return this.generateCallbackData(action, params);
+            });
+            
+            // Send a new message with search results
             const newMsg = await bot.sendMessage(chatId, resultsMessage, {
                 parse_mode: 'HTML',
                 disable_web_page_preview: true,
                 reply_markup: {
-                    inline_keyboard: this.createResultsPaginationKeyboard(0, Math.ceil(results.length / this.maxResults))
+                    inline_keyboard: keyboard
                 }
             });
             
@@ -803,6 +601,161 @@ class WalletSearcherHandler extends BaseHandler {
                     }
                 }
             );
+        }
+    }
+
+    /**
+     * Show a page of search results
+     * @param {Object} bot - The telegram bot instance
+     * @param {Object} message - The message to update
+     * @param {Object} criteria - Search criteria used
+     * @param {number} page - Page number to show
+     * @param {number|string} userId - User ID for state retrieval
+     */
+    async showResultsPage(bot, message, criteria, page = 0, userId) {
+        const chatId = message.chat.id;
+        const messageId = message.message_id;
+        
+        try {
+            // Get user state to retrieve results
+            const userState = this.stateManager.getUserState(userId);
+            
+            if (!userState || userState.context !== 'walletSearch' || !userState.data || !userState.data.results) {
+                throw new Error('No search results found');
+            }
+            
+            const results = userState.data.results;
+            
+            // Calculate pagination
+            const totalResults = results.length;
+            const totalPages = Math.ceil(totalResults / this.maxResults);
+            const startIndex = page * this.maxResults;
+            const endIndex = Math.min(startIndex + this.maxResults, totalResults);
+            const pageResults = results.slice(startIndex, endIndex);
+            
+            // Format results message
+            let formattedMessage = this.formatter.formatResultsMessage(
+                pageResults, 
+                criteria, 
+                page, 
+                totalPages, 
+                totalResults,
+                this.maxResults
+            );
+            
+            // Check message length to avoid Telegram error
+            if (formattedMessage.length > 3800) { // Leave some buffer
+                // If too long, reduce content and add a warning
+                formattedMessage = this.formatter.createTruncatedResultsMessage(
+                    pageResults, 
+                    criteria, 
+                    page, 
+                    totalPages, 
+                    totalResults,
+                    this.maxResults
+                );
+            }
+            
+            // Create pagination keyboard
+            const keyboard = this.formatter.createResultsPaginationKeyboard(page, totalPages, (action, params = {}) => {
+                return this.generateCallbackData(action, params);
+            });
+            
+            // Update existing message with the new page content
+            await bot.editMessageText(formattedMessage, {
+                chat_id: chatId,
+                message_id: messageId,
+                parse_mode: 'HTML',
+                disable_web_page_preview: true,
+                reply_markup: {
+                    inline_keyboard: keyboard
+                }
+            });
+            
+            // Store current page in user state for context
+            userState.data.currentPage = page;
+            this.stateManager.setUserState(userId, userState);
+            
+        } catch (error) {
+            logger.error('Error showing results page:', error);
+            
+            // If we can't edit (message might be too old), send a new one
+            try {
+                await bot.sendMessage(chatId, 
+                    '<b>❌ Error</b>\n\nCannot update results. Starting a new results page.',
+                    {
+                        parse_mode: 'HTML',
+                        reply_markup: {
+                            inline_keyboard: [[
+                                {
+                                    text: "◀️ Back to Search",
+                                    callback_data: this.generateCallbackData('back')
+                                },
+                                {
+                                    text: "🔍 Start New Search",
+                                    callback_data: this.generateCallbackData('new')
+                                }
+                            ]]
+                        }
+                    }
+                );
+                
+                // If we have results, try sending a new results message
+                const userState = this.stateManager.getUserState(userId);
+                if (userState?.context === 'walletSearch' && userState.data?.results) {
+                    const results = userState.data.results;
+                    const totalPages = Math.ceil(results.length / this.maxResults);
+                    
+                    if (page >= totalPages) page = 0; // Reset page if out of range
+                    
+                    const startIndex = page * this.maxResults;
+                    const endIndex = Math.min(startIndex + this.maxResults, results.length);
+                    const pageResults = results.slice(startIndex, endIndex);
+                    
+                    // Format the message
+                    let formattedMessage = this.formatter.formatResultsMessage(
+                        pageResults, 
+                        criteria, 
+                        page, 
+                        totalPages, 
+                        results.length,
+                        this.maxResults
+                    );
+                    
+                    // Check if message is too long
+                    if (formattedMessage.length > 3800) {
+                        formattedMessage = this.formatter.createTruncatedResultsMessage(
+                            pageResults,
+                            criteria,
+                            page,
+                            totalPages,
+                            results.length,
+                            this.maxResults
+                        );
+                    }
+                    
+                    // Create keyboard
+                    const keyboard = this.formatter.createResultsPaginationKeyboard(page, totalPages, (action, params = {}) => {
+                        return this.generateCallbackData(action, params);
+                    });
+                    
+                    // Send a new message with the updated results
+                    const newMsg = await bot.sendMessage(chatId, formattedMessage, {
+                        parse_mode: 'HTML',
+                        disable_web_page_preview: true,
+                        reply_markup: {
+                            inline_keyboard: keyboard
+                        }
+                    });
+                    
+                    // Update message ID in state for future pagination
+                    userState.data.messageId = newMsg.message_id;
+                    userState.data.currentPage = page;
+                    this.stateManager.setUserState(userId, userState);
+                }
+            } catch (sendError) {
+                logger.error('Failed to send new message after pagination error:', sendError);
+            }
         }
     }
 
@@ -896,322 +849,6 @@ class WalletSearcherHandler extends BaseHandler {
         }
         
         return query;
-    }
-
-    /**
-     * Show a page of search results
-     * @param {Object} bot - The telegram bot instance
-     * @param {Object} message - The message to update
-     * @param {Object} criteria - Search criteria used
-     * @param {number} page - Page number to show
-     * @param {number|string} userId - User ID for state retrieval
-     * @param {Array} results - Search results if already available
-     */
-    async showResultsPage(bot, message, criteria, page = 0, userId, results = null) {
-        const chatId = message.chat.id;
-        
-        try {
-            // Get user state to retrieve results
-            const userState = this.stateManager.getUserState(userId);
-            
-            // Get results from state if not provided
-            if (!results) {
-                if (!userState || userState.context !== 'walletSearch' || !userState.data || !userState.data.results) {
-                    throw new Error('No search results found');
-                }
-                results = userState.data.results;
-            }
-            
-            // Calculate pagination
-            const totalResults = results.length;
-            const totalPages = Math.ceil(totalResults / this.maxResults);
-            const startIndex = page * this.maxResults;
-            const endIndex = Math.min(startIndex + this.maxResults, totalResults);
-            const pageResults = results.slice(startIndex, endIndex);
-            
-            // Format results message
-            const formattedMessage = this.formatResultsMessage(pageResults, criteria, page, totalPages, totalResults);
-            
-            // Create pagination keyboard
-            const keyboard = this.createResultsPaginationKeyboard(page, totalPages);
-            
-            // Send a new message with the results
-            const newMsg = await bot.sendMessage(chatId, formattedMessage, {
-                parse_mode: 'HTML',
-                disable_web_page_preview: true,
-                reply_markup: {
-                    inline_keyboard: keyboard
-                }
-            });
-            
-            // Update the message ID in state for future reference
-            if (userState && userState.context === 'walletSearch' && userState.data) {
-                userState.data.messageId = newMsg.message_id;
-                this.stateManager.setUserState(userId, userState);
-            }
-            
-        } catch (error) {
-            logger.error('Error showing results page:', error);
-            
-            // Send a new error message
-            await bot.sendMessage(chatId, 
-                '<b>❌ Error</b>\n\nAn error occurred while displaying results. Please try again.',
-                {
-                    parse_mode: 'HTML',
-                    reply_markup: {
-                        inline_keyboard: [[
-                            {
-                                text: "◀️ Back to Search",
-                                callback_data: this.generateCallbackData('back')
-                            },
-                            {
-                                text: "🔍 Start New Search",
-                                callback_data: this.generateCallbackData('new')
-                            }
-                        ]]
-                    }
-                }
-            );
-        }
-    }
-
-    /**
-     * Format search results message
-     * @param {Array} results - Page of search results
-     * @param {Object} criteria - Search criteria used
-     * @param {number} page - Current page number
-     * @param {number} totalPages - Total number of pages
-     * @param {number} totalResults - Total number of results
-     * @returns {string} Formatted message
-     */
-    formatResultsMessage(results, criteria, page, totalPages, totalResults) {
-        if (results.length === 0) {
-            return '<b>🔍 Wallet Search Results</b>\n\nNo wallets found matching your criteria. Try adjusting your search parameters.';
-        }
-        
-        let message = '<b>🔍 Wallet Search Results</b>\n\n';
-        
-        // Show criteria used
-        message += '<b>Search Criteria:</b>\n';
-        let activeCriteriaCount = 0;
-        for (const [key, value] of Object.entries(criteria)) {
-            if (value > 0) {
-                activeCriteriaCount++;
-                const name = this.criteriaNames[key] || key;
-                const unit = this.criteriaUnits[key] || '';
-                let displayValue = value;
-                
-                // Format display value based on criteria type
-                if (key === 'winrate') {
-                    displayValue = `≥ ${value}${unit}`;
-                } 
-                // Format dollar amounts
-                else if (['total_value', 'realized_profit_30d', 'token_avg_cost', 'unrealized_profit'].includes(key)) {
-                    displayValue = `≥ ${unit}${formatNumber(value, 0, false, true)}`;
-                }
-                // Format SOL amounts
-                else if (key === 'sol_balance') {
-                    displayValue = `≥ ${displayValue} ${unit}`;
-                }
-                // Format holding period
-                else if (key === 'avg_holding_peroid') {
-                    if (value < 1) {
-                        displayValue = `≤ ${Math.round(value * 60)}m`;
-                    } else if (value >= 24) {
-                        displayValue = `≥ ${(value / 24).toFixed(1)}d`;
-                    } else {
-                        const hours = Math.floor(value);
-                        const minutes = Math.round((value - hours) * 60);
-                        displayValue = `≥ ${minutes > 0 ? `${hours}h${minutes}m` : `${hours}h`}`;
-                    }
-                }
-                
-                message += `• ${name}: ${displayValue}\n`;
-            }
-        }
-        
-        if (activeCriteriaCount === 0) {
-            message += `• No filters applied (showing all wallets)\n`;
-        }
-        
-        message += `\n<b>Found ${totalResults} wallets</b> (Showing ${page * this.maxResults + 1}-${Math.min((page + 1) * this.maxResults, totalResults)})\n\n`;
-        
-        // Format each result
-        results.forEach((wallet, index) => {
-            const position = page * this.maxResults + index + 1;
-            
-            try {
-                // Handle missing address
-                if (!wallet.address) {
-                    message += `<b>${position}. Invalid wallet data</b>\n\n`;
-                    return;
-                }
-                
-                // Format address
-                const truncatedAddress = wallet.address.substring(0, 6) + '...' + wallet.address.substring(wallet.address.length - 4);
-                message += `<b>${position}. <a href="https://solscan.io/account/${wallet.address}">${truncatedAddress}</a></b>`;
-                
-                // Add GMGN & Cielo links
-                message += ` <a href="https://gmgn.ai/sol/address/${wallet.address}">GMGN</a>/<a href="https://app.cielo.finance/profile/${wallet.address}/pnl/tokens">Cielo</a>\n`;
-                
-                // Line 1: Portfolio, SOL & Win Rate
-                const portfolioValue = wallet.total_value !== null && wallet.total_value !== undefined 
-                    ? `💼 $${formatNumber(wallet.total_value, 0, false, true)}` : '';
-                
-                // Parse SOL balance
-                let solBalance = '';
-                if (wallet.sol_balance) {
-                    try {
-                        const solValue = typeof wallet.sol_balance === 'string' 
-                            ? parseFloat(wallet.sol_balance) : wallet.sol_balance;
-                            
-                        if (!isNaN(solValue)) {
-                            solBalance = `SOL: ${formatNumber(solValue, 1)}`;
-                        }
-                    } catch (e) {
-                        logger.warn(`Failed to parse SOL balance: ${wallet.sol_balance}`, e);
-                    }
-                }
-                
-                // Win rate
-                const winrateValue = wallet.winrate !== null && wallet.winrate !== undefined
-                    ? `WR: ${typeof wallet.winrate === 'number' ? (wallet.winrate * 100).toFixed(0) : 'N/A'}%` 
-                    : '';
-                
-                // Combine for first line
-                let line1 = '';
-                if (portfolioValue) line1 += portfolioValue;
-                if (solBalance) line1 += line1 ? ` | ${solBalance}` : solBalance;
-                if (winrateValue) line1 += line1 ? ` | ${winrateValue}` : winrateValue;
-                
-                if (line1) {
-                    message += `├ ${line1}\n`;
-                }
-                
-                // Line 2: PnL & Trading stats
-                const pnl30d = wallet.realized_profit_30d
-                    ? `💸 PnL: $${formatNumber(wallet.realized_profit_30d, 0, false, true)}` : '';
-                
-                const trades = (wallet.buy_30d !== null && wallet.sell_30d !== null)
-                    ? `${wallet.buy_30d}B/${wallet.sell_30d}S` : '';
-                
-                // Holding time with minutes format for < 1h
-                let holdingTime = '';
-                if (wallet.avg_holding_peroid !== null && wallet.avg_holding_peroid !== undefined) {
-                    const holdingSeconds = wallet.avg_holding_peroid;
-                    const holdingMinutes = holdingSeconds / 60;
-                    const holdingHours = holdingMinutes / 60;
-                    
-                    if (holdingHours < 1) {
-                        // Format as minutes if less than 1 hour
-                        holdingTime = `${Math.round(holdingMinutes)}min`;
-                    } else if (holdingHours >= 24) {
-                        // Format as days if 24+ hours
-                        holdingTime = `${(holdingHours / 24).toFixed(1)}d`;
-                    } else {
-                        // Format as hours and minutes
-                        const hours = Math.floor(holdingHours);
-                        const minutes = Math.round((holdingHours - hours) * 60);
-                        holdingTime = minutes > 0 ? `${hours}h${minutes}min` : `${hours}h`;
-                    }
-                }
-                
-                // Combine for second line
-                let line2 = '';
-                if (pnl30d) line2 += pnl30d;
-                if (trades) line2 += line2 ? ` | 🔄 ${trades}` : `🔄 ${trades}`;
-                if (holdingTime) line2 += line2 ? ` | ⏱️ ${holdingTime}` : `⏱️ ${holdingTime}`;
-                
-                if (line2) {
-                    message += `├ ${line2}\n`;
-                }
-                
-                // Line 3: Performance indicators
-                let line3 = '';
-                
-                // 2x-5x & 5x+ trades
-                if (wallet.pnl_2x_5x_num > 0 || wallet.pnl_gt_5x_num > 0) {
-                    let tradeStats = '';
-                    if (wallet.pnl_2x_5x_num > 0) tradeStats += `2x-5x: ${wallet.pnl_2x_5x_num}`;
-                    if (wallet.pnl_gt_5x_num > 0) {
-                        tradeStats += tradeStats ? ` | 5x+: ${wallet.pnl_gt_5x_num}` : `5x+: ${wallet.pnl_gt_5x_num}`;
-                    }
-                    line3 += tradeStats ? `🚀 ${tradeStats}` : '';
-                }
-                
-                // Avg Buy & Unrealized PnL
-                const avgBuy = wallet.token_avg_cost > 0 
-                    ? `Avg Buy: $${formatNumber(wallet.token_avg_cost, 0, false, true)}` : '';
-                    
-                // Unrealized PnL if significant
-                let unrealPnl = '';
-                if (wallet.unrealized_profit !== null && wallet.unrealized_profit !== undefined) {
-                    const pnlSymbol = wallet.unrealized_profit > 0 ? '📈' : '📉';
-                    unrealPnl = `${pnlSymbol} uPnL: $${formatNumber(wallet.unrealized_profit, 0, false, true)}`;
-                }
-                
-                // Add to line 3
-                if (avgBuy) line3 += line3 ? ` | ${avgBuy}` : avgBuy;
-                if (unrealPnl) line3 += line3 ? ` | ${unrealPnl}` : unrealPnl;
-                
-                if (line3) {
-                    message += `└ ${line3}\n`;
-                }
-                
-                // Use code formatting for clarity
-                message += `📊 <b>Show Details:</b> <code>/wc ${wallet.address}</code>\n\n`;
-                
-            } catch (error) {
-                logger.error(`Error formatting wallet at index ${index}:`, error);
-                message += `<b>${position}. Error formatting wallet data</b>\n\n`;
-            }
-        });
-        
-        // Add pagination info
-        if (totalPages > 1) {
-            message += `<i>Page ${page + 1} of ${totalPages}</i>`;
-        }
-        
-        return message;
-    }
-
-    /**
-     * Create pagination keyboard for results
-     * @param {number} page - Current page number
-     * @param {number} totalPages - Total number of pages
-     * @returns {Array} Keyboard button rows
-     */
-    createResultsPaginationKeyboard(page, totalPages) {
-        const keyboard = [];
-        const navigationRow = [];
-        
-        // Add back button
-        navigationRow.push({
-            text: "◀️ Back to Search",
-            callback_data: this.generateCallbackData('back')
-        });
-        
-        // Add pagination buttons if there's more than one page
-        if (totalPages > 1) {
-            // Previous page button
-            if (page > 0) {
-                navigationRow.push({
-                    text: "◀️ Previous",
-                    callback_data: this.generateCallbackData('page', { page: page - 1 })
-                });
-            }
-            
-            // Next page button
-            if (page < totalPages - 1) {
-                navigationRow.push({
-                    text: "Next ▶️",
-                    callback_data: this.generateCallbackData('page', { page: page + 1 })
-                });
-            }
-        }
-        
-        keyboard.push(navigationRow);
-        return keyboard;
     }
 }
 
