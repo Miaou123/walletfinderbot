@@ -19,9 +19,12 @@ const ListSubscriptionsHandler = require('./subscriptionManagement/listSubscript
 const ListGroupSubscriptionsHandler = require('./subscriptionManagement/listGroupSubscriptionsHandler');
 
 
+
 // Import System Command Handlers
 const BroadcastHandler = require('./systemCommands/broadcastHandler');
 const UsageStatsHandler = require('./systemCommands/usageStatsHandler');
+const BroadcastLocalHandler = require('./systemCommands/broadcastLocalHandler');
+const ImageBroadcastHandler = require('./systemCommands/imageBroadcastHandler');
 
 
 //Utils
@@ -58,7 +61,10 @@ class AdminCommandManager {
             
             // System Commands
             broadcast: new BroadcastHandler(accessControl, bot),
-            usagestats: new UsageStatsHandler(accessControl, bot, usageTracker)
+            usagestats: new UsageStatsHandler(accessControl, bot, usageTracker),
+            broadcastlocal: new BroadcastLocalHandler(accessControl, bot),
+            imagebroadcast: new ImageBroadcastHandler(accessControl, bot),
+            imagebroadcastlocal: new ImageBroadcastHandler(accessControl, bot),
         };
     }
 

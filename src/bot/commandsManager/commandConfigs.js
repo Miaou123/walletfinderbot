@@ -363,7 +363,34 @@ const adminCommandConfigs = {
     description: 'Send message to all users',
     usage: '/broadcast [message]',
     helpMessage: 'Send a message to all whitelisted users.\n\nExample:\n/broadcast Hello everyone!'
-  }
+  },
+  'broadcastlocal': {
+    aliases: ['bclocal'],
+    minArgs: 1,
+    maxArgs: Infinity,
+    requiresAuth: true,
+    description: 'Test broadcast message locally',
+    usage: '/broadcastlocal [message]',
+    helpMessage: 'Preview how a broadcast message will look by sending it only to yourself.\n\nThis is useful for checking formatting and catching errors before broadcasting to all users.\n\nExample:\n/broadcastlocal Hello everyone!'
+  },
+  'imagebroadcast': {
+    aliases: ['imgbc'],
+    minArgs: 0,
+    maxArgs: 0,
+    requiresAuth: true,
+    description: 'Broadcast a message with an image to all users',
+    usage: '/imagebroadcast',
+    helpMessage: 'Start the image broadcast wizard to send an image with caption to all users.'
+},
+'imagebroadcastlocal': {
+    aliases: ['imgbclocal'],
+    minArgs: 0,
+    maxArgs: 0,
+    requiresAuth: true,
+    description: 'Test an image broadcast locally',
+    usage: '/imagebroadcastlocal',
+    helpMessage: 'Preview how an image broadcast will look without sending to users.'
+},
 };
 
 module.exports = {
