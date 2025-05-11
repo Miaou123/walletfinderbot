@@ -1,5 +1,7 @@
+// src/analysis/freshWallets.js
 const { getSolanaApi } = require('../integrations/solanaApi');
 const { getHolders } = require('../tools/getHolders');
+const { analyzeFunding } = require('../tools/fundingAnalyzer'); // Import funding analyzer
 const BigNumber = require('bignumber.js');
 const logger = require('../utils/logger');
 
@@ -78,7 +80,9 @@ async function analyzeFreshWallets(tokenAddress, mainContext = 'default') {
                 percentage: new BigNumber(w.balance)
                     .dividedBy(totalSupply)
                     .multipliedBy(100)
-                    .toNumber()
+                    .toNumber(),
+                funderAddress: w.funderAddress || null,
+                fundingDetails: w.fundingDetails || null
             }));
         
         // Calculate total supply held by fresh wallets
@@ -131,6 +135,28 @@ async function analyzeWallets(wallets, tokenAddress, mainContext) {
 
             if (await isFreshWallet(wallet.address, mainContext, 'isFreshWallet')) {
                 category = 'Fresh';
+                
+                // For fresh wallets, analyze funding source
+                try {
+                    // Get funding information using fundingAnalyzer
+                    const fundingResult = await analyzeFunding([{address: wallet.address}], mainContext, 'analyzeFunding');
+                    const fundingInfo = fundingResult[0];
+                    
+                    return {
+                        ...wallet,
+                        category,
+                        funderAddress: fundingInfo?.funderAddress || null,
+                        fundingDetails: fundingInfo?.fundingDetails || null
+                    };
+                } catch (fundingError) {
+                    logger.error(`Error analyzing funding for wallet ${wallet.address}:`, fundingError);
+                    return {
+                        ...wallet,
+                        category,
+                        funderAddress: null,
+                        fundingDetails: null
+                    };
+                }
             }
 
             return {
