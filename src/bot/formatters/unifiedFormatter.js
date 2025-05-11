@@ -523,6 +523,124 @@ formatFundingInfo(funderAddress, fundingDetails) {
 }
 
 /**
+ * Analyze and group wallets by their funding sources
+ * @param {Array} analyzedWallets - All analyzed wallets
+ * @param {string} category - Optional category filter (e.g., 'Fresh')
+ * @returns {Object} - Grouped wallets by funding source
+ */
+analyzeFundingSources(analyzedWallets, category = null) {
+  // Filter wallets with funding information
+  const walletsWithFunding = analyzedWallets.filter(wallet => {
+    // Apply category filter if provided
+    const matchesCategory = category ? wallet.category === category : wallet.category !== 'Unknown';
+    return matchesCategory && wallet.funderAddress && wallet.fundingDetails;
+  });
+  
+  // Group wallets by funding source
+  const fundingGroups = {};
+  
+  for (const wallet of walletsWithFunding) {
+    const { funderAddress } = wallet;
+    
+    if (!fundingGroups[funderAddress]) {
+      // Get source name if available
+      let sourceName = wallet.fundingDetails.sourceName;
+      if (!sourceName) {
+        try {
+          const addressCategorization = require('../../utils/addressCategorization');
+          const addressInfo = addressCategorization.getAddressInfo(funderAddress);
+          sourceName = addressInfo ? addressInfo.name : null;
+        } catch (error) {
+          logger.debug('Error importing addressCategorization:', error);
+        }
+      }
+      
+      fundingGroups[funderAddress] = {
+        address: funderAddress,
+        wallets: [],
+        sourceName: sourceName || null,
+        totalSupplyPercentage: 0,
+        totalFundedAmount: 0
+      };
+    }
+    
+    // Add wallet to its funding group
+    fundingGroups[funderAddress].wallets.push(wallet);
+    
+    // Add to total statistics
+    if (wallet.percentageOfSupply) {
+      fundingGroups[funderAddress].totalSupplyPercentage += parseFloat(wallet.percentageOfSupply);
+    } else if (wallet.balance && wallet.fundingDetails.tokenInfo?.totalSupply) {
+      const percentage = new BigNumber(wallet.balance)
+        .dividedBy(wallet.fundingDetails.tokenInfo.totalSupply)
+        .multipliedBy(100)
+        .toNumber();
+      fundingGroups[funderAddress].totalSupplyPercentage += percentage;
+    }
+    
+    // Add funding amount if available
+    if (wallet.fundingDetails.amount) {
+      fundingGroups[funderAddress].totalFundedAmount += wallet.fundingDetails.amount;
+    }
+  }
+  
+  // Filter out groups with only one wallet
+  return Object.values(fundingGroups).filter(group => group.wallets.length > 1);
+}
+
+/**
+ * Format funding groups into a summary section
+ * @param {Array} fundingGroups - Groups of wallets by funding source
+ * @param {string} walletType - Type of wallets (team, fresh, etc.)
+ * @returns {string} - Formatted summary section
+ */
+formatFundingGroupsSummary(fundingGroups, walletType = 'wallet') {
+  if (!fundingGroups || fundingGroups.length === 0) {
+    return '';
+  }
+  
+  let summary = '\n\n<b>🔍 Common Funding Sources:</b>\n';
+  
+  // Format each funding group
+  fundingGroups.forEach(group => {
+    const sourceDisplay = group.sourceName 
+      ? `<a href="https://solscan.io/account/${group.address}">${group.sourceName}</a>`
+      : `<a href="https://solscan.io/account/${group.address}">${truncateAddress(group.address)}</a>`;
+    
+    summary += `• ${group.wallets.length} ${walletType} wallets funded from ${sourceDisplay} ` +
+              `(${formatNumber(group.totalSupplyPercentage, 2)}% of supply, ${formatNumber(group.totalFundedAmount, 2)} SOL)\n`;
+  });
+  
+  return summary;
+}
+
+/**
+ * Enhance wallets with supply percentage information
+ * @param {Array} wallets - Array of wallet objects
+ * @param {Object} tokenInfo - Token information
+ * @returns {Array} - Enhanced wallets with percentage info
+ */
+enhanceWalletsWithPercentage(wallets, tokenInfo) {
+  return wallets.map(wallet => {
+    const supplyPercentage = new BigNumber(wallet.balance)
+      .dividedBy(tokenInfo.totalSupply)
+      .multipliedBy(100)
+      .toFixed(2);
+    
+    // Add token info to funding details for percentage calculations
+    if (wallet.fundingDetails) {
+      wallet.fundingDetails.tokenInfo = tokenInfo;
+    }
+    
+    return { 
+      ...wallet, 
+      percentageOfSupply: supplyPercentage
+    };
+  });
+}
+
+
+/**
  * Format fresh wallets analysis result
  * @param {Array} analyzedWallets - All analyzed wallets 
  * @param {Object} tokenInfo - Token information
@@ -635,6 +753,295 @@ formatFreshWalletDetails(analyzedWallets, tokenInfo) {
   } catch (error) {
     logger.error('Error in formatFreshWalletDetails:', error);
     return 'Error formatting fresh wallet details.';
+  }
+}
+
+/**
+ * Generic wallet list formatter with common funding analysis
+ * Can be used by both fresh and team commands
+ * @param {Array} analyzedWallets - All analyzed wallets
+ * @param {Object} tokenInfo - Token information
+ * @param {Array} wallets - The wallets to display (fresh or team)
+ * @param {number} totalSupplyControlled - Percentage of supply controlled
+ * @param {Object} options - Formatting options
+ * @returns {string} Formatted wallet analysis
+ */
+formatWalletAnalysis(analyzedWallets, tokenInfo, wallets, totalSupplyControlled, options = {}) {
+  try {
+    const {
+      title = 'Wallet Analysis',
+      emoji = '👥',
+      warningEmoji = '⚠️',
+      walletType = 'wallet',
+      categoryFilter = null,
+      displayCategory = false,
+      maxWallets = 10
+    } = options;
+    
+    // Start with the basic header
+    let message = `<b>${title} for <a href="https://dexscreener.com/solana/${tokenInfo.address}">${tokenInfo.symbol}</a></b>\n\n`;
+    message += `${emoji} Supply Controlled by ${walletType}s: ${formatNumber(totalSupplyControlled, 2, true)} ${this.getFreshWalletEmoji(totalSupplyControlled)}\n`;
+    message += `${warningEmoji} Wallets flagged as ${walletType}s: ${wallets.length}`;
+    
+    // Add percentage of supply to each wallet for easier processing
+    const enhancedWallets = this.enhanceWalletsWithPercentage(
+      analyzedWallets.filter(w => !categoryFilter || w.category === categoryFilter),
+      tokenInfo
+    );
+    
+    // Analyze funding sources and get groups
+    const fundingGroups = this.analyzeFundingSources(enhancedWallets, categoryFilter);
+    
+    // Add funding groups summary if there are any
+    if (fundingGroups.length > 0) {
+      const fundingSummary = this.formatFundingGroupsSummary(fundingGroups, walletType);
+      message += fundingSummary;
+    }
+    
+    // Add the top wallets section
+    message += `\n\n<b>Top ${walletType} wallets:</b>\n`;
+    
+    // Sort wallets by balance and take top N
+    const topWallets = enhancedWallets
+      .sort((a, b) => new BigNumber(b.balance).minus(new BigNumber(a.balance)).toNumber())
+      .slice(0, maxWallets);
+
+    topWallets.forEach((wallet, index) => {
+      const supplyPercentage = wallet.percentageOfSupply;
+        
+      // Basic wallet info
+      let walletLine = `${index + 1}. <a href="https://solscan.io/account/${wallet.address}">${truncateAddress(wallet.address)}</a> (${formatNumber(supplyPercentage, 2, true)})`;
+      
+      // Add category if needed
+      if (displayCategory) {
+        walletLine += ` - ${wallet.category}`;
+      }
+      
+      // Add funding info if available
+      walletLine += this.formatFundingInfo(wallet.funderAddress, wallet.fundingDetails);
+      
+      message += `${walletLine}\n`;
+    });
+
+    return message;
+  } catch (error) {
+    logger.error(`Error in formatWalletAnalysis for ${walletType}:`, error);
+    return `Error formatting ${walletType} details.`;
+  }
+}
+
+/**
+ * Generic wallet details formatter with common funding analysis
+ * @param {Array} analyzedWallets - All analyzed wallets
+ * @param {Object} tokenInfo - Token information
+ * @param {Object} options - Formatting options
+ * @returns {string} Formatted wallet details
+ */
+formatWalletDetails(analyzedWallets, tokenInfo, options = {}) {
+  try {
+    const {
+      categoryFilter = null,
+      displayCategory = true,
+      walletType = 'wallet'
+    } = options;
+    
+    // Filter wallets by category if needed
+    const filteredWallets = categoryFilter 
+      ? analyzedWallets.filter(wallet => wallet.category === categoryFilter)
+      : analyzedWallets.filter(wallet => wallet.category !== 'Unknown');
+
+    let message = `<b>${tokenInfo.symbol}</b> (<a href="https://dexscreener.com/solana/${tokenInfo.address}">📈</a>)\n`;
+    message += `<b>${filteredWallets.length} ${walletType} addresses:</b>\n`;
+
+    // Add percentage of supply to each wallet for easier processing
+    const enhancedWallets = this.enhanceWalletsWithPercentage(filteredWallets, tokenInfo);
+    
+    // Analyze funding sources and get groups
+    const fundingGroups = this.analyzeFundingSources(enhancedWallets, categoryFilter);
+    
+    // Add funding groups summary if there are any
+    if (fundingGroups.length > 0) {
+      const fundingSummary = this.formatFundingGroupsSummary(fundingGroups, walletType);
+      message += fundingSummary;
+    }
+    
+    message += '\n';
+
+    enhancedWallets
+      .sort((a, b) => {
+        const balanceA = new BigNumber(a.balance).dividedBy(tokenInfo.totalSupply).multipliedBy(100);
+        const balanceB = new BigNumber(b.balance).dividedBy(tokenInfo.totalSupply).multipliedBy(100);
+        return balanceB.minus(balanceA).toNumber();
+      })
+      .forEach((wallet, index) => {
+        const percentage = wallet.percentageOfSupply;
+
+        // Basic wallet info
+        let walletLine = `${index + 1}. <a href="https://solscan.io/account/${wallet.address}">${truncateAddress(wallet.address)}</a> (${percentage}%)`;
+        
+        // Add category if needed
+        if (displayCategory) {
+          walletLine += ` - ${wallet.category}`;
+        }
+        
+        // Add funding info if available
+        if (wallet.funderAddress && wallet.fundingDetails) {
+          const fundingAmount = wallet.fundingDetails.amount ? `${wallet.fundingDetails.amount.toFixed(2)} SOL` : '';
+          const txSignature = wallet.fundingDetails.signature || '';
+          
+          // Try to get source name from details or address categorization
+          let sourceName = wallet.fundingDetails.sourceName;
+          if (!sourceName) {
+            try {
+              const addressCategorization = require('../../utils/addressCategorization');
+              const addressInfo = addressCategorization.getAddressInfo(wallet.funderAddress);
+              sourceName = addressInfo ? addressInfo.name : null;
+            } catch (error) {
+              logger.debug('Error importing addressCategorization:', error);
+            }
+          }
+          
+          const timeAgo = wallet.fundingDetails.timestamp ? this.formatTimeDifference(wallet.fundingDetails.timestamp) : '';
+          
+          // Format the transaction link
+          const txLink = txSignature ? 
+            `<a href="https://solscan.io/tx/${txSignature}">funded</a>` : 
+            'funded';
+          
+          let fundingInfo = '';
+          
+          if (fundingAmount && sourceName) {
+            fundingInfo = `\n   └ ${txLink} ${fundingAmount} from <a href="https://solscan.io/account/${wallet.funderAddress}">${sourceName}</a> ${timeAgo}`;
+          } else if (fundingAmount) {
+            fundingInfo = `\n   └ ${txLink} ${fundingAmount} from <a href="https://solscan.io/account/${wallet.funderAddress}">${truncateAddress(wallet.funderAddress)}</a> ${timeAgo}`;
+          }
+          
+          walletLine += fundingInfo;
+        }
+        
+        message += `${walletLine}\n\n`;
+      });
+
+    return message;
+  } catch (error) {
+    logger.error(`Error in formatWalletDetails for ${walletType}:`, error);
+    return `Error formatting ${walletType} details.`;
+  }
+}
+
+/**
+ * Format team supply analysis result
+ * @param {Array} analyzedWallets - All analyzed wallets 
+ * @param {Object} tokenInfo - Token information
+ * @param {Array} teamWallets - Team wallets only
+ * @param {number} totalSupplyControlled - Percentage of supply controlled by team wallets
+ * @returns {string} Formatted team supply analysis
+ */
+formatTeamSupplyResult(analyzedWallets, tokenInfo, teamWallets, totalSupplyControlled) {
+  try {
+    let message = `<b>Team Supply Analysis for <a href="https://dexscreener.com/solana/${tokenInfo.address}">${tokenInfo.symbol}</a></b>\n\n`;
+
+    message += `👥 Supply Controlled by team/insiders: ${formatNumber(totalSupplyControlled, 2, true)} ${this.getFreshWalletEmoji(totalSupplyControlled)}\n`;
+    message += `⚠️ Wallets flagged as team/insiders: ${teamWallets.length}\n\n`;
+    message += `<b>Top team wallets:</b>\n`;
+
+    const topTeamWallets = analyzedWallets
+      .filter(w => w.category !== 'Unknown')
+      .sort((a, b) => new BigNumber(b.balance).minus(new BigNumber(a.balance)).toNumber())
+      .slice(0, 10);
+
+    topTeamWallets.forEach((wallet, index) => {
+      const supplyPercentage = new BigNumber(wallet.balance)
+        .dividedBy(tokenInfo.totalSupply)
+        .multipliedBy(100)
+        .toFixed(2);
+        
+      // Basic wallet info
+      let walletLine = `${index + 1}. <a href="https://solscan.io/account/${wallet.address}">${truncateAddress(wallet.address)}</a> (${formatNumber(supplyPercentage, 2, true)}) - ${wallet.category}`;
+      
+      // Add funding info if available
+      walletLine += this.formatFundingInfo(wallet.funderAddress, wallet.fundingDetails);
+      
+      message += `${walletLine}\n`;
+    });
+
+    return message;
+  } catch (error) {
+    logger.error('Error in formatTeamSupplyResult:', error);
+    return 'Error formatting team supply details.';
+  }
+}
+
+/**
+ * Format team wallet details for detailed view
+ * @param {Array} analyzedWallets - All analyzed wallets
+ * @param {Object} tokenInfo - Token information
+ * @returns {string} Formatted wallet details
+ */
+formatTeamWalletDetails(analyzedWallets, tokenInfo) {
+  try {
+    const teamWallets = analyzedWallets.filter(wallet => wallet.category !== 'Unknown');
+
+    let message = `<b>${tokenInfo.symbol}</b> (<a href="https://dexscreener.com/solana/${tokenInfo.address}">📈</a>)\n`;
+    message += `<b>${teamWallets.length} team addresses:</b>\n\n`;
+
+    teamWallets
+      .sort((a, b) => {
+        const balanceA = new BigNumber(a.balance).dividedBy(tokenInfo.totalSupply).multipliedBy(100);
+        const balanceB = new BigNumber(b.balance).dividedBy(tokenInfo.totalSupply).multipliedBy(100);
+        return balanceB.minus(balanceA).toNumber();
+      })
+      .forEach((wallet, index) => {
+        const percentage = new BigNumber(wallet.balance)
+          .dividedBy(tokenInfo.totalSupply)
+          .multipliedBy(100)
+          .toFixed(2);
+
+        // Basic wallet info
+        let walletLine = `${index + 1}. <a href="https://solscan.io/account/${wallet.address}">${truncateAddress(wallet.address)}</a> (${percentage}%) - ${wallet.category}`;
+        
+        // Add funding info if available
+        if (wallet.funderAddress && wallet.fundingDetails) {
+          const fundingAmount = wallet.fundingDetails.amount ? `${wallet.fundingDetails.amount.toFixed(2)} SOL` : '';
+          const txSignature = wallet.fundingDetails.signature || '';
+          
+          // Try to get source name from details or address categorization
+          let sourceName = wallet.fundingDetails.sourceName;
+          if (!sourceName) {
+            try {
+              const addressCategorization = require('../../utils/addressCategorization');
+              const addressInfo = addressCategorization.getAddressInfo(wallet.funderAddress);
+              sourceName = addressInfo ? addressInfo.name : null;
+            } catch (error) {
+              logger.debug('Error importing addressCategorization:', error);
+            }
+          }
+          
+          const timeAgo = wallet.fundingDetails.timestamp ? this.formatTimeDifference(wallet.fundingDetails.timestamp) : '';
+          
+          // Format the transaction link
+          const txLink = txSignature ? 
+            `<a href="https://solscan.io/tx/${txSignature}">funded</a>` : 
+            'funded';
+          
+          let fundingInfo = '';
+          
+          if (fundingAmount && sourceName) {
+            fundingInfo = `\n   └ ${txLink} ${fundingAmount} from <a href="https://solscan.io/account/${wallet.funderAddress}">${sourceName}</a> ${timeAgo}`;
+          } else if (fundingAmount) {
+            fundingInfo = `\n   └ ${txLink} ${fundingAmount} from <a href="https://solscan.io/account/${wallet.funderAddress}">${truncateAddress(wallet.funderAddress)}</a> ${timeAgo}`;
+          }
+          
+          walletLine += fundingInfo;
+        }
+        
+        message += `${walletLine}\n\n`;
+      });
+
+    return message;
+  } catch (error) {
+    logger.error('Error in formatTeamWalletDetails:', error);
+    return 'Error formatting team wallet details.';
   }
 }
   

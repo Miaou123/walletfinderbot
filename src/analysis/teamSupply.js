@@ -1,6 +1,8 @@
+// src/analysis/teamSupply.js
 const { getSolanaApi } = require('../integrations/solanaApi');
 const { checkInactivityPeriod } = require('../tools/inactivityPeriod');
 const { getHolders } = require('../tools/getHolders');
+const { analyzeFunding } = require('../tools/fundingAnalyzer'); // Import funding analyzer
 const BigNumber = require('bignumber.js');
 const logger = require('../utils/logger');
 
@@ -41,7 +43,8 @@ async function analyzeTeamSupply(tokenAddress, mainContext = 'default') {
             total_supply: assetInfo.supply.total, // Déjà ajusté avec les décimales
             symbol: assetInfo.symbol,
             name: assetInfo.name,
-            decimals: assetInfo.decimals
+            decimals: assetInfo.decimals,
+            address: tokenAddress  // Ajouté l'adresse du token
         };
 
         logger.debug('Token info received:', tokenInfo);
@@ -49,51 +52,47 @@ async function analyzeTeamSupply(tokenAddress, mainContext = 'default') {
         const totalSupply = new BigNumber(tokenInfo.total_supply);
         const allHolders = await getHolders(tokenAddress, mainContext, 'getHolders');
         
-             // Ajout de logs pour le filtrage
-             const significantHolders = allHolders.filter(holder => {
+        // Filtre les wallets de pool de liquidité et les holdings non significatifs
+        const significantHolders = allHolders.filter(holder => {
+            if (KNOWN_LP_POOLS.has(holder.address)) {
+                return false;
+            }
 
-                if (KNOWN_LP_POOLS.has(holder.address)) {
-                    return false;
-                }
-
-                const rawBalance = new BigNumber(holder.balance);
-                const percentage = rawBalance.dividedBy(totalSupply);
-                const percentageNumber = percentage.multipliedBy(100).toNumber();
-
-                return percentage.isGreaterThanOrEqualTo(SUPPLY_THRESHOLD);
-            });
+            const rawBalance = new BigNumber(holder.balance);
+            const percentage = rawBalance.dividedBy(totalSupply);
+            return percentage.isGreaterThanOrEqualTo(SUPPLY_THRESHOLD);
+        });
     
+        logger.debug('Significant holders found:', {
+            count: significantHolders.length,
+            threshold: SUPPLY_THRESHOLD.multipliedBy(100).toString() + '%'
+        });
     
-            logger.debug('Significant holders found:', {
-                count: significantHolders.length,
-                threshold: SUPPLY_THRESHOLD.multipliedBy(100).toString() + '%'
-            });
-    
-            const analyzedWallets = await analyzeWallets(significantHolders, tokenAddress, mainContext);
-            logger.debug('Analyzed wallets results:', {
-                total: analyzedWallets.length,
-                byCategory: analyzedWallets.reduce((acc, w) => {
-                    acc[w.category] = (acc[w.category] || 0) + 1;
-                    return acc;
-                }, {})
-            });    
-
-            const teamWallets = analyzedWallets
-            .filter(w => w.category !== 'Unknown')
+        // Analyser chaque wallet significatif
+        const analyzedWallets = await analyzeWallets(significantHolders, tokenAddress, mainContext, tokenInfo);
+        
+        // Filtre uniquement les wallets qui sont catégorisés (non-normaux)
+        // CHANGEMENT CRUCIAL: Nous filtrons explicitement les wallets "Normal" 
+        const teamWallets = analyzedWallets
+            .filter(w => w.category !== 'Normal' && w.category !== 'Unknown') 
             .map(w => ({
                 address: w.address,
                 balance: w.balance.toString(),
                 percentage: new BigNumber(w.balance)
                     .dividedBy(totalSupply)
                     .multipliedBy(100)
-                    .toNumber()
+                    .toNumber(),
+                category: w.category,
+                funderAddress: w.funderAddress || null,
+                fundingDetails: w.fundingDetails || null
             }));
+
+        logger.debug(`Filtered ${teamWallets.length} team wallets out of ${analyzedWallets.length} analyzed wallets`);
         
-        const teamSupplyHeld = analyzedWallets
-            .filter(w => w.category !== 'Unknown')
-            .reduce((total, wallet) => {
-                return total.plus(new BigNumber(wallet.balance));
-            }, new BigNumber(0));
+        // Calcule la supply contrôlée par les wallets "team"
+        const teamSupplyHeld = teamWallets.reduce((total, wallet) => {
+            return total.plus(new BigNumber(wallet.balance));
+        }, new BigNumber(0));
         
         const totalSupplyControlled = teamSupplyHeld
             .dividedBy(totalSupply)
@@ -106,9 +105,10 @@ async function analyzeTeamSupply(tokenAddress, mainContext = 'default') {
                     totalSupply: tokenInfo.total_supply,
                     symbol: tokenInfo.symbol,
                     name: tokenInfo.name,
-                    decimals: tokenInfo.decimals
+                    decimals: tokenInfo.decimals,
+                    address: tokenAddress
                 },
-                analyzedWallets,
+                analyzedWallets: teamWallets,  // Uniquement les wallets team
                 teamWallets,
                 totalSupplyControlled,
                 tokenAddress
@@ -120,7 +120,7 @@ async function analyzeTeamSupply(tokenAddress, mainContext = 'default') {
                 decimals: tokenInfo.decimals,
                 totalSupplyControlled,
                 teamWallets,
-                allWalletsDetails: analyzedWallets
+                allWalletsDetails: teamWallets  // Uniquement les wallets team
             }
         };
 
@@ -131,12 +131,14 @@ async function analyzeTeamSupply(tokenAddress, mainContext = 'default') {
 }
 
 // Les fonctions auxiliaires restent identiques
-async function analyzeWallets(wallets, tokenAddress, mainContext) {
+async function analyzeWallets(wallets, tokenAddress, mainContext, tokenInfo) {
     const analyzeWallet = async (wallet) => {
         try {
-            let category = 'Unknown';
+            // Par défaut, on considère les wallets comme "Normal" (non-team)
+            let category = "Normal";  
             let daysSinceLastActivity = null;
 
+            // Tenter de classifier plus précisément
             if (await isFreshWallet(wallet.address, mainContext, 'isFreshWallet')) {
                 category = 'Fresh';
             } else {
@@ -151,13 +153,35 @@ async function analyzeWallets(wallets, tokenAddress, mainContext) {
                 } else if (await isTeamBot(wallet.address, tokenAddress, mainContext)) {
                     category = 'Teambot';
                 }
+                // Si aucune des conditions n'est remplie, reste "Normal"
             }
-
-            return {
-                ...wallet,
-                category,
-                daysSinceLastActivity
-            };
+            
+            // Analyze funding source for all wallets
+            try {
+                const fundingResult = await analyzeFunding(
+                    [{address: wallet.address}], 
+                    mainContext, 
+                    'analyzeFunding'
+                );
+                const fundingInfo = fundingResult[0];
+                
+                return {
+                    ...wallet,
+                    category,
+                    daysSinceLastActivity,
+                    funderAddress: fundingInfo?.funderAddress || null,
+                    fundingDetails: fundingInfo?.fundingDetails || null
+                };
+            } catch (fundingError) {
+                logger.error(`Error analyzing funding for wallet ${wallet.address}:`, fundingError);
+                return {
+                    ...wallet,
+                    category,
+                    daysSinceLastActivity,
+                    funderAddress: null,
+                    fundingDetails: null
+                };
+            }
         } catch (error) {
             logger.error(`Error analyzing wallet ${wallet.address}:`, error);
             return {
@@ -181,6 +205,14 @@ async function analyzeWallets(wallets, tokenAddress, mainContext) {
         }
     }
 
+    // Log pour debug
+    const categoryCounts = analyzedWallets.reduce((counts, wallet) => {
+        counts[wallet.category] = (counts[wallet.category] || 0) + 1;
+        return counts;
+    }, {});
+    
+    logger.debug('Analyzed wallets categories:', categoryCounts);
+
     return analyzedWallets;
 }
 
@@ -196,13 +228,16 @@ async function isTeamBot(address, tokenAddress, mainContext) {
                 'getTeamBotTransactions'
             );
             
-            const hasOnlyTokenTransactions = transactions.every(tx => 
-                tx?.meta?.postTokenBalances?.some(balance => 
-                    balance.mint === tokenAddress
-                ) ?? false
-            );
-
-            return hasOnlyTokenTransactions;
+            // S'il y a des transactions, vérifier si elles impliquent toutes le token cible
+            if (transactions && transactions.length > 0) {
+                const hasOnlyTokenTransactions = transactions.every(tx => 
+                    tx?.meta?.postTokenBalances?.some(balance => 
+                        balance.mint === tokenAddress
+                    ) ?? false
+                );
+                
+                return hasOnlyTokenTransactions;
+            }
         }
         return false;
     } catch (error) {

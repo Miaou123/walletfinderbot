@@ -32,23 +32,28 @@ You can use "/help [command]" or "/[command]" for a full detail on how the comma
 /referral - Check your referral link and add/change your rewards wallet
 
 <b>🆓 Free commands:</b>
-/scan (/s) - Scan a token for a top holders analysis (then click on Track supply to get notified when top holders buy/sell)
+/scan (/s) - Scan a token for a top holders analysis (Supply tracking: enabled).
+/topholders (/th) - Analyze top holders
 /bundle (/bd) - Analyze bundle
 /walletchecker (/wc) - In depth analysis of a Solana wallet
 /dexpaid (/dp) - Show if dexscreener is paid for a token, also shows adds/boosts.
 
 <b>👁️ Advanced commands:</b>
-/topholders (/th) - Analyze top holders
-/dev - Analyze the dev of a pumpfun token
-/team (/t) - Analyze team supply with an homemade algorithm (then click on Track Team wallets to get notified when they buy/sell).
+/fresh (/f) - Analyze fresh wallets holding a token and detect common funding sources (Supply tracking: enabled).
+/team (/t) - Analyze team supply with an homemade algorithm (Supply tracking: enabled).
 /entrymap (/em) - Show the entryMap for the top holders of a token.
-/freshratio (/fr) - Analyze the proportion of fresh wallets buying a token over a specific time frame.
 /earlybuyers (/eb) - Analyze early buyers on a given timeframe
 /besttraders (/bt) - Analyze the 100 best traders
 /cross (/c) - Find common holders between multiple tokens
 /crossbt (/cbt) - Find common holders between the top traders of multiple tokens (realized and unrealized PnL)
+/dev - Analyze the dev wallet of a pumpfun token
 /search (/sh) - Search for specific wallets with only a part of their address
 /tracker - Show tracked supplies
+
+<b>📊 Tracking Feature:</b>
+Several commands (/scan, /team, /fresh) include a tracking feature that lets you monitor wallet movements in real-time. 
+After running these commands, click the "Track" button to receive notifications when wallets buy or sell. 
+Use /tracker to manage your active tracking sessions.
 
 For more information on how to use each command and how they work, please consult our <a href="https://smp-team.gitbook.io/noesis-bot">documentation</a>.
 
