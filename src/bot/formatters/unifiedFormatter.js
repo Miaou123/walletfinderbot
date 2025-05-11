@@ -592,17 +592,26 @@ analyzeFundingSources(analyzedWallets, category = null) {
  * Format funding groups into a summary section
  * @param {Array} fundingGroups - Groups of wallets by funding source
  * @param {string} walletType - Type of wallets (team, fresh, etc.)
+ * @param {number} minWalletThreshold - Minimum number of wallets to show a funding source (default: 3)
  * @returns {string} - Formatted summary section
  */
-formatFundingGroupsSummary(fundingGroups, walletType = 'wallet') {
+formatFundingGroupsSummary(fundingGroups, walletType = 'wallet', minWalletThreshold = 3) {
   if (!fundingGroups || fundingGroups.length === 0) {
+    return '';
+  }
+  
+  // Filter groups to only include those with at least minWalletThreshold wallets
+  const filteredGroups = fundingGroups.filter(group => group.wallets.length >= minWalletThreshold);
+  
+  // If no groups meet the threshold, return empty string
+  if (filteredGroups.length === 0) {
     return '';
   }
   
   let summary = '\n\n<b>🔍 Common Funding Sources:</b>\n';
   
   // Format each funding group
-  fundingGroups.forEach(group => {
+  filteredGroups.forEach(group => {
     const sourceDisplay = group.sourceName 
       ? `<a href="https://solscan.io/account/${group.address}">${group.sourceName}</a>`
       : `<a href="https://solscan.io/account/${group.address}">${truncateAddress(group.address)}</a>`;
@@ -775,7 +784,8 @@ formatWalletAnalysis(analyzedWallets, tokenInfo, wallets, totalSupplyControlled,
       walletType = 'wallet',
       categoryFilter = null,
       displayCategory = false,
-      maxWallets = 10
+      maxWallets = 10,
+      minFundingGroupSize = 3  // New option to control minimum group size
     } = options;
     
     // Start with the basic header
@@ -794,7 +804,11 @@ formatWalletAnalysis(analyzedWallets, tokenInfo, wallets, totalSupplyControlled,
     
     // Add funding groups summary if there are any
     if (fundingGroups.length > 0) {
-      const fundingSummary = this.formatFundingGroupsSummary(fundingGroups, walletType);
+      const fundingSummary = this.formatFundingGroupsSummary(
+        fundingGroups, 
+        walletType, 
+        minFundingGroupSize || 3  // Use the new minFundingGroupSize option with default of 3
+      );
       message += fundingSummary;
     }
     

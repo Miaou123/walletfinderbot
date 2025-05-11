@@ -1,8 +1,10 @@
 // src/analysis/teamSupply.js
+// Updated with fixes for error categorization and excessive logging
+
 const { getSolanaApi } = require('../integrations/solanaApi');
 const { checkInactivityPeriod } = require('../tools/inactivityPeriod');
 const { getHolders } = require('../tools/getHolders');
-const { analyzeFunding } = require('../tools/fundingAnalyzer'); // Import funding analyzer
+const { analyzeFunding } = require('../tools/fundingAnalyzer'); 
 const BigNumber = require('bignumber.js');
 const logger = require('../utils/logger');
 
@@ -25,20 +27,16 @@ const FRESH_WALLET_THRESHOLD = 100;
 const TRANSACTION_CHECK_LIMIT = 20;
 const MAX_ASSETS_THRESHOLD = 2;
 const SUPPLY_THRESHOLD = new BigNumber('0.001'); // 0.1%
-const WALLET_ANALYSIS_TIMEOUT = 10000; // 10 seconds timeout per wallet
-const BATCH_SIZE = 5; // Reduced batch size to avoid rate limiting
-const BATCH_DELAY = 200; // Milliseconds between batches
+const WALLET_ANALYSIS_TIMEOUT = 30000; // Increased to 30 seconds per wallet
+const BATCH_SIZE = 5; 
+const BATCH_DELAY = 200; 
 
 /**
  * Analyzes the team supply for a given token
- * @param {string} tokenAddress - Token contract address
- * @param {string} mainContext - Main context for API calls
- * @param {Object} cancellationToken - Token to check for cancellation
- * @returns {Promise<Object>} Analysis results
  */
 async function analyzeTeamSupply(tokenAddress, mainContext = 'default', cancellationToken = null) {
     const operationId = Math.random().toString(36).substring(2, 8);
-    logger.debug(`Starting team supply analysis for ${tokenAddress} (ID: ${operationId})`, { mainContext });
+    logger.info(`Starting team supply analysis for ${tokenAddress} (ID: ${operationId})`);
 
     const progress = {
         startTime: Date.now(),
@@ -53,7 +51,7 @@ async function analyzeTeamSupply(tokenAddress, mainContext = 'default', cancella
             timestamp: now,
             elapsed: now - progress.startTime
         });
-        logger.debug(`[${operationId}] ${step} (${now - progress.startTime}ms elapsed)`, { tokenAddress });
+        logger.debug(`[${operationId}] ${step} (${now - progress.startTime}ms elapsed)`);
     };
 
     // Helper to check for cancellation
@@ -76,11 +74,11 @@ async function analyzeTeamSupply(tokenAddress, mainContext = 'default', cancella
         }
 
         const tokenInfo = {
-            total_supply: assetInfo.supply.total, // Already adjusted with decimals
+            total_supply: assetInfo.supply.total, 
             symbol: assetInfo.symbol,
             name: assetInfo.name,
             decimals: assetInfo.decimals,
-            address: tokenAddress  // Add token address
+            address: tokenAddress
         };
 
         logStep(`Token info received: ${tokenInfo.symbol}`);
@@ -94,10 +92,12 @@ async function analyzeTeamSupply(tokenAddress, mainContext = 'default', cancella
         // 3. Filter significant holders
         checkCancellation();
         const significantHolders = allHolders.filter(holder => {
+            // Skip known liquidity pools
             if (KNOWN_LP_POOLS.has(holder.address)) {
                 return false;
             }
 
+            // Only include holders with significant balances
             const rawBalance = new BigNumber(holder.balance);
             const percentage = rawBalance.dividedBy(new BigNumber(tokenInfo.total_supply));
             return percentage.isGreaterThanOrEqualTo(SUPPLY_THRESHOLD);
@@ -118,17 +118,13 @@ async function analyzeTeamSupply(tokenAddress, mainContext = 'default', cancella
         );
         logStep(`Analyzed ${analyzedWallets.length} wallets`);
         
-        // Log category distribution for debugging
-        const categoryCounts = analyzedWallets.reduce((counts, wallet) => {
-            counts[wallet.category] = (counts[wallet.category] || 0) + 1;
-            return counts;
-        }, {});
-        logger.debug(`[${operationId}] Wallet categories:`, categoryCounts);
-        
-        // 5. Filter team wallets
+        // 5. Filter team wallets - only keep wallets with meaningful categories
         checkCancellation();
         const teamWallets = analyzedWallets
-            .filter(w => w.category !== 'Normal' && w.category !== 'Unknown') 
+            .filter(w => {
+                // Include wallets with specific categories, exclude Normal and Unknown
+                return (w.category !== 'Normal' && w.category !== 'Unknown' && w.category !== 'Error');
+            })
             .map(w => ({
                 address: w.address,
                 balance: w.balance.toString(),
@@ -145,9 +141,11 @@ async function analyzeTeamSupply(tokenAddress, mainContext = 'default', cancella
         
         // 6. Calculate supply
         checkCancellation();
-        const teamSupplyHeld = teamWallets.reduce((total, wallet) => {
-            return total.plus(new BigNumber(wallet.balance));
-        }, new BigNumber(0));
+        const teamSupplyHeld = analyzedWallets
+            .filter(w => w.category !== 'Normal' && w.category !== 'Unknown' && w.category !== 'Error')
+            .reduce((total, wallet) => {
+                return total.plus(new BigNumber(wallet.balance));
+            }, new BigNumber(0));
         
         const totalSupplyControlled = teamSupplyHeld
             .dividedBy(new BigNumber(tokenInfo.total_supply))
@@ -156,6 +154,7 @@ async function analyzeTeamSupply(tokenAddress, mainContext = 'default', cancella
 
         logStep(`Team supply controlled: ${totalSupplyControlled.toFixed(2)}%`);
 
+        // Create result objects
         return {
             scanData: {
                 tokenInfo: {
@@ -165,7 +164,7 @@ async function analyzeTeamSupply(tokenAddress, mainContext = 'default', cancella
                     decimals: tokenInfo.decimals,
                     address: tokenAddress
                 },
-                analyzedWallets: teamWallets,  // Only team wallets
+                analyzedWallets: analyzedWallets,  // Include all analyzed wallets
                 teamWallets,
                 totalSupplyControlled,
                 tokenAddress
@@ -177,7 +176,7 @@ async function analyzeTeamSupply(tokenAddress, mainContext = 'default', cancella
                 decimals: tokenInfo.decimals,
                 totalSupplyControlled,
                 teamWallets,
-                allWalletsDetails: teamWallets  // Only team wallets
+                allWalletsDetails: analyzedWallets  // Include all analyzed wallets
             }
         };
 
@@ -188,20 +187,12 @@ async function analyzeTeamSupply(tokenAddress, mainContext = 'default', cancella
         }
         
         logger.error(`[${operationId}] Error in analyzeTeamSupply:`, error);
-        logger.error(`[${operationId}] Progress at time of error:`, progress);
         throw error;
     }
 }
 
 /**
  * Analyze wallets with timeout and cancellation support
- * @param {Array} wallets - Wallets to analyze
- * @param {string} tokenAddress - Token address
- * @param {string} mainContext - Main context for API calls
- * @param {Object} tokenInfo - Token information
- * @param {string} operationId - Unique operation ID
- * @param {Object} cancellationToken - Token to check for cancellation
- * @returns {Promise<Array>} Analyzed wallets
  */
 async function analyzeWalletsWithTimeout(wallets, tokenAddress, mainContext, tokenInfo, operationId, cancellationToken) {
     // Log progress every 10% of wallets
@@ -221,20 +212,24 @@ async function analyzeWalletsWithTimeout(wallets, tokenAddress, mainContext, tok
             lastProgressLog = index;
         }
         
-        return Promise.race([
-            analyzeWallet(wallet, tokenAddress, mainContext, tokenInfo, operationId, cancellationToken),
-            new Promise((_, reject) => 
-                setTimeout(() => reject(new Error(`Wallet analysis timeout for ${wallet.address.slice(0, 8)}...`)), 
-                WALLET_ANALYSIS_TIMEOUT)
-            )
-        ]).catch(error => {
+        try {
+            // Use Promise.race with a timeout
+            return await Promise.race([
+                analyzeWallet(wallet, tokenAddress, mainContext, tokenInfo, operationId, cancellationToken),
+                new Promise((_, reject) => 
+                    setTimeout(() => reject(new Error(`Wallet analysis timeout for ${wallet.address.slice(0, 8)}...`)), 
+                    WALLET_ANALYSIS_TIMEOUT)
+                )
+            ]);
+        } catch (error) {
+            // If the wallet analysis fails or times out, return the wallet with Error category
             logger.warn(`[${operationId}] Wallet analysis failed for ${wallet.address.slice(0, 8)}...: ${error.message}`);
             return {
                 ...wallet,
                 category: 'Error',
                 error: error.message
             };
-        });
+        }
     };
 
     // Process wallets in smaller batches with breaks between batches
@@ -247,8 +242,9 @@ async function analyzeWalletsWithTimeout(wallets, tokenAddress, mainContext, tok
         }
         
         const batch = wallets.slice(i, i + BATCH_SIZE);
-        logger.debug(`[${operationId}] Processing batch ${Math.floor(i/BATCH_SIZE) + 1}/${Math.ceil(wallets.length/BATCH_SIZE)} (${batch.length} wallets)`);
+        logger.debug(`[${operationId}] Processing batch ${Math.floor(i/BATCH_SIZE) + 1}/${Math.ceil(wallets.length/BATCH_SIZE)}`);
         
+        // Process each wallet in the batch
         const batchResults = await Promise.all(
             batch.map((wallet, batchIndex) => 
                 analyzeWalletWithTimeout(wallet, i + batchIndex)
@@ -268,13 +264,6 @@ async function analyzeWalletsWithTimeout(wallets, tokenAddress, mainContext, tok
 
 /**
  * Analyze a single wallet
- * @param {Object} wallet - Wallet to analyze
- * @param {string} tokenAddress - Token address
- * @param {string} mainContext - Main context for API calls
- * @param {Object} tokenInfo - Token information
- * @param {string} operationId - Unique operation ID
- * @param {Object} cancellationToken - Token to check for cancellation
- * @returns {Promise<Object>} Analyzed wallet
  */
 async function analyzeWallet(wallet, tokenAddress, mainContext, tokenInfo, operationId, cancellationToken) {
     // Check for cancellation
@@ -298,8 +287,9 @@ async function analyzeWallet(wallet, tokenAddress, mainContext, tokenInfo, opera
             };
         }
 
-        // Attempt to categorize more precisely
-        if (await isFreshWallet(wallet.address, mainContext, 'isFreshWallet')) {
+        // First try to identify if it's a fresh wallet (this is faster)
+        const isFresh = await isFreshWallet(wallet.address, mainContext, 'isFreshWallet');
+        if (isFresh) {
             category = 'Fresh';
         } else {
             try {
@@ -308,20 +298,29 @@ async function analyzeWallet(wallet, tokenAddress, mainContext, tokenInfo, opera
                     throw new Error('Analysis cancelled by user');
                 }
                 
+                // Only run inactivity period check if the wallet isn't fresh
                 const inactivityCheck = await checkInactivityPeriod(wallet.address, tokenAddress, mainContext, 'checkInactivity');
-                if (inactivityCheck.category === 'No Token') {
-                    category = 'No Token';
-                } else if (inactivityCheck.category === 'No ATA Transaction') {
-                    category = 'No ATA Transaction';
-                } else if (inactivityCheck.isInactive) {
-                    category = 'Inactive';
-                    daysSinceLastActivity = inactivityCheck.daysSinceLastActivity;
-                } else if (await isTeamBot(wallet.address, tokenAddress, mainContext)) {
-                    category = 'Teambot';
+                
+                // Handle the different inactivity check results
+                if (inactivityCheck) {
+                    if (inactivityCheck.category === 'No Token') {
+                        category = 'No Token';
+                    } else if (inactivityCheck.category === 'No ATA Transaction') {
+                        category = 'No ATA Transaction';
+                    } else if (inactivityCheck.isInactive) {
+                        category = 'Inactive';
+                        daysSinceLastActivity = inactivityCheck.daysSinceLastActivity;
+                    } else if (await isTeamBot(wallet.address, tokenAddress, mainContext)) {
+                        category = 'Teambot';
+                    }
                 }
             } catch (inactivityError) {
-                logger.debug(`[${operationId}] Error checking inactivity for ${wallet.address.slice(0, 8)}...: ${inactivityError.message}`);
-                // Fall back to Normal if inactivity check fails
+                // Don't log every inactivity error - just continue with category as Normal
+                // Only log significant errors so we don't flood logs
+                if (inactivityError.message && !inactivityError.message.includes('No Token')) {
+                    logger.debug(`[${operationId}] Inactivity check error for ${wallet.address.slice(0, 8)}...: ${inactivityError.message}`);
+                }
+                // Don't change category here - keep it as Normal
             }
         }
         
@@ -330,38 +329,47 @@ async function analyzeWallet(wallet, tokenAddress, mainContext, tokenInfo, opera
             throw new Error('Analysis cancelled by user');
         }
         
-        // Analyze funding source
+        // Analyze funding source - this helps identify team wallets
         try {
             const fundingResult = await analyzeFunding(
                 [{address: wallet.address}], 
                 mainContext, 
                 'analyzeFunding'
             );
-            const fundingInfo = fundingResult[0];
             
-            return {
-                ...wallet,
-                category,
-                daysSinceLastActivity,
-                funderAddress: fundingInfo?.funderAddress || null,
-                fundingDetails: fundingInfo?.fundingDetails || null
-            };
+            // Only update if funding analysis returned results
+            if (fundingResult && fundingResult.length > 0) {
+                const fundingInfo = fundingResult[0];
+                
+                return {
+                    ...wallet,
+                    category,
+                    daysSinceLastActivity,
+                    funderAddress: fundingInfo?.funderAddress || null,
+                    fundingDetails: fundingInfo?.fundingDetails || null
+                };
+            }
         } catch (fundingError) {
-            logger.debug(`[${operationId}] Error analyzing funding for ${wallet.address.slice(0, 8)}...: ${fundingError.message}`);
-            return {
-                ...wallet,
-                category,
-                daysSinceLastActivity,
-                funderAddress: null,
-                fundingDetails: null
-            };
+            // Only log significant funding errors
+            logger.debug(`[${operationId}] Funding analysis error for ${wallet.address.slice(0, 8)}...: ${fundingError.message}`);
         }
+        
+        // Return wallet data even if funding analysis failed
+        return {
+            ...wallet,
+            category,
+            daysSinceLastActivity,
+            funderAddress: null,
+            fundingDetails: null
+        };
+        
     } catch (error) {
         // If analysis was cancelled, propagate that error
         if (error.message.includes('cancelled')) {
             throw error;
         }
         
+        // For all other errors, return wallet with Error category
         logger.error(`[${operationId}] Error analyzing wallet ${wallet.address.slice(0, 8)}...:`, error);
         return {
             ...wallet,
@@ -373,9 +381,6 @@ async function analyzeWallet(wallet, tokenAddress, mainContext, tokenInfo, opera
 
 /**
  * Check if a wallet has excessive transactions (optimization)
- * @param {string} address - Wallet address
- * @param {string} mainContext - Main context for API calls
- * @returns {Promise<boolean>} True if the wallet has excessive transactions
  */
 async function hasExcessiveTransactions(address, mainContext) {
     try {
@@ -387,25 +392,15 @@ async function hasExcessiveTransactions(address, mainContext) {
             'checkTransactionCount'
         );
         
-        // If we hit the maximum count, this wallet has too many transactions
-        // for detailed analysis - just categorize as normal
-        if (signatures.length >= 1000) {
-            logger.warn(`Wallet ${address} has more than 1000 transactions. Skipping funding analysis.`);
-            return true;
-        }
-        return false;
+        return signatures.length >= 1000;
     } catch (error) {
-        logger.debug(`Error checking transaction count for ${address.slice(0, 8)}...: ${error.message}`);
+        // Don't log every error here
         return false; // Default to false if we can't determine
     }
 }
 
 /**
  * Check if a wallet is a team bot
- * @param {string} address - Wallet address
- * @param {string} tokenAddress - Token address
- * @param {string} mainContext - Main context for API calls
- * @returns {Promise<boolean>} True if the wallet is a team bot
  */
 async function isTeamBot(address, tokenAddress, mainContext) {
     try {
@@ -420,32 +415,23 @@ async function isTeamBot(address, tokenAddress, mainContext) {
                 'getTeamBotTransactions'
             );
             
-            // Check if they all involve the target token
-            if (transactions && transactions.length > 0) {
-                // Since we're just checking if every transaction might involve the token,
-                // we don't need to check each one individually - just count them
-                return true;
-            }
+            // Just check if transactions were found - this is a simplified check
+            return transactions && transactions.length > 0;
         }
         return false;
     } catch (error) {
-        logger.debug(`Error checking if ${address.slice(0, 8)}... is a teambot:`, error.message);
         return false;
     }
 }
 
 /**
  * Check if a wallet is a fresh wallet
- * @param {string} address - Wallet address
- * @param {string} mainContext - Main context for API calls
- * @param {string} subContext - Sub-context for API calls
- * @returns {Promise<boolean>} True if the wallet is a fresh wallet
  */
 async function isFreshWallet(address, mainContext, subContext) {
     try {
         const solanaApi = getSolanaApi();
         
-        // First call to check if transaction count <= threshold
+        // Get transactions and check if count is below threshold
         const initialSignatures = await solanaApi.getSignaturesForAddress(
             address, 
             { limit: FRESH_WALLET_THRESHOLD + 1 }, // +1 to check if exceeding threshold
@@ -453,14 +439,9 @@ async function isFreshWallet(address, mainContext, subContext) {
             subContext
         );
         
-        const transactionCount = initialSignatures.length;
-        const isFresh = transactionCount < FRESH_WALLET_THRESHOLD;
-        
-        logger.debug(`Fresh wallet check for ${address.slice(0, 8)}...: ${transactionCount} transactions, isFresh: ${isFresh}`);
-        
-        return isFresh;
+        // Check if the number of transactions is below threshold
+        return initialSignatures.length < FRESH_WALLET_THRESHOLD;
     } catch (error) {
-        logger.debug(`Error checking if ${address.slice(0, 8)}... is a fresh wallet: ${error.message}`);
         return false;
     }
 }
