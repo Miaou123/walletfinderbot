@@ -24,7 +24,10 @@ class TopHoldersPaginatedHandler {
         const userId = msg.from.id;
         const chatId = msg.chat.id;
         
-        logger.info(`Starting TopHolders command for user ${msg.from.username}`);
+        // Use chatId for groups, userId for private chats to enable shared pagination in groups
+        const stateId = msg.chat.type === 'private' ? userId : chatId;
+        
+        logger.info(`Starting TopHolders command for user ${msg.from.username} in chat ${chatId}`);
     
         try {
             const [coinAddress, topHoldersCountStr] = args;
@@ -149,7 +152,7 @@ class TopHoldersPaginatedHandler {
             
             // Store data for pagination using the pagination utilities
             const paginationState = PaginationUtils.storePaginationData(
-                userId,
+                stateId, // Use stateId (chatId for groups, userId for private) instead of just userId
                 this.COMMAND_NAME,
                 analyzedWallets, // Store ALL wallets for pagination
                 { 
@@ -248,6 +251,9 @@ async handleCallback(bot, query) {
         const chatId = query.message.chat.id;
         const messageId = query.message.message_id;
         
+        // Use chatId for groups, userId for private chats to match shared state
+        const stateId = query.message.chat.type === 'private' ? userId : chatId;
+        
         // Parse the callback data
         const parts = query.data.split(':');
         const command = parts[0];
@@ -304,7 +310,7 @@ async handleCallback(bot, query) {
             const category = parts[2];
             
             // Get state using imported stateManager directly
-            const state = stateManager.getUserState(userId);
+            const state = stateManager.getUserState(stateId);
             
             if (!state || state.context !== 'pagination' || state.command !== this.COMMAND_NAME) {
                 await bot.answerCallbackQuery(query.id, {
@@ -319,7 +325,7 @@ async handleCallback(bot, query) {
             state.currentPage = 0; // Reset to first page when changing filter
             
             // Save the updated state
-            stateManager.setUserState(userId, state);
+            stateManager.setUserState(stateId, state);
             
             // Filter wallets by category
             let filteredWallets = [];

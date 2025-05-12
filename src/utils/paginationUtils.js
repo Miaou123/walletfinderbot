@@ -106,7 +106,7 @@ class PaginationUtils {
     
     /**
      * Store results for pagination in state manager
-     * @param {string} userId - User ID
+     * @param {string} userId - User ID or Chat ID for groups
      * @param {string} command - Command name
      * @param {Array} results - Results to paginate
      * @param {Object} metadata - Additional metadata
@@ -146,7 +146,7 @@ class PaginationUtils {
     
     /**
      * Update pagination page in state manager
-     * @param {string} userId - User ID
+     * @param {string} userId - User ID or Chat ID for groups
      * @param {number} newPage - New page number
      * @returns {Object|null} Updated state or null if not found
      */
@@ -243,6 +243,11 @@ class PaginationUtils {
         const messageId = query.message.message_id;
         const userId = query.from.id;
         
+        // Use chatId for groups, userId for private chats
+        const stateId = query.message.chat.type === 'private' ? userId : chatId;
+        
+        logger.debug(`Handling pagination callback. StateId: ${stateId}, Chat type: ${query.message.chat.type}`);
+        
         try {
             // Parse options
             const { command, action, pageParam, formatFunction, createKeyboardFunction } = options;
@@ -253,11 +258,12 @@ class PaginationUtils {
                 throw new Error(`Invalid page number: ${pageParam}`);
             }
             
-            // Get current state from stateManager
-            const state = stateManager.getUserState(userId);
+            // Get current state from stateManager using stateId
+            const state = stateManager.getUserState(stateId);
             
             // Validate state
             if (!state || state.context !== 'pagination' || state.command !== command) {
+                logger.debug(`Invalid state for pagination. State exists: ${!!state}, Context: ${state?.context}, Command: ${state?.command}`);
                 await bot.answerCallbackQuery(query.id, {
                     text: "This data is no longer available. Please run the command again.",
                     show_alert: true
@@ -278,7 +284,7 @@ class PaginationUtils {
             
             // Update current page in state
             state.currentPage = newPage;
-            stateManager.setUserState(userId, state);
+            stateManager.setUserState(stateId, state);
             
             // Format the message using the provided function
             const formattedMessage = formatFunction(
