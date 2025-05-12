@@ -6,10 +6,11 @@ const gmgnApi = require('../../integrations/gmgnApi');
 const { getSolanaApi } = require('../../integrations/solanaApi');
 
 class CrossHandler {
-    constructor() {
+    constructor(stateManager) {
         this.crossAnalyzer = new CrossAnalyzer();
         this.COMMAND_NAME = 'cross';
         this.MAX_RESULTS_PER_PAGE = 5;
+        this.stateManager = stateManager || require('../../utils/stateManager'); // Get stateManager by dependency injection or as fallback
     }
 
     async handleCommand(bot, msg, args, messageThreadId) {
@@ -168,7 +169,6 @@ class CrossHandler {
         try {
             const userId = query.from.id;
             const chatId = query.message.chat.id;
-            const messageId = query.message.message_id;
             
             // For group chats, use chatId as the state ID
             const stateId = query.message.chat.type === 'private' ? userId : chatId;
@@ -182,15 +182,40 @@ class CrossHandler {
                 return; // Not for this handler
             }
             
-            // Handle different actions
+            // Handle 'none' action - do nothing but acknowledge the query
+            if (action === 'none') {
+                await bot.answerCallbackQuery(query.id);
+                return;
+            }
+            
+            // For page navigation
             if (action === 'page') {
-                const pageNum = parseInt(parts[2], 10);
+                // Get the current state to access the full results
+                if (!this.stateManager) {
+                    logger.error('stateManager is undefined in CrossHandler');
+                    await bot.answerCallbackQuery(query.id, {
+                        text: "Cannot access state. Please run the command again.",
+                        show_alert: true
+                    });
+                    return;
+                }
+
+                const currentState = this.stateManager.getUserState(stateId);
                 
-                // Use pagination utility to handle page navigation
+                if (!currentState || currentState.context !== 'pagination' || currentState.command !== this.COMMAND_NAME) {
+                    logger.debug(`Invalid state for pagination. State exists: ${!!currentState}, Context: ${currentState?.context}, Command: ${currentState?.command}`);
+                    await bot.answerCallbackQuery(query.id, {
+                        text: "This data is no longer available. Please run the command again.",
+                        show_alert: true
+                    });
+                    return;
+                }
+                
+                // Use the pagination utilities to handle page navigation
                 await PaginationUtils.handlePaginationCallback(bot, query, {
                     command: this.COMMAND_NAME,
                     action: action,
-                    pageParam: pageNum,
+                    pageParam: parts[2],
                     
                     // Format function
                     formatFunction: (pageResults, metadata, page, totalPages, totalResults) => {
@@ -203,7 +228,7 @@ class CrossHandler {
                             totalResults,
                             this.MAX_RESULTS_PER_PAGE,
                             true,
-                            state.results // Pass all results for accurate statistics
+                            currentState.results // Use currentState.results instead of state.results
                         );
                     },
                     

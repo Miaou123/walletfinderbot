@@ -105,7 +105,7 @@ class CommandHandlers {
         this.entryMapHandler = new EntryMapHandler();
         this.devHandler = new DevCommandHandler();
         this.earlyBuyersHandler = new EarlyBuyersHandler();
-        this.crossHandler = new CrossHandler();
+        this.crossHandler = new CrossHandler(this.stateManager);
         this.bestTradersHandler = new BestTradersHandler();
         this.searchHandler = new SearchHandler();
         this.topHoldersHandler = new TopHoldersHandler();
