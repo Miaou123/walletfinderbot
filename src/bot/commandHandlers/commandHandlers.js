@@ -64,6 +64,9 @@ class CommandHandlers {
                 'referral': this.referralHandler,
                 'preview': this.previewHandler,
                 'walletsearch': this.walletSearcherHandler,
+                'besttraders': this.bestTradersHandler,
+                'topholders': this.topHoldersHandler,
+                'cross': this.crossHandler
             };
 
             await this.setupCallbackHandler();

@@ -25,9 +25,14 @@ class TokenAnalyzer {
 
             const formattedTokenInfo = this.formatTokenInfo(tokenMetadata, coinAddress);
             const topHolders = await getTopHolders(coinAddress, count, mainContext, 'getTopHolders');
+            
+            // Ensure each holder has tokenBalance and tokens are properly formatted
             const walletInfos = topHolders.map(holder => ({ 
                 address: holder.address, 
-                tokenBalance: holder.amount 
+                tokenBalance: holder.tokenBalance,
+                // Convert to number if it's a string
+                amount: typeof holder.balance === 'string' ? parseFloat(holder.balance) : holder.balance,
+                solBalance: holder.solBalance || '0'
             }));
 
             const analyzedWallets = await this.analyzeAndFormatMultipleWallets(
@@ -83,6 +88,11 @@ class TokenAnalyzer {
             const analyzedTokenValue = specificTokenInfo ? parseFloat(specificTokenInfo.value) : 0;
             const walletValueExcludingAnalyzedToken = parseFloat(stats.totalValue) - analyzedTokenValue;
 
+            // Calculate supply percentage - ensure we have valid numbers
+            let tokenBalance = new BigNumber(walletInfo.tokenBalance || 0);
+            let totalSupply = new BigNumber(tokenInfo.total_supply || 0);
+            let supplyPercentage = this.calculateSupplyPercentage(tokenBalance, totalSupply);
+
             const { isInteresting, category } = await this.determineWalletCategory(
                 walletInfo.address,
                 walletValueExcludingAnalyzedToken,
@@ -91,8 +101,11 @@ class TokenAnalyzer {
                 mainContext
             );
 
-            const { tokenBalance, supplyPercentage, tokenValueUsd, formattedInfo } = 
-                this.formatWalletData(walletInfo, specificTokenInfo, tokenInfo, stats);
+            // Bundle token information
+            const tokenValueUsd = specificTokenInfo ? specificTokenInfo.value : 'N/A';
+            
+            // Create formatted info string for display
+            const formattedInfo = `${tokenBalance.toFormat(0)} ${tokenInfo.symbol}, ${supplyPercentage}% of supply, $${tokenValueUsd} - ${stats.solBalance} SOL - ${stats.daysSinceLastRelevantSwap || 'N/A'} days since last relevant swap`;
 
             if (isInteresting && category === 'High Value') {
                 const walletCheckerData = await fetchMultipleWallets(
@@ -110,8 +123,9 @@ class TokenAnalyzer {
                         formattedInfo,
                         supplyPercentage,
                         tokenValueUsd,
-                        tokenBalance,
-                        tokenInfo.symbol
+                        tokenBalance.toFormat(0),
+                        tokenInfo.symbol,
+                        tokenBalance
                     );
                 }
             }
@@ -124,8 +138,9 @@ class TokenAnalyzer {
                 formattedInfo,
                 supplyPercentage,
                 tokenValueUsd,
-                tokenBalance,
-                tokenInfo.symbol
+                tokenBalance.toFormat(0),
+                tokenInfo.symbol,
+                tokenBalance
             );
         } catch (error) {
             console.error(`Error analyzing wallet ${walletInfo.address}:`, error);
@@ -168,22 +183,19 @@ class TokenAnalyzer {
         return transactions.length;
     }
 
-    formatWalletData(walletInfo, specificTokenInfo, tokenInfo, stats) {
-        const tokenBalance = specificTokenInfo ? new BigNumber(specificTokenInfo.balance) : new BigNumber(0);
-        const supplyPercentage = this.calculateSupplyPercentage(tokenBalance, tokenInfo.total_supply);
-        const tokenValueUsd = specificTokenInfo ? specificTokenInfo.value : 'N/A';
-        const formattedInfo = `${tokenBalance.toFormat(0)} ${tokenInfo.symbol}, ${supplyPercentage}% of supply, $${tokenValueUsd} - ${stats.solBalance} SOL - ${stats.daysSinceLastRelevantSwap || 'N/A'} days since last relevant swap`;
-
-        return { tokenBalance, supplyPercentage, tokenValueUsd, formattedInfo };
-    }
-
     calculateSupplyPercentage(balance, totalSupply) {
-        return totalSupply && !isNaN(totalSupply) && totalSupply > 0 
-            ? balance.dividedBy(totalSupply).multipliedBy(100).toFixed(2) 
-            : 'N/A';
+        if (!totalSupply || totalSupply.isNaN() || totalSupply.isZero()) {
+            return 'N/A';
+        }
+        
+        if (!balance || balance.isNaN()) {
+            return 'N/A';
+        }
+        
+        return balance.dividedBy(totalSupply).multipliedBy(100).toFixed(2);
     }
 
-    generateResultObject(address, isInteresting, category, stats, formattedInfo, supplyPercentage, tokenValueUsd, tokenBalance, tokenSymbol) {
+    generateResultObject(address, isInteresting, category, stats, formattedInfo, supplyPercentage, tokenValueUsd, tokenBalanceFormatted, tokenSymbol, tokenBalance) {
         return {
             address,
             isInteresting,
@@ -192,7 +204,8 @@ class TokenAnalyzer {
             formattedInfo,
             supplyPercentage,
             tokenValueUsd,
-            tokenBalance: tokenBalance.toFormat(0),
+            tokenBalance: tokenBalanceFormatted,
+            rawTokenBalance: tokenBalance, // Added for formatter flexibility
             tokenSymbol,
             solBalance: stats.solBalance,
             daysSinceLastRelevantSwap: stats.daysSinceLastRelevantSwap || 'N/A'
@@ -207,7 +220,7 @@ class TokenAnalyzer {
         };
     }
 
-    enrichWalletInfo(walletInfo, walletCheckerData, category, stats, formattedInfo, supplyPercentage, tokenValueUsd, tokenBalance, tokenSymbol) {
+    enrichWalletInfo(walletInfo, walletCheckerData, category, stats, formattedInfo, supplyPercentage, tokenValueUsd, tokenBalanceFormatted, tokenSymbol, tokenBalance) {
         const { winrate, realized_profit_30d, unrealized_profit } = walletCheckerData.data.data;
         return {
             address: walletInfo.address,
@@ -217,7 +230,8 @@ class TokenAnalyzer {
             formattedInfo,
             supplyPercentage,
             tokenValueUsd,
-            tokenBalance: tokenBalance.toFormat(0),
+            tokenBalance: tokenBalanceFormatted,
+            rawTokenBalance: tokenBalance, // Added for formatter flexibility
             tokenSymbol,
             solBalance: stats.solBalance,
             daysSinceLastRelevantSwap: stats.daysSinceLastRelevantSwap || 'N/A',

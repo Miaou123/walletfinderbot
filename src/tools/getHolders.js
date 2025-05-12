@@ -21,7 +21,7 @@ async function getHolders(coinAddress, mainContext, subContext) {
           allHolders.set(account.owner, {
             address: account.owner,
             balance: balance.toNumber(),
-            tokenBalance: balance.toFixed()
+            tokenBalance: balance.toString() // Store as string to prevent precision loss
           });
         }
       });
@@ -44,6 +44,8 @@ async function getTopHolders(coinAddress, count = 20, mainContext, subContext) {
   const solanaApi = getSolanaApi();
   try {
     let topHolders;
+    const tokenSupplyInfo = await solanaApi.getTokenSupply(coinAddress, mainContext, subContext);
+    const tokenDecimals = tokenSupplyInfo.value.decimals;
 
     if (count <= 20) {
       const result = await solanaApi.getTokenLargestAccounts(coinAddress, mainContext, subContext);
@@ -54,7 +56,6 @@ async function getTopHolders(coinAddress, count = 20, mainContext, subContext) {
       }
 
       topHolders = await Promise.all(result.value.map(async (account, index) => {
-
         const tokenAccountInfo = await solanaApi.getAccountInfo(account.address, { encoding: 'jsonParsed' }, mainContext, subContext);
         if (!isValidAccountInfo(tokenAccountInfo)) {
           logger.warn(`Invalid account info for address: ${account.address}`);
@@ -63,11 +64,15 @@ async function getTopHolders(coinAddress, count = 20, mainContext, subContext) {
 
         const ownerAddress = tokenAccountInfo.value.data.parsed.info.owner;
         const solBalance = await getSolBalance(ownerAddress, solanaApi, mainContext, subContext);
+        
+        // Calculate the token amount with proper decimal handling
+        const rawAmount = account.amount;
+        const amount = new BigNumber(rawAmount).dividedBy(new BigNumber(10).pow(tokenDecimals));
 
         return {
           address: ownerAddress,
-          balance: account.amount,
-          tokenBalance: account.amount,
+          amount: amount.toNumber(), // For sorting and display
+          tokenBalance: amount.toString(), // Store exact value as string
           solBalance
         };
       }));
@@ -98,7 +103,9 @@ function formatTopHolders(holders) {
   return holders.map(holder => ({
     address: holder.address || holder.pubkey,
     tokenBalance: holder.tokenBalance || holder.balance.toString(),
-    balance: typeof holder.balance === 'number' ? holder.balance : parseFloat(holder.balance || holder.amount),
+    balance: typeof holder.balance === 'number' ? holder.balance : 
+             typeof holder.amount === 'number' ? holder.amount :
+             parseFloat(holder.balance || holder.amount || '0'),
     solBalance: holder.solBalance || '0'
   }));
 }

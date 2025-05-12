@@ -4,9 +4,11 @@ const logger = require('../../utils/logger');
 /**
  * Format an array of best traders into a single message string.
  * @param {Array} traders - List of trader objects to format.
+ * @param {Object} params - Command parameters.
+ * @param {boolean} isPaginated - Whether this is being displayed in paginated view.
  * @returns {string} Formatted message string.
  */
-function formatBestTraders(traders, params) {
+function formatBestTraders(traders, params, isPaginated = false) {
     try {
         if (!Array.isArray(traders) || traders.length === 0) {
             logger.warn('No traders provided to format.');
@@ -15,18 +17,23 @@ function formatBestTraders(traders, params) {
 
         const { contractAddress, winrateThreshold, portfolioThreshold, sortOption } = params;
 
-        // Header du message
+        // Header of the message
         const header = [
             `🏆 <b>Best traders analysis for:</b>`,
             `<code>${contractAddress}</code>`,
             `📊 Winrate threshold: <code>>${winrateThreshold}%</code>`,
-            `💰 Portfolio threshold: <code>$${portfolioThreshold}</code>`,
-            `📈 Sorted by: <code>${sortOption}</code>`,
-            ``,
-            `Click /bt to customize these values\n`,
-            ``
+            `💰 Portfolio threshold: <code>$${formatNumber(portfolioThreshold)}</code>`,
+            `📈 Sorted by: <code>${sortOption}</code>`
         ].join('\n');
-
+        
+        // Add different footer based on pagination mode
+        let paginationInfo = '';
+        if (isPaginated) {
+            paginationInfo = `\n\nShowing ${traders.length} traders (navigate with buttons below)`;
+        } else {
+            paginationInfo = `\n\nClick /bt to customize these values\n`;
+        }
+        
         const tradersList = traders.map((trader, index) => {
             try {
                 const { wallet, data } = trader;
@@ -37,36 +44,32 @@ function formatBestTraders(traders, params) {
 
                 const { 
                     winrate, 
-                    pnl_30d, 
                     sol_balance, 
                     total_value,
                     unrealized_profit,
                     realized_profit_30d,
                     wallet_tag_v2,
-                    profit_change,
                     total_pnl_percent,
-                    token_realized_profit,
-                    token_unrealized_profit
                 } = data.data;
 
                 const winratePercentage = (winrate * 100).toFixed(2);
                 const portfolioEmoji = total_value > 100000 ? '🐳' : '🐬';
                 const truncatedWallet = truncateAddress(wallet);
                 
-                // Emoji pour le token (vous pouvez ajuster selon vos besoins)
+                // Emoji for the token
                 const tokenEmoji = '🪙';
                 
-                // Extraction du numéro de rank à partir de wallet_tag_v2 (si présent)
+                // Extract rank number from wallet_tag_v2 if present
                 let rankNumber = '';
                 if (wallet_tag_v2 && wallet_tag_v2.startsWith('TOP')) {
-                    // Extraire le nombre et le formater comme les autres nombres
+                    // Extract the number and format it
                     const rankValue = parseInt(wallet_tag_v2.replace('TOP', ''), 10);
                     if (!isNaN(rankValue)) {
                         rankNumber = formatNumber(rankValue, 0);
                     }
                 }
                 
-                // Formatage du PnL total avec formatNumber
+                // Format total PnL with formatNumber
                 let totalPnLDisplay = 'PnL: N/A';
                 if (total_pnl_percent !== undefined && total_pnl_percent !== null) {
                     const sign = total_pnl_percent >= 0 ? '+' : '';
@@ -75,7 +78,7 @@ function formatBestTraders(traders, params) {
 
                 let formattedString = `${index + 1}. <a href="https://solscan.io/account/${wallet}">${truncatedWallet}</a> ${portfolioEmoji} <a href="https://gmgn.ai/sol/address/${wallet}">gmgn</a>/<a href="https://app.cielo.finance/profile/${wallet}/pnl/tokens">cielo</a>\n`;
                 
-                // Ligne uniquement pour le PnL (sans rank)
+                // Line only for PnL (without rank)
                 if (totalPnLDisplay !== 'PnL: N/A') {
                     formattedString += `├ ${tokenEmoji} ${totalPnLDisplay}\n`;
                 }
@@ -91,23 +94,28 @@ function formatBestTraders(traders, params) {
             }
         }).filter(str => str !== '').join('\n\n');
 
-        return `${header}${tradersList}`;
+        return `${header}${paginationInfo}\n\n${tradersList}`;
     } catch (error) {
         logger.error('Error in formatBestTraders function:', error);
         return 'An error occurred while formatting traders.';
     }
 }
 
+/**
+ * Format initial loading message
+ * @param {Object} params - Command parameters
+ * @returns {string} Formatted message
+ */
 function formatInitialMessage(params) {
     const { contractAddress, winrateThreshold, portfolioThreshold, sortOption } = params;
     return [
         `🎯 <b>Analyzing best traders for contract:</b>`,
         `<code>${contractAddress}</code>`,
         `📊 Winrate threshold: <code>>${winrateThreshold}%</code>`,
-        `💰 Portfolio threshold: <code>$${portfolioThreshold}</code>`,
+        `💰 Portfolio threshold: <code>$${formatNumber(portfolioThreshold)}</code>`,
         `📈 Sorting by: <code>${sortOption}</code>`,
         ``,
-        `Click /bt to customize these values`
+        `Please wait while we fetch and analyze the data...`
     ].join('\n');
 }
 
