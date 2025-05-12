@@ -44,6 +44,7 @@ const KNOWN_ADDRESSES = {
   // DEXes and Liquidity Pools
   "5Q544fKrFoe6tsEbD7S8EmxGTJYAKtTVhAW5Q5pge4j1": { name: "Raydium", category: ADDRESS_CATEGORIES.DEX },
   "675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8": { name: "Raydium 2", category: ADDRESS_CATEGORIES.DEX },
+  "GpMZbSM2GgvTKHJirzeGfMFoaZ8UR2X7F4v8vHTvxFbL": { name: "Raydium 3", category: ADDRESS_CATEGORIES.DEX },
   "MoonCVVNZFSYkqNXP6bxHLPL6QQJiMagDL3qcqUQTrG": { name: "Moonshot", category: ADDRESS_CATEGORIES.DEX },
   "LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo": { name: "Meteora", category: ADDRESS_CATEGORIES.DEX },
   "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P": { name: "Pump.fun", category: ADDRESS_CATEGORIES.DEX },
@@ -51,16 +52,8 @@ const KNOWN_ADDRESSES = {
   "G2YxRa6wt1qePMwfJzdXZG62ej4qaTC7YURzuh2Lwd3t": { name: "Jupiter", category: ADDRESS_CATEGORIES.DEX },
   
   // Bridges and Cross-Chain Infrastructure
-  "GpMZbSM2GgvTKHJirzeGfMFoaZ8UR2X7F4v8vHTvxFbL": { name: "Wormhole", category: ADDRESS_CATEGORIES.BRIDGE },
   "GugU1tP7doLeTw9hQP51xRJyS8Da1fWxuiy2rVrnMD2m": { name: "Wormhole 2", category: ADDRESS_CATEGORIES.BRIDGE },
-  "3u8hJUVTA4jH1wYAyUur7FFZVQ8H635K3tSHHF4ssjQ5": { name: "Wormhole 3", category: ADDRESS_CATEGORIES.BRIDGE },
-  "3VFdJkFuzrcwCwdAjdQfdrKp5p8P8FKAaHnoNddZ59Jc": { name: "Allbridge", category: ADDRESS_CATEGORIES.BRIDGE },
-  
-  // Well-known Projects, DAOs and Protocols
-  "3SGeuz8EXsYFo2eZpJpMcFxj6EBKQNbZxzRC4RgG8njT": { name: "Solana Foundation", category: ADDRESS_CATEGORIES.DAO },
-  "DpdaWCE1gvbRxKmNQRZFeFdWmaL8n8UfvYs4rvC8Lvdy": { name: "Solana Foundation 2", category: ADDRESS_CATEGORIES.DAO },
-  "AFrY1K11J5gbnmKQQ5xXQmEQBJDYXStE6gQrJ7F2vUmA": { name: "Serum DAO", category: ADDRESS_CATEGORIES.DAO },
-  "2ZsHYjrk1PVLFLgWz9xnXPUXchd5JrFrPXbjrExJJKrK": { name: "Pyth Network", category: ADDRESS_CATEGORIES.PROTOCOL },
+
 
 };
 
