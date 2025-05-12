@@ -30,15 +30,21 @@ class StateManager {
   }
 
   setUserState(userId, state) {
-    this.userStates.set(userId.toString(), state);
+    // Ensure userId is a string to avoid type mismatches
+    const key = userId.toString();
+    this.userStates.set(key, state);
   }
 
   getUserState(userId) {
-    return this.userStates.get(userId.toString());
+    // Ensure userId is a string when retrieving
+    const key = userId.toString();
+    return this.userStates.get(key);
   }
 
   deleteUserState(userId) {
-    this.userStates.delete(userId.toString());
+    // Ensure userId is a string when deleting
+    const key = userId.toString();
+    this.userStates.delete(key);
   }
 
   setMessage(chatId, messageId, data) {
@@ -58,6 +64,20 @@ class StateManager {
     };
   }
   
+  // Dump state for a specific user/chat for debugging
+  dumpState(id) {
+    const key = id.toString();
+    const state = this.userStates.get(key);
+    return {
+      exists: !!state,
+      context: state?.context,
+      command: state?.command,
+      timestamp: state?.timestamp,
+      hasResults: Array.isArray(state?.results),
+      resultCount: Array.isArray(state?.results) ? state.results.length : 0
+    };
+  }
+  
   // Comprehensive cleanup of all states related to a chat
   // By default, we preserve tracking info to allow buttons to continue working
   cleanAllChatStates(chatId, options = { preserveTrackingInfo: true }) {
@@ -68,7 +88,8 @@ class StateManager {
     
     // Clean userStates with this chatId
     for (const [key, state] of this.userStates.entries()) {
-      if (key === `grp_${chatIdStr}` || 
+      if (key === chatIdStr || 
+          key === `grp_${chatIdStr}` || 
           state?.chatId === chatIdStr || 
           state?.action === 'awaiting_custom_threshold') {
         this.userStates.delete(key);

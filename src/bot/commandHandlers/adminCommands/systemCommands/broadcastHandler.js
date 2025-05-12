@@ -30,7 +30,23 @@ class BroadcastHandler extends BaseAdminHandler {
                 return;
             }
 
-            const { successCount, failCount, debugInfo } = await this.broadcastMessage(fullMessage, adminUsername);
+            // Send initial status message before starting broadcast
+            const statusMsg = await this.bot.sendMessage(
+                chatId,
+                `📢 Preparing broadcast...`
+            );
+            const statusMsgId = statusMsg.message_id;
+
+            // Track the start time here
+            const startTime = Date.now();
+
+            // Call broadcastMessage with all required parameters
+            const { successCount, failCount, debugInfo, rateLimitErrors } = await this.broadcastMessage(
+                fullMessage, 
+                adminUsername, 
+                chatId, 
+                statusMsgId
+            );
             
             // Send detailed debug info only to admin
             if (debugInfo.adminStatus) {
@@ -55,7 +71,7 @@ class BroadcastHandler extends BaseAdminHandler {
                     `✅ Successfully sent: ${successCount}\n` +
                     `❌ Failed: ${failCount}\n` +
                     `⏱️ Time taken: ${minutes}m ${seconds}s\n` +
-                    `🛑 Rate limit hits: ${rateLimitErrors}`,
+                    `🛑 Rate limit hits: ${rateLimitErrors || 0}`,
                     {
                         chat_id: chatId,
                         message_id: statusMsgId
@@ -70,7 +86,7 @@ class BroadcastHandler extends BaseAdminHandler {
                     `✅ Successfully sent: ${successCount}\n` +
                     `❌ Failed: ${failCount}\n` +
                     `⏱️ Time taken: ${minutes}m ${seconds}s\n` +
-                    `🛑 Rate limit hits: ${rateLimitErrors}`
+                    `🛑 Rate limit hits: ${rateLimitErrors || 0}`
                 );
             }
         } catch (error) {
@@ -82,7 +98,7 @@ class BroadcastHandler extends BaseAdminHandler {
         }
     }
 
-    async broadcastMessage(message, adminUsername) {
+    async broadcastMessage(message, adminUsername, chatId, statusMsgId) {
         logger.info('Starting broadcast');
 
         let successCount = 0;
@@ -108,35 +124,40 @@ class BroadcastHandler extends BaseAdminHandler {
 
             logger.info(`Retrieved ${users.length} users from DB for broadcasting`);
             
-            // Send initial status message
-            const statusMsgId = (await this.bot.sendMessage(
-                chatId,
-                `📢 Starting broadcast to ${users.length} users...`
-            )).message_id;
+            // Update the status message instead of creating a new one
+            if (statusMsgId) {
+                await this.bot.editMessageText(
+                    `📢 Starting broadcast to ${users.length} users...`,
+                    {
+                        chat_id: chatId,
+                        message_id: statusMsgId
+                    }
+                );
+            }
             
             // Track last update time to avoid too many updates
             let lastProgressUpdate = Date.now();
             
             for (const user of users) {
-                const chatIdNum = Number(user.chatId);
+                const userChatId = Number(user.chatId);
                 const normalizedUsername = user.username ? user.username.toLowerCase() : null;
 
                 // Check if this is the admin
                 if (normalizedUsername === adminUsername?.toLowerCase()) {
                     debugInfo.adminStatus.foundInDB = true;
-                    debugInfo.adminStatus.adminChatId = chatIdNum;
-                    logger.info(`Found admin in DB: ${user.username} with chatId: ${chatIdNum}`);
+                    debugInfo.adminStatus.adminChatId = userChatId;
+                    logger.info(`Found admin in DB: ${user.username} with chatId: ${userChatId}`);
                 }
 
-                if (chatIdNum > 0 && normalizedUsername) {
+                if (userChatId > 0 && normalizedUsername) {
                     try {
-                        await this.bot.sendMessage(chatIdNum, message, {
+                        await this.bot.sendMessage(userChatId, message, {
                             parse_mode: 'HTML',
                             disable_web_page_preview: true
                         });
 
                         successCount++;
-                        logger.info(`Successfully sent broadcast to user ${user.username} (${chatIdNum})`);
+                        logger.info(`Successfully sent broadcast to user ${user.username} (${userChatId})`);
 
                         if (normalizedUsername === adminUsername?.toLowerCase()) {
                             debugInfo.adminStatus.sentToAdmin = true;
@@ -151,7 +172,7 @@ class BroadcastHandler extends BaseAdminHandler {
                             
                             // Update progress message approximately every 30 messages (5%)
                             const now = Date.now();
-                            if (now - lastProgressUpdate > 5000) {
+                            if (now - lastProgressUpdate > 5000 && statusMsgId) {
                                 try {
                                     const progress = ((successCount + failCount) / users.length * 100).toFixed(1);
                                     await this.bot.editMessageText(
@@ -190,7 +211,7 @@ class BroadcastHandler extends BaseAdminHandler {
                             debugInfo.rateLimit.lastOccurrence = Date.now();
                             
                             logger.warn(
-                                `Rate limit detected when sending to ${user.username} (${chatIdNum}). ` +
+                                `Rate limit detected when sending to ${user.username} (${userChatId}). ` +
                                 `This is occurrence #${rateLimitErrors}. Adding extra pause...`
                             );
                             
@@ -198,7 +219,7 @@ class BroadcastHandler extends BaseAdminHandler {
                             await new Promise(resolve => setTimeout(resolve, 15000));
                         } else {
                             logger.error(
-                                `Failed to send broadcast to user ${user.username} (${chatIdNum}):`,
+                                `Failed to send broadcast to user ${user.username} (${userChatId}):`,
                                 error.message || error
                             );
                         }
@@ -211,7 +232,7 @@ class BroadcastHandler extends BaseAdminHandler {
             logger.info(`Broadcast complete. Successful: ${successCount}, Failed: ${failCount}`);
             logger.info(`Admin status: ${JSON.stringify(debugInfo.adminStatus, null, 2)}`);
             
-            return { successCount, failCount, debugInfo };
+            return { successCount, failCount, debugInfo, rateLimitErrors };
         } catch (error) {
             logger.error('Error retrieving or sending broadcast:', error);
             throw error;

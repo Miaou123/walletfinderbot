@@ -31,6 +31,7 @@ class crossAnalyzer {
             // Create a map of all holders
             const allHoldersMap = new Map();
 
+            // Process holders and track token holdings
             holdersLists.forEach((holdersList, index) => {
                 holdersList.forEach(holder => {
                     if (holder.balance >= this.MIN_TOKEN_THRESHOLD && !isExcludedAddress(holder.address)) {
@@ -46,7 +47,7 @@ class crossAnalyzer {
                 });
             });
 
-            // Calculate values and filter holders
+            // Calculate values and filter holders that hold at least 2 tokens
             const relevantHolders = Array.from(allHoldersMap.values())
                 .filter(holder => holder.tokensHeld.size >= 2)
                 .map(holder => {
@@ -72,9 +73,16 @@ class crossAnalyzer {
                     return b.combinedValue - a.combinedValue;
                 });
 
+            // Get wallet checker data for the filtered holders
             if (relevantHolders.length > 0) {
-                const walletCheckerData = await fetchMultipleWallets(relevantHolders.map(h => h.address), 5, mainContext, 'walletChecker');
+                const walletCheckerData = await fetchMultipleWallets(
+                    relevantHolders.map(h => h.address), 
+                    5, 
+                    mainContext, 
+                    'walletChecker'
+                );
 
+                // Attach walletCheckerData to holders
                 return relevantHolders.map(holder => ({
                     ...holder,
                     walletCheckerData: walletCheckerData.find(w => w.wallet === holder.address)?.data?.data || null

@@ -7,23 +7,27 @@ const logger = require('../../utils/logger');
  * @param {Array} tokenInfos - Information about tokens
  * @returns {Object} Statistics about holder combinations
  */
-const calculateHolderStats = (filteredHolders, tokenInfos) => {
+const calculateHolderStats = (allHolders, tokenInfos) => {
     const stats = {
-        total: filteredHolders.length,
+        total: allHolders.length,
         combinations: {}
     };
 
+    // For each token pair, count how many holders have both tokens
     tokenInfos.forEach((token, i) => {
         tokenInfos.slice(i + 1).forEach((otherToken, j) => {
             const key = `${token.symbol}/${otherToken.symbol}`;
-            stats.combinations[key] = filteredHolders.filter(h => 
+            
+            // Count holders that have both token i and token i+j+1
+            stats.combinations[key] = allHolders.filter(h => 
                 h.tokensHeld && h.tokensHeld.has(i) && h.tokensHeld.has(i + j + 1)
             ).length;
         });
     });
 
+    // Count holders that have all tokens
     const allTokensKey = tokenInfos.map(t => t.symbol).join('/');
-    stats.combinations[allTokensKey] = filteredHolders.filter(h => 
+    stats.combinations[allTokensKey] = allHolders.filter(h => 
         h.tokensHeld && h.tokensHeld.size === tokenInfos.length
     ).length;
 
@@ -50,15 +54,19 @@ const formatCrossAnalysisMessage = (
     totalPages = 1,
     totalHolders = 0,
     holdersPerPage = 5,
-    isPaginated = false
+    isPaginated = false,
+    allHolders = null  // Add optional parameter to pass all holders for statistics
 ) => {
     try {
         if (!Array.isArray(pageHolders) || pageHolders.length === 0) {
             return 'No common holders found matching the criteria.';
         }
 
-        // Calculate stats for all holders
-        const holderStats = calculateHolderStats(pageHolders, tokenInfos);
+        // If allHolders is not provided, use pageHolders for statistics (backward compatibility)
+        const holdersForStats = allHolders || pageHolders;
+        
+        // Calculate stats using ALL holders, not just the page
+        const holderStats = calculateHolderStats(holdersForStats, tokenInfos);
 
         // Create header
         let message = `<b>Cross-Analysis Results for ${tokenInfos.map(t => `<a href="https://solscan.io/token/${t.address}">${t.symbol}</a>`).join(' ')}</b>\n\n`;
@@ -119,9 +127,20 @@ const formatCrossAnalysisWallet = (wallet, contractAddresses, tokenInfos, rank) 
         }
 
         const shortAddress = `${wallet.address.slice(0, 4)}...${wallet.address.slice(-4)}`;
-        const pnlEmoji = getEmojiForPnl(wallet.walletCheckerData?.total_value || 0);
+        
+        // Determine emoji based on portfolio value
+        let sizeEmoji = '🐟'; // Small fish default
+        const portfolioValue = wallet.walletCheckerData?.total_value || 0;
+        
+        if (portfolioValue > 1000000) {
+            sizeEmoji = '🐳'; // Whale for >$1M 
+        } else if (portfolioValue > 100000) {
+            sizeEmoji = '🦈'; // Shark for >$100k
+        }
+        
+        const pnlEmoji = getEmojiForPnl(wallet.walletCheckerData?.realized_profit_30d || 0);
 
-        let result = `${rank}. <a href="https://solscan.io/account/${wallet.address}">${shortAddress}</a> ${pnlEmoji} <a href="https://gmgn.ai/sol/address/${wallet.address}">gmgn</a>/<a href="https://app.cielo.finance/profile/${wallet.address}/pnl/tokens">cielo</a>\n`;
+        let result = `${rank}. ${shortAddress} <a href="https://solscan.io/account/${wallet.address}">${shortAddress}</a> ${sizeEmoji} <a href="https://gmgn.ai/sol/address/${wallet.address}">gmgn</a>/<a href="https://app.cielo.finance/profile/${wallet.address}/pnl/tokens">cielo</a>\n`;
         result += `├ 🪙 Tokens held: <b>${wallet.tokensHeld ? wallet.tokensHeld.size : 0}/${contractAddresses.length}</b>\n`;
 
         if (wallet.walletCheckerData) {
