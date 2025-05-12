@@ -66,7 +66,8 @@ class CommandHandlers {
                 'walletsearch': this.walletSearcherHandler,
                 'besttraders': this.bestTradersHandler,
                 'topholders': this.topHoldersHandler,
-                'cross': this.crossHandler
+                'cross': this.crossHandler,
+                'earlybuyers': this.earlyBuyersHandler, 
             };
 
             await this.setupCallbackHandler();
