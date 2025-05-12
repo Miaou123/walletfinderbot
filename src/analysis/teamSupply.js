@@ -1,5 +1,5 @@
 // src/analysis/teamSupply.js
-// Updated with fixes for error categorization and excessive logging
+// Fixed to properly categorize team wallets and remove teambot detection
 
 const { getSolanaApi } = require('../integrations/solanaApi');
 const { checkInactivityPeriod } = require('../tools/inactivityPeriod');
@@ -24,12 +24,27 @@ const KNOWN_LP_POOLS = new Set([
 ]);
 
 const FRESH_WALLET_THRESHOLD = 100;
-const TRANSACTION_CHECK_LIMIT = 20;
-const MAX_ASSETS_THRESHOLD = 2;
 const SUPPLY_THRESHOLD = new BigNumber('0.001'); // 0.1%
 const WALLET_ANALYSIS_TIMEOUT = 30000; // Increased to 30 seconds per wallet
 const BATCH_SIZE = 5; 
 const BATCH_DELAY = 200; 
+
+// Define team wallet categories - removed Teambot
+const TEAM_WALLET_CATEGORIES = new Set([
+    'Fresh', 
+    'Inactive', 
+    'No Token', 
+    'No ATA Transaction'
+]);
+
+/**
+ * Checks if a wallet is considered a team wallet based on its category
+ * @param {string} category - Wallet category
+ * @returns {boolean} True if it's a team wallet category
+ */
+function isTeamWalletCategory(category) {
+    return TEAM_WALLET_CATEGORIES.has(category);
+}
 
 /**
  * Analyzes the team supply for a given token
@@ -118,13 +133,10 @@ async function analyzeTeamSupply(tokenAddress, mainContext = 'default', cancella
         );
         logStep(`Analyzed ${analyzedWallets.length} wallets`);
         
-        // 5. Filter team wallets - only keep wallets with meaningful categories
+        // 5. Filter team wallets - FIXED: Only include wallets with team categories
         checkCancellation();
         const teamWallets = analyzedWallets
-            .filter(w => {
-                // Include wallets with specific categories, exclude Normal and Unknown
-                return (w.category !== 'Normal' && w.category !== 'Unknown' && w.category !== 'Error');
-            })
+            .filter(w => isTeamWalletCategory(w.category))
             .map(w => ({
                 address: w.address,
                 balance: w.balance.toString(),
@@ -139,10 +151,10 @@ async function analyzeTeamSupply(tokenAddress, mainContext = 'default', cancella
 
         logStep(`Filtered ${teamWallets.length} team wallets`);
         
-        // 6. Calculate supply
+        // 6. Calculate supply - FIXED: Only count wallets with team categories
         checkCancellation();
         const teamSupplyHeld = analyzedWallets
-            .filter(w => w.category !== 'Normal' && w.category !== 'Unknown' && w.category !== 'Error')
+            .filter(w => isTeamWalletCategory(w.category))
             .reduce((total, wallet) => {
                 return total.plus(new BigNumber(wallet.balance));
             }, new BigNumber(0));
@@ -310,9 +322,8 @@ async function analyzeWallet(wallet, tokenAddress, mainContext, tokenInfo, opera
                     } else if (inactivityCheck.isInactive) {
                         category = 'Inactive';
                         daysSinceLastActivity = inactivityCheck.daysSinceLastActivity;
-                    } else if (await isTeamBot(wallet.address, tokenAddress, mainContext)) {
-                        category = 'Teambot';
                     }
+                    // Removed teambot check entirely
                 }
             } catch (inactivityError) {
                 // Don't log every inactivity error - just continue with category as Normal
@@ -400,31 +411,6 @@ async function hasExcessiveTransactions(address, mainContext) {
 }
 
 /**
- * Check if a wallet is a team bot
- */
-async function isTeamBot(address, tokenAddress, mainContext) {
-    try {
-        const solanaApi = getSolanaApi();
-        
-        const assetCount = await solanaApi.getAssetCount(address, mainContext, 'isTeamBot');
-        if (assetCount <= MAX_ASSETS_THRESHOLD) {
-            const transactions = await solanaApi.getSignaturesForAddress(
-                address, 
-                { limit: TRANSACTION_CHECK_LIMIT },
-                mainContext,
-                'getTeamBotTransactions'
-            );
-            
-            // Just check if transactions were found - this is a simplified check
-            return transactions && transactions.length > 0;
-        }
-        return false;
-    } catch (error) {
-        return false;
-    }
-}
-
-/**
  * Check if a wallet is a fresh wallet
  */
 async function isFreshWallet(address, mainContext, subContext) {
@@ -447,5 +433,6 @@ async function isFreshWallet(address, mainContext, subContext) {
 }
 
 module.exports = {
-    analyzeTeamSupply
+    analyzeTeamSupply,
+    isTeamWalletCategory // Exported for testing
 };

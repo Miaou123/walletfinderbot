@@ -766,8 +766,7 @@ formatFreshWalletDetails(analyzedWallets, tokenInfo) {
 }
 
 /**
- * Generic wallet list formatter with common funding analysis
- * Can be used by both fresh and team commands
+ * Format wallet analysis in unifiedFormatter.js
  * @param {Array} analyzedWallets - All analyzed wallets
  * @param {Object} tokenInfo - Token information
  * @param {Array} wallets - The wallets to display (fresh or team)
@@ -785,7 +784,7 @@ formatWalletAnalysis(analyzedWallets, tokenInfo, wallets, totalSupplyControlled,
       categoryFilter = null,
       displayCategory = false,
       maxWallets = 10,
-      minFundingGroupSize = 3  // New option to control minimum group size
+      minFundingGroupSize = 3
     } = options;
     
     // Start with the basic header
@@ -807,7 +806,7 @@ formatWalletAnalysis(analyzedWallets, tokenInfo, wallets, totalSupplyControlled,
       const fundingSummary = this.formatFundingGroupsSummary(
         fundingGroups, 
         walletType, 
-        minFundingGroupSize || 3  // Use the new minFundingGroupSize option with default of 3
+        minFundingGroupSize || 3
       );
       message += fundingSummary;
     }
@@ -815,8 +814,21 @@ formatWalletAnalysis(analyzedWallets, tokenInfo, wallets, totalSupplyControlled,
     // Add the top wallets section
     message += `\n\n<b>Top ${walletType} wallets:</b>\n`;
     
+    // Get wallets to display - IMPORTANT: Only use wallets that match the category filter
+    let walletsToShow;
+    if (categoryFilter) {
+      // Filter to only show wallets with the specified category
+      walletsToShow = enhancedWallets.filter(w => w.category === categoryFilter);
+    } else {
+      // For team wallets, we want to filter out Normal, Unknown and Error wallets
+      const teamCategories = new Set(['Fresh', 'Inactive', 'No Token', 'No ATA Transaction']);
+      walletsToShow = walletType === 'team' ? 
+        enhancedWallets.filter(w => teamCategories.has(w.category)) : 
+        enhancedWallets;
+    }
+    
     // Sort wallets by balance and take top N
-    const topWallets = enhancedWallets
+    const topWallets = walletsToShow
       .sort((a, b) => new BigNumber(b.balance).minus(new BigNumber(a.balance)).toNumber())
       .slice(0, maxWallets);
 
@@ -859,10 +871,20 @@ formatWalletDetails(analyzedWallets, tokenInfo, options = {}) {
       walletType = 'wallet'
     } = options;
     
-    // Filter wallets by category if needed
-    const filteredWallets = categoryFilter 
-      ? analyzedWallets.filter(wallet => wallet.category === categoryFilter)
-      : analyzedWallets.filter(wallet => wallet.category !== 'Unknown');
+    // Filter wallets based on category or type
+    let filteredWallets;
+    
+    if (categoryFilter) {
+      // If a specific category filter is provided, use it
+      filteredWallets = analyzedWallets.filter(wallet => wallet.category === categoryFilter);
+    } else if (walletType === 'team') {
+      // For team wallets, only include wallets with team categories
+      const teamCategories = new Set(['Fresh', 'Inactive', 'No Token', 'No ATA Transaction']);
+      filteredWallets = analyzedWallets.filter(wallet => teamCategories.has(wallet.category));
+    } else {
+      // Default filtering (exclude Unknown category)
+      filteredWallets = analyzedWallets.filter(wallet => wallet.category !== 'Unknown' && wallet.category !== 'Error');
+    }
 
     let message = `<b>${tokenInfo.symbol}</b> (<a href="https://dexscreener.com/solana/${tokenInfo.address}">📈</a>)\n`;
     message += `<b>${filteredWallets.length} ${walletType} addresses:</b>\n`;
