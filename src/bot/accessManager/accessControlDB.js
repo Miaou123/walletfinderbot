@@ -1,5 +1,5 @@
 const logger = require('../../utils/logger');
-const { SubscriptionService, PaymentService } = require('../../database');
+const { SubscriptionService, PaymentService, TokenVerificationService } = require('../../database');
 
 class AccessControlDB {
    constructor(database, config) {
@@ -12,6 +12,7 @@ class AccessControlDB {
        this.adminsCollection = this.db.collection('admins');
        this.subscriptionService = SubscriptionService;
        this.paymentService = PaymentService;
+       this.tokenVerificationService = TokenVerificationService;
    }
 
    async ensureIndexes() {
@@ -114,11 +115,63 @@ class AccessControlDB {
         }
     }
     
+    /**
+     * Check if user has token verification and meets minimum token requirement
+     * @param {string} userId - User ID from Telegram
+     * @returns {Promise<boolean>} Whether the user has a verified wallet with enough tokens
+     */
+    async hasTokenVerification(userId) {
+        if (!userId) return false;
+        
+        try {
+            // Check verification status via the token verification service
+            const verificationStatus = await this.tokenVerificationService.checkVerifiedStatus(userId);
+            return verificationStatus.hasAccess;
+        } catch (error) {
+            logger.error(`Error checking token verification for user "${userId}":`, error);
+            return false;
+        }
+    }
+    
+    /**
+     * Get the token verification status with details
+     * @param {string} userId - User ID from Telegram
+     * @returns {Promise<Object>} - Verification status details
+     */
+    async getTokenVerificationStatus(userId) {
+        if (!userId) return { hasAccess: false, reason: 'invalid_user_id' };
+        
+        try {
+            return await this.tokenVerificationService.checkVerifiedStatus(userId);
+        } catch (error) {
+            logger.error(`Error getting token verification status for user "${userId}":`, error);
+            return { hasAccess: false, reason: 'error', error: error.message };
+        }
+    }
+
+   /**
+    * Check if a user has access based on specified context
+    * @param {string} identifier - User ID or group ID
+    * @param {string} context - Access context: 'user', 'admin', 'group', or 'token'
+    * @param {string} username - Username for subscription checks
+    * @returns {Promise<boolean>} - Whether access is allowed
+    */
    async isAllowed(identifier, context = 'user', username = null) {
        try {
            if (context === 'admin') return await this.isAdmin(identifier);
            if (context === 'group') return await this.hasActiveGroupSubscription(identifier);
-           return await this.hasActiveSubscription(identifier, username);
+           if (context === 'token') return await this.hasTokenVerification(identifier);
+           
+           // Default user check - either subscription or token verification is sufficient
+           const hasSubscription = await this.hasActiveSubscription(identifier, username);
+           
+           // If configured to accept either subscription or token verification
+           if (this.config.ALLOW_TOKEN_OR_SUBSCRIPTION) {
+               const hasTokens = await this.hasTokenVerification(identifier);
+               return hasSubscription || hasTokens;
+           }
+           
+           return hasSubscription;
        } catch (error) {
            logger.error(`Error in isAllowed check for ${identifier} (${context}):`, error);
            return false;

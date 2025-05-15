@@ -12,6 +12,7 @@ const SolanaPaymentHandler = require('../tools/solanaPaymentHandler.js');
 const groupMessageLogger = require('./messageDataManager/groupMessageLogger');
 const MessageHandler = require('./messageHandler');
 const WalletUpdateManager = require('./walletUpdateManager');
+const TokenBalanceChecker = require('../tools/tokenBalanceChecker');
 const { getDatabase } = require('../database');
 
 // ====================
@@ -166,6 +167,15 @@ class TelegramBotService {
         // Start the wallet update manager
         await this.walletUpdateManager.start();
         this.logger.info('Wallet update manager started successfully');
+        
+        // 8. Initialize token balance checker if token verification is enabled
+        if (config.TOKEN_ADDRESS) {
+            this.tokenBalanceChecker = new TokenBalanceChecker(this.bot);
+            this.tokenBalanceChecker.start();
+            this.logger.info('Token balance checker started successfully');
+        } else {
+            this.logger.info('Token verification not configured, skipping token balance checker');
+        }
         
         this.logger.info('All managers initialized successfully');
     }
@@ -328,6 +338,12 @@ class TelegramBotService {
         if (this.walletUpdateManager) {
             this.walletUpdateManager.stop();
             this.logger.info('Wallet update manager stopped');
+        }
+        
+        // Stop the token balance checker if it exists
+        if (this.tokenBalanceChecker) {
+            this.tokenBalanceChecker.stop();
+            this.logger.info('Token balance checker stopped');
         }
         
         // Close any other resources

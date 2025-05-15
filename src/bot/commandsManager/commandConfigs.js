@@ -8,6 +8,21 @@ const commandConfigs = {
     usage: '/start [referral_link]',
     helpMessage: 'Use /start to begin using the bot. You can also use a referral link like /start r-username'
   },
+  'verify': {
+    aliases: ['v'],
+    minArgs: 0,
+    maxArgs: 0,
+    requiresAuth: false,
+    requiresToken: false,
+    description: 'Verify your wallet to access token-gated features',
+    usage: '/verify',
+    helpMessage: 'Start the wallet verification process to access token-gated features.\n\n' +
+                'This command helps you connect your wallet to the bot by sending a small verification transaction.\n\n' +
+                'Benefits:\n' +
+                '• Access to token-gated features\n' +
+                '• Automatic verification checks\n' +
+                '• No need for manual wallet submission'
+  },
   'help': { 
     aliases: [], 
     minArgs: 0, 
@@ -67,6 +82,7 @@ const commandConfigs = {
     minArgs: 1,
     maxArgs: 2,
     requiresAuth: true,
+    requiresToken: true, // This command requires token verification
     description: 'Analyze entry prices of top holders',
     usage: '/entrymap [contract_address] [number_of_holders](20)*',
     helpMessage: 'Analyzes the entry prices of top holders for a given token.\n\n' +
@@ -142,7 +158,8 @@ const commandConfigs = {
     aliases: ['c'], 
     minArgs: 2, 
     maxArgs: 6, 
-    requiresAuth: true, 
+    requiresAuth: true,
+    requiresToken: true, // This command requires token verification
     description: 'Cross-analyze multiple tokens', 
     usage: '/cross [contract_address1] [contract_address2] ... [Combined_value_min]($10000)*',
     helpMessage: 'Search for wallets that hold multiple coins. You can analyze up to 5 coins with a minimum combined value (default is $10000).\n\nThis command helps identify wallets that have significant holdings across multiple tokens.'
@@ -170,6 +187,7 @@ const commandConfigs = {
     minArgs: 1,
     maxArgs: 1,
     requiresAuth: true,
+    requiresToken: true, // This command requires token verification
     description: 'Analyze pumpfun developer profile and previous coins',
     usage: '/dev [contract_address]',
     helpMessage: 'Analyze a developer wallet to check their history of creating coins, including success rate, bonding rate, funding methods and connections to other successful projects.'
