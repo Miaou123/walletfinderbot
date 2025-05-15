@@ -93,6 +93,26 @@ async function updateIndexes(db) {
                     { key: { username: 1 }, options: {} },
                     { key: { expiresAt: 1 }, options: {} },
                 ]
+            },
+            tokenVerification: {
+                collection: db.collection("tokenVerification"),
+                indexes: [
+                    { key: { sessionId: 1 }, options: { unique: true } },
+                    { key: { userId: 1 }, options: {} },
+                    { key: { paymentAddress: 1 }, options: { unique: true } },
+                    { key: { expiresAt: 1 }, options: {} },
+                    { key: { status: 1 }, options: {} }
+                ]
+            },
+            verifiedUsers: {
+                collection: db.collection("verifiedUsers"),
+                indexes: [
+                    { key: { userId: 1 }, options: { unique: true } },
+                    { key: { walletAddress: 1 }, options: {} },
+                    { key: { isActive: 1 }, options: {} },
+                    { key: { verifiedAt: -1 }, options: {} },
+                    { key: { lastChecked: 1 }, options: {} }
+                ]
             }
         };
 

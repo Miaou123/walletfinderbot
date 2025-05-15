@@ -31,6 +31,10 @@ class MessageHandler {
             // Récupérer les handlers après leur initialisation
             this.commandHandlers = this.commandHandlersInstance.getHandlers();
             
+            // Track token verification check timing
+            this.lastVerificationChecks = new Map();
+            this.verificationCacheTime = 5 * 60 * 1000; // 5 minutes cache
+            
             this.logger.info(`Bot initialized with username: ${this.botUsername}`);
         } catch (error) {
             this.logger.error('Failed to initialize MessageHandler:', error);
@@ -124,7 +128,32 @@ class MessageHandler {
             // Vérifier si la commande nécessite une authentification
             const commandConfig = this.commandConfigs[command];
             const requiresAuth = commandConfig?.requiresAuth ?? false;
+            const requiresToken = commandConfig?.requiresToken ?? false;
 
+            // Handle token verification first if command requires token specifically
+            if (requiresToken && !isGroup) {
+                const hasTokenVerification = await this.accessControl.hasTokenVerification(userId);
+                
+                if (!hasTokenVerification && command !== 'verify') {
+                    await this.bot.sendMessage(chatId,
+                        "🔒 <b>Token Access Required</b>\n\n" +
+                        "This feature is only available to token holders.\n\n" +
+                        "Please use /verify to connect your wallet and verify your token holdings.",
+                        { 
+                            parse_mode: 'HTML',
+                            message_thread_id: messageThreadId,
+                            reply_markup: {
+                                inline_keyboard: [[
+                                    { text: "🔑 Verify Wallet", callback_data: "tokenverify:reverify" }
+                                ]]
+                            }
+                        }
+                    );
+                    return;
+                }
+            }
+
+            // Check regular subscription if required
             if (requiresAuth) {
                 if (isGroup) {
                     // Exception for the command subscribe_group
@@ -142,12 +171,12 @@ class MessageHandler {
                         }
                     }
                 } else {
-                    // Vérification des utilisateurs individuels
-                    // Pass both userId and username for checking
+                    // Check user access - either subscription or token based on configuration
                     const username = msg.from.username;
-                    const hasActiveUserSub = await this.accessControl.hasActiveSubscription(userId, username);
+                    const hasAccess = await this.accessControl.isAllowed(userId, 'user', username);
                     
-                    if (!hasActiveUserSub && command !== 'subscribe') {
+                    // Skip access check for subscription and verify commands themselves
+                    if (!hasAccess && command !== 'subscribe' && command !== 'verify') {
                         await this.bot.sendMessage(chatId,
                             "🔒 This command requires an active subscription\n\n" +
                             "• Use /subscribe to view our subscription plans\n" +

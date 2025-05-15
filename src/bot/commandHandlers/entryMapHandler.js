@@ -2,6 +2,7 @@ const { validateSolanaAddress, recognizeArgType } = require('./helpers.js');
 const EntryPriceAnalyzer = require('../../analysis/entryPriceAnalyzer');
 const { formatEntryMapResponse } = require('../formatters/entryMapFormatter');
 const logger = require('../../utils/logger');
+const { tokenGatedCommand } = require('../../utils/tokenGateMiddleware');
 
 class EntryMapHandler {
     constructor() {

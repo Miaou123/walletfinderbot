@@ -3,6 +3,7 @@ const WalletService = require('./services/walletService');
 const UserService = require('./services/userService');
 const SubscriptionService = require('./services/subscriptionService');
 const PaymentService = require('./services/paymentService');
+const TokenVerificationService = require('./services/tokenVerificationService');
 const SubscriptionConfig = require('./config/subscriptionConfig');
 
 
@@ -32,4 +33,5 @@ module.exports = {
     SubscriptionService,
     PaymentService,
     SubscriptionConfig, 
+    TokenVerificationService,
 };

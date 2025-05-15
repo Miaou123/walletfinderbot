@@ -26,6 +26,13 @@ const nonSensitiveConfig = {
     METEORA: 'Eo7WjKq67rjJQSZxS6z3YkapzY3eMj6Xy8X5EQVn5UaB',
     MOONSHOT: 'MoonCVVNZFSYkqNXP6bxHLPL6QQJiMagDL3qcqUQTrG',
   },
+  
+  // Token verification settings
+  TOKEN_ADDRESS: process.env.TOKEN_ADDRESS,
+  TOKEN_SYMBOL: process.env.TOKEN_SYMBOL || 'token',
+  TOKEN_MIN_THRESHOLD: parseInt(process.env.TOKEN_MIN_THRESHOLD || '1'),
+  VERIFICATION_ADDRESS: process.env.VERIFICATION_ADDRESS,
+  ALLOW_TOKEN_OR_SUBSCRIPTION: process.env.ALLOW_TOKEN_OR_SUBSCRIPTION === 'true',
 };
 
 const config = {
