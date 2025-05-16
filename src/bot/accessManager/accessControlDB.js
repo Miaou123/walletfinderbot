@@ -152,6 +152,30 @@ class AccessControlDB {
             return false;
         }
     }
+
+
+/**
+ * Check if group has token-verified status
+ * @param {string} groupId - Group ID from Telegram
+ * @returns {Promise<boolean>} Whether the group is token-verified
+ */
+async hasGroupTokenVerification(groupId) {
+    if (!groupId) return false;
+    
+    try {
+        if (!this.tokenVerificationService) {
+            logger.warn('Token verification service not available for group check');
+            return false;
+        }
+        
+        const verificationStatus = await this.tokenVerificationService.checkGroupVerifiedStatus(groupId);
+        return verificationStatus.hasAccess;
+        
+    } catch (error) {
+        logger.error(`Error checking group token verification for "${groupId}":`, error);
+        return false;
+    }
+}
     
    /**
     * Check if a user has access via any method (subscription, token verification, or admin)
@@ -159,28 +183,36 @@ class AccessControlDB {
     * @param {string} context - Access context: 'user', 'group', 'admin', or 'token'
     * @param {string} username - Username (optional, for subscription check)
     */
-   async isAllowed(identifier, context = 'user', username = null) {
-       try {
-           // Admin access trumps all
-           if (context === 'admin' || await this.isAdmin(identifier)) return true;
-           
-           // For group context, check group subscription
-           if (context === 'group') return await this.hasActiveGroupSubscription(identifier);
-           
-           // For token context, check token verification
-           if (context === 'token') return await this.hasTokenVerification(identifier);
-           
-           // First check subscription (traditional paid access)
-           const hasSubscription = await this.hasActiveSubscription(identifier, username);
-           if (hasSubscription) return true;
-           
-           // If no subscription, check token verification as fallback
-           return await this.hasTokenVerification(identifier);
-       } catch (error) {
-           logger.error(`Error in isAllowed check for ${identifier} (${context}):`, error);
-           return false;
-       }
-   }
+ 
+async isAllowed(identifier, context = 'user', username = null) {
+    try {
+        // Admin access trumps all
+        if (context === 'admin' || await this.isAdmin(identifier)) return true;
+        
+        // For group context, check group subscription OR group token verification
+        if (context === 'group') {
+            // First check subscription
+            const hasSubscription = await this.hasActiveGroupSubscription(identifier);
+            if (hasSubscription) return true;
+            
+            // If no subscription, check token verification
+            return await this.hasGroupTokenVerification(identifier);
+        }
+        
+        // For token context, check token verification
+        if (context === 'token') return await this.hasTokenVerification(identifier);
+        
+        // First check subscription (traditional paid access)
+        const hasSubscription = await this.hasActiveSubscription(identifier, username);
+        if (hasSubscription) return true;
+        
+        // If no subscription, check token verification as fallback
+        return await this.hasTokenVerification(identifier);
+    } catch (error) {
+        logger.error(`Error in isAllowed check for ${identifier} (${context}):`, error);
+        return false;
+    }
+}
 }
 
 module.exports = AccessControlDB;

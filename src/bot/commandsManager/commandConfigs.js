@@ -82,7 +82,7 @@ const commandConfigs = {
     minArgs: 1,
     maxArgs: 2,
     requiresAuth: true,
-    requiresToken: true, // This command requires token verification
+    requiresToken: false, // This command requires token verification
     description: 'Analyze entry prices of top holders',
     usage: '/entrymap [contract_address] [number_of_holders](20)*',
     helpMessage: 'Analyzes the entry prices of top holders for a given token.\n\n' +
@@ -104,7 +104,8 @@ const commandConfigs = {
     aliases: ['wc'],
     minArgs: 2,
     maxArgs: 2,
-    requiresAuth: false,
+    requiresAuth: true,
+    requiresToken: true,
     description: 'Analyze wallet trading performance',
     usage: '/w [wallet_address] [timeframe](30d)*',
     helpMessage: 'Analyzes a wallet\'s trading performance, including metrics like:\n- Balance and portfolio value\n- Trading activity and patterns\n- Win rate and ROI\n- Risk metrics and trading behavior'
@@ -123,6 +124,7 @@ const commandConfigs = {
     minArgs: 1, 
     maxArgs: 1, 
     requiresAuth: true, 
+    requiresToken: false,
     description: 'Analyze team supply', 
     usage: '/team [contract_address]',
     helpMessage: 'Analyze team and insider supply for a token using a custom algorithm.\n\nThis command helps identify wallets likely associated with the project team or insiders and estimates the total supply they control.'
@@ -132,6 +134,7 @@ const commandConfigs = {
     minArgs: 1, 
     maxArgs: 1, 
     requiresAuth: true, 
+    requiresToken: false,
     description: 'Analyze fresh wallets', 
     usage: '/fresh [contract_address]',
     helpMessage: 'Analyze fresh wallets holding a token with significant amounts (>0.05% of supply).\n\nThis command identifies wallets with low transaction counts that hold meaningful amounts of a token.'
@@ -141,6 +144,7 @@ const commandConfigs = {
     minArgs: 1, 
     maxArgs: 4, 
     requiresAuth: true, 
+    requiresToken: false,
     description: 'Analyze best traders', 
     usage: '/bt [contract_address] [winrate_threshold](50%)* [portfolio_threshold]($10000)* [sort_option](port)*',
     helpMessage: 'Analyse the 100 best traders for a specific contract with given winrate and portfolio thresholds.\n\nSort options:\n- winrate/wr: Sort by win rate\n- pnl: Sort by profit and loss\n- portfolio/port: Sort by portfolio value\n- sol: Sort by SOL balance'
@@ -150,6 +154,7 @@ const commandConfigs = {
     minArgs: 1, 
     maxArgs: 4, 
     requiresAuth: true, 
+    requiresToken: false,
     description: 'Analyze early buyers', 
     usage: '/eb [coin_address] [time_frame](1h)* [min buy amount](1%)* [pump or nopump]*',
     helpMessage: 'Analyze early buyers of a specific coin within a given time frame and minimum buy amount threshold.\nTime frame is in hours or minutes (e.g., 2h or 30m).\n Percentage is the minimum percentage of total supply bought in one or multiple transactions over the timeframe.\nIf you only want to analyse pumpfun transactions, use the flag "pump" at the end of your command and if you only want to analyse raydium transactions use "nopump"'
@@ -159,7 +164,7 @@ const commandConfigs = {
     minArgs: 2, 
     maxArgs: 6, 
     requiresAuth: true,
-    requiresToken: true, // This command requires token verification
+    requiresToken: false,
     description: 'Cross-analyze multiple tokens', 
     usage: '/cross [contract_address1] [contract_address2] ... [Combined_value_min]($10000)*',
     helpMessage: 'Search for wallets that hold multiple coins. You can analyze up to 5 coins with a minimum combined value (default is $10000).\n\nThis command helps identify wallets that have significant holdings across multiple tokens.'
@@ -169,6 +174,7 @@ const commandConfigs = {
     minArgs: 2, 
     maxArgs: 3, 
     requiresAuth: true, 
+    requiresToken: false,
     description: 'Cross-analyze top traders of multiple tokens', 
     usage: '/crossbt [contract_address1] [contract_address2] [contract_address3]*',
     helpMessage: 'Analyze and compare the top 100 traders across 2 or 3 tokens to find common wallets. This command will help you find the best traders across a meta or wallets from team/insiders involved in multiple coins. You can analyze up to 3 coins.'
@@ -178,6 +184,7 @@ const commandConfigs = {
     minArgs: 2, 
     maxArgs: Infinity, 
     requiresAuth: true, 
+    requiresToken: false,
     description: 'Search for specific wallets', 
     usage: '/search [contract_address] [partial_address1] [partial_address2]*',
     helpMessage: 'Search for wallets that hold a specific token and match the partial addresses provided.\n\nTip: You can add multiple parts to one partial address by separating them with one or multiple dots.'
@@ -187,7 +194,7 @@ const commandConfigs = {
     minArgs: 1,
     maxArgs: 1,
     requiresAuth: true,
-    requiresToken: true, // This command requires token verification
+    requiresToken: false,
     description: 'Analyze pumpfun developer profile and previous coins',
     usage: '/dev [contract_address]',
     helpMessage: 'Analyze a developer wallet to check their history of creating coins, including success rate, bonding rate, funding methods and connections to other successful projects.'
@@ -197,6 +204,7 @@ const commandConfigs = {
     minArgs: 0,
     maxArgs: 0,
     requiresAuth: true,
+    requiresToken: false,
     description: 'Search for wallets by criteria',
     usage: '/walletsearch',
     helpMessage: 'Search for wallets based on criteria like Win Rate, Portfolio Value, Profit, and SOL Balance.\n\n' +
@@ -211,11 +219,27 @@ const commandConfigs = {
     aliases: ['tr'], 
     minArgs: 0, 
     maxArgs: 0, 
-    requiresAuth: true, 
+    requiresAuth: false, 
+    requiresToken: false,
     description: 'Show tracked supplies', 
     usage: '/tracker',
     helpMessage: 'Display a list of all your currently tracked supplies.\n\nUse this command to view and manage your active supply tracking sessions.'
   },
+  'verifygroup': {
+    aliases: ['vg', 'groupverify'],
+    minArgs: 0,
+    maxArgs: 0,
+    requiresAuth: false,
+    requiresToken: false,
+    description: 'Verify your group using token verification',
+    usage: '/verifygroup',
+    helpMessage: 'Start the group wallet verification process to access token-gated features.\n\n' +
+                'This command helps you verify your group by sending a small amount of tokens:\n\n' +
+                '• Only group admins can initiate verification\n' +
+                '• No wallet connection necessary\n' +
+                `• Requires ${process.env.MIN_TOKEN_THRESHOLD || 1} ${process.env.TOKEN_SYMBOL || 'tokens'} minimum\n\n` +
+                'Once verified, your group will have access to all token-gated features without a subscription.'
+},
   'subscribe': {
     aliases: ['sub'],
     minArgs: 0,

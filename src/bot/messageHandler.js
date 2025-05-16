@@ -103,6 +103,7 @@ class MessageHandler {
             }
         }
     
+        
         // Vérification des commandes
         if (msg.text.startsWith('/')) {
             const { command, isAdmin } = this.commandParser.parseCommand(msg.text);
@@ -131,20 +132,23 @@ class MessageHandler {
             const requiresToken = commandConfig?.requiresToken ?? false;
 
             // Handle token verification first if command requires token specifically
+            // These commands are ONLY available via token verification, not subscription
             if (requiresToken && !isGroup) {
                 const hasTokenVerification = await this.accessControl.hasTokenVerification(userId);
                 
                 if (!hasTokenVerification && command !== 'verify') {
                     await this.bot.sendMessage(chatId,
-                        "🔒 <b>Token Access Required</b>\n\n" +
-                        "This feature is only available to token holders.\n\n" +
-                        "Please use /verify to connect your wallet and verify your token holdings.",
+                        "🔒 <b>Token Verification Required</b>\n\n" +
+                        `This premium command is <b>exclusively available</b> to token holders.\n\n` +
+                        "• Use /verify to start the verification process (<b>no wallet connection necessary</b>)\n" +
+                        `• You need to hold our token to access this feature\n\n` +
+                        "This command cannot be accessed via subscription.",
                         { 
                             parse_mode: 'HTML',
                             message_thread_id: messageThreadId,
                             reply_markup: {
                                 inline_keyboard: [[
-                                    { text: "🔑 Verify Wallet", callback_data: "tokenverify:reverify" }
+                                    { text: "🔑 Start Verification", callback_data: "tokenverify:reverify" }
                                 ]]
                             }
                         }
@@ -154,34 +158,70 @@ class MessageHandler {
             }
 
             // Check regular subscription if required
+            // These commands are available via EITHER subscription OR token verification
             if (requiresAuth) {
                 if (isGroup) {
-                    // Exception for the command subscribe_group
-                    if (command !== 'subscribe_group') {
+                    // Exception for the commands that are always allowed in groups
+                    if (command !== 'subscribe_group' && command !== 'verifygroup') {
+                        // Check if the group has a subscription
                         const hasActiveGroupSub = await this.accessControl.hasActiveGroupSubscription(chatId);
-                        if (!hasActiveGroupSub) {
+                        
+                        // Also check if the group has token verification
+                        let hasGroupVerification = false;
+                        try {
+                            hasGroupVerification = !hasActiveGroupSub ? 
+                                await this.accessControl.hasGroupTokenVerification(chatId) : false;
+                        } catch (error) {
+                            this.logger.error(`Error checking group verification: ${error.message}`);
+                        }
+                        
+                        // Also check if this specific user has token verification
+                        let userHasAccess = false;
+                        if (!hasActiveGroupSub && !hasGroupVerification) {
+                            try {
+                                userHasAccess = await this.accessControl.hasTokenVerification(userId);
+                            } catch (error) {
+                                this.logger.error(`Error checking token verification for user in group: ${error.message}`);
+                            }
+                        }
+                        
+                        // If no valid access method, show access required message
+                        if (!hasActiveGroupSub && !hasGroupVerification && !userHasAccess) {
                             await this.bot.sendMessage(chatId,
-                                "🔒 This command requires an active group subscription\n\n" +
-                                "• Use /subscribe_group to view our group subscription plans\n" +
-                                "• Try /preview to test our features before subscribing\n\n" +
+                                "🔒 <b>Access Required</b>\n\n" +
+                                "This command requires access which you can get through:\n\n" +
+                                "1️⃣ <b>Group Subscription</b>\n" +
+                                "• Use /subscribe_group to subscribe this group\n\n" + 
+                                "2️⃣ <b>Group Verification</b>\n" +
+                                "• Use /verifygroup to verify this group with tokens (<b>no wallet connection necessary</b>)\n\n" +
+                                "3️⃣ <b>Individual Access</b>\n" +
+                                "• Members can use /verify in private chat with the bot\n\n" +
+                                "Try /preview to test our features\n\n" +
                                 "Need help? Contact @Rengon0x for support",
-                                { message_thread_id: messageThreadId }
+                                { 
+                                    parse_mode: 'HTML',
+                                    message_thread_id: messageThreadId 
+                                }
                             );
                             return;
                         }
                     }
                 } else {
-                    // Check user access - either subscription or token based on configuration
-                    const username = msg.from.username;
+                    // Private chat - check user access either through subscription or token verification
                     const hasAccess = await this.accessControl.isAllowed(userId, 'user', username);
                     
                     // Skip access check for subscription and verify commands themselves
                     if (!hasAccess && command !== 'subscribe' && command !== 'verify') {
                         await this.bot.sendMessage(chatId,
-                            "🔒 This command requires an active subscription\n\n" +
-                            "• Use /subscribe to view our subscription plans\n" +
-                            "• Try /preview to test our features before subscribing\n\n" +
-                            "Need help? Contact @Rengon0x for support"
+                            "🔒 <b>Access Required</b>\n\n" +
+                            "This command requires access which you can get through either:\n\n" +
+                            "1️⃣ <b>Subscription</b>\n" +
+                            "• Use /subscribe to view our subscription plans\n\n" + 
+                            "2️⃣ <b>Token Verification</b>\n" +
+                            "• Use /verify to start the verification process (<b>no wallet connection necessary</b>)\n\n" +
+                            "Try /preview to test our features before subscribing/verifying\n\n" +
+                            "Need help? Contact @Rengon0x for support",
+                            { parse_mode: 'HTML' }
                         );
                         return;
                     }

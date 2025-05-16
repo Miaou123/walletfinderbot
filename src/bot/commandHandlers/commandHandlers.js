@@ -26,6 +26,7 @@ const WalletCheckerHandler = require('./walletCheckerHandler');
 const WalletSearcherHandler = require('./walletSearcherHandler');
 const PreviewHandler = require('./previewHandler');
 const TokenVerifyHandler = require('./tokenVerifyHandler');
+const GroupVerifyHandler = require('./groupVerifyHandler');
 const stateManager = require('../../utils/stateManager');
 const logger = require('../../utils/logger');
 
@@ -69,7 +70,8 @@ class CommandHandlers {
                 'topholders': this.topHoldersHandler,
                 'cross': this.crossHandler,
                 'earlybuyers': this.earlyBuyersHandler, 
-                'tokenverify': this.tokenVerifyHandler
+                'tokenverify': this.tokenVerifyHandler,
+                'groupverify': this.groupVerifyHandler
             };
 
             await this.setupCallbackHandler();
@@ -114,7 +116,8 @@ class CommandHandlers {
         this.helpHandler = new HelpHandler(this.bot);
         this.teamHandler = new TeamHandler(this.stateManager);
         this.tokenVerifyHandler = new TokenVerifyHandler(this.accessControl);
-        
+        this.groupVerifyHandler = new GroupVerifyHandler(this.accessControl);
+
         // Initialize the wallet searcher handler
         const WalletSearcherHandler = require('./walletSearcherHandler');
         this.walletSearcherHandler = new WalletSearcherHandler(this.accessControl);
@@ -167,6 +170,8 @@ class CommandHandlers {
             'referral': { handler: this.referralHandler.handleCommand, context: this.referralHandler },
             'walletsearch': { handler: this.walletSearcherHandler.handleCommand, context: this.walletSearcherHandler },
             'verify': { handler: this.tokenVerifyHandler.handleCommand, context: this.tokenVerifyHandler },
+            'verifygroup': { handler: this.groupVerifyHandler.handleCommand, context: this.groupVerifyHandler },
+
 
             // Admin Commands
             'adduser': { handler: (msg, args) => this.adminCommands.handleCommand('adduser', msg, args) },

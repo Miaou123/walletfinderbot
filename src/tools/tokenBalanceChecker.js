@@ -61,42 +61,53 @@ class TokenBalanceChecker {
      */
     async checkAllUsers() {
         try {
-            logger.info('Starting periodic token balance check for all verified users');
+            logger.info('Starting periodic token balance check for all verified users and groups');
             
-            // This will update all verified wallets in one batch operation
-            const result = await TokenVerificationService.checkAllVerifiedWallets();
+            // Check individual users first
+            const userResult = await this.accessControl.tokenVerificationService.checkAllVerifiedWallets();
             
-            // If enabled, notify users whose access was revoked
-            if (this.notifyUsersOnRevoke && result.revokedUsers && result.revokedUsers.length > 0) {
-                await this.notifyRevokedUsers(result.revokedUsers);
+            // Then check groups
+            const groupResult = await this.accessControl.tokenVerificationService.checkAllVerifiedGroups();
+            
+            // If enabled, notify revoked users and groups
+            if (this.notifyUsersOnRevoke) {
+                if (userResult.revokedUsers && userResult.revokedUsers.length > 0) {
+                    await this.notifyRevokedUsers(userResult.revokedUsers);
+                }
+                
+                if (groupResult.revokedGroups && groupResult.revokedGroups.length > 0) {
+                    await this.notifyRevokedGroups(groupResult.revokedGroups);
+                }
             }
             
-            logger.info(`Periodic token balance check completed. Checked ${result.checkedCount || 0} wallets.`);
+            logger.info(`Periodic token balance check completed. Checked ${userResult.checkedCount || 0} users and ${groupResult.checkedCount || 0} groups.`);
+            
+            return {
+                users: userResult,
+                groups: groupResult
+            };
         } catch (error) {
             logger.error('Error in periodic token balance check:', error);
         }
     }
     
-    /**
-     * Notify users whose access was revoked due to insufficient token balance
-     * @param {Array} revokedUsers - Array of user IDs whose access was revoked
-     */
-    async notifyRevokedUsers(revokedUsers) {
-        if (!this.bot || !revokedUsers || revokedUsers.length === 0) return;
+    // Add a new method to notify revoked groups:
+    async notifyRevokedGroups(revokedGroups) {
+        if (!this.bot || !revokedGroups || revokedGroups.length === 0) return;
         
-        for (const user of revokedUsers) {
+        for (const group of revokedGroups) {
             try {
                 await this.bot.sendMessage(
-                    user.userId,
-                    `⚠️ <b>Token Access Revoked</b>\n\n` +
-                    `Your token balance has fallen below the required minimum of ${this.MIN_TOKEN_THRESHOLD} ${this.TOKEN_SYMBOL}.\n\n` +
-                    `Current balance: ${user.tokenBalance} ${this.TOKEN_SYMBOL}\n\n` +
-                    `To regain access to token-gated features, please ensure your wallet contains at least ${this.MIN_TOKEN_THRESHOLD} ${this.TOKEN_SYMBOL} and use /verify to update your verification status.`,
+                    group.groupId,
+                    `⚠️ <b>Group Token Access Revoked</b>\n\n` +
+                    `This group's token balance has fallen below the required minimum of ${this.MIN_TOKEN_THRESHOLD} ${this.TOKEN_SYMBOL}.\n\n` +
+                    `Current balance: ${group.tokenBalance} ${this.TOKEN_SYMBOL}\n\n` +
+                    `To regain access to token-gated features, please ensure the wallet contains at least ${this.MIN_TOKEN_THRESHOLD} ${this.TOKEN_SYMBOL} and use /verifygroup to update verification.`,
                     { parse_mode: 'HTML' }
                 );
-                logger.debug(`Sent token revocation notice to user ${user.userId}`);
+                logger.debug(`Sent token revocation notice to group ${group.groupId}`);
             } catch (error) {
-                logger.error(`Failed to send revocation notice to user ${user.userId}:`, error);
+                logger.error(`Failed to send revocation notice to group ${group.groupId}:`, error);
             }
         }
     }

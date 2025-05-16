@@ -6,6 +6,7 @@ const PaymentService = require('./services/paymentService');
 const TokenVerificationService = require('./services/tokenVerificationService');
 const SubscriptionConfig = require('./config/subscriptionConfig');
 const VerifiedUser = require('./models/verified_user');
+const VerifiedGroup = require('./models/verified_group');
 
 
 // Pour la compatibilité avec le code existant
@@ -35,5 +36,6 @@ module.exports = {
     PaymentService,
     SubscriptionConfig, 
     TokenVerificationService,
-    VerifiedUser
+    VerifiedUser,
+    VerifiedGroup
 };

@@ -889,6 +889,310 @@ class TokenVerificationService {
             return { success: false, error: error.message };
         }
     }
+
+
+/**
+ * Create a verification session for a group
+ * @param {string} groupId - Telegram group ID
+ * @param {string} groupName - Telegram group name
+ * @param {string} adminUserId - Admin user ID
+ * @param {string} adminUsername - Admin username
+ * @returns {Promise<Object>} - Created session object
+ */
+static async createGroupVerificationSession(groupId, groupName, adminUserId, adminUsername) {
+    try {
+        const collection = await this.getCollection();
+        
+        // Generate a verification address keypair
+        const keypairInfo = await this.generateVerificationAddress();
+        
+        const sessionId = `verify_group_${Date.now()}_${groupId}`;
+        const expiresAt = new Date(Date.now() + (30 * 60 * 1000)); // 30 minutes
+        
+        const session = {
+            sessionId,
+            type: 'group', // Important to distinguish from user verification
+            groupId,
+            groupName,
+            adminUserId,
+            adminUsername,
+            paymentAddress: keypairInfo.paymentAddress,
+            privateKey: keypairInfo.privateKey,
+            verificationAmount: VERIFICATION_AMOUNT,
+            status: 'pending',
+            createdAt: new Date(),
+            expiresAt,
+            lastChecked: null,
+            walletAddress: null, // Will be filled when verified
+            tokenBalance: 0, // Will be updated when verified
+            lastUpdated: new Date()
+        };
+        
+        // Instead of directly inserting, check for and delete existing sessions
+        await collection.deleteMany({ groupId, status: 'pending' });
+        await collection.insertOne(session);
+        
+        logger.debug(`Created group verification session for group ${groupId} with payment address ${keypairInfo.paymentAddress}`);
+        
+        return session;
+    } catch (error) {
+        logger.error(`Error creating group verification session for ${groupId}:`, error);
+        throw error;
+    }
+}
+
+/**
+ * Get verified group information
+ * @param {string} groupId - Group ID from Telegram
+ * @returns {Promise<Object|null>} - Verified group info or null
+ */
+static async getVerifiedGroup(groupId) {
+    try {
+        // Use direct MongoDB methods to avoid mongoose timeouts
+        const db = await getDatabase();
+        const collection = db.collection('verifiedGroups');
+        
+        // First check the VerifiedGroup collection
+        const verifiedGroup = await collection.findOne(
+            { groupId, isActive: true },
+            { sort: { verifiedAt: -1 } }
+        );
+        
+        if (verifiedGroup) {
+            return verifiedGroup;
+        }
+        
+        // Fall back to the sessions collection if not found in main collection
+        const sessionsCollection = await this.getCollection();
+        
+        const session = await sessionsCollection.findOne(
+            { groupId, status: 'verified', type: 'group' },
+            { sort: { verifiedAt: -1 } }
+        );
+        
+        return session;
+    } catch (error) {
+        logger.error(`Error getting verified group for "${groupId}":`, error);
+        return null;
+    }
+}
+
+/**
+ * Check if a group has verified status with sufficient tokens
+ * @param {string} groupId - Group ID
+ * @returns {Promise<Object>} - Access status
+ */
+static async checkGroupVerifiedStatus(groupId) {
+    try {
+        const verifiedGroup = await this.getVerifiedGroup(groupId);
+        
+        if (!verifiedGroup) {
+            return { 
+                hasAccess: false, 
+                reason: 'not_verified' 
+            };
+        }
+        
+        // If last check was recent, use cached result
+        const cacheTime = 30 * 60 * 1000; // 30 minutes
+        if (verifiedGroup.lastChecked && 
+            (new Date() - new Date(verifiedGroup.lastChecked)) < cacheTime) {
+            
+            return {
+                hasAccess: verifiedGroup.tokenBalance >= MIN_TOKEN_THRESHOLD,
+                walletAddress: verifiedGroup.walletAddress,
+                tokenBalance: verifiedGroup.tokenBalance
+            };
+        }
+        
+        // If TOKEN_ADDRESS is not defined, skip balance check
+        if (!TOKEN_ADDRESS) {
+            return {
+                hasAccess: true,
+                walletAddress: verifiedGroup.walletAddress,
+                tokenBalance: verifiedGroup.tokenBalance || MIN_TOKEN_THRESHOLD
+            };
+        }
+        
+        // Check current token balance
+        const holders = await getHolders(TOKEN_ADDRESS);
+        const holder = holders.find(h => h.address === verifiedGroup.walletAddress);
+        
+        const tokenBalance = holder ? holder.balance : 0;
+        const hasAccess = tokenBalance >= MIN_TOKEN_THRESHOLD;
+        
+        // Update cached balance in both models
+        if (verifiedGroup.sessionId) {
+            await this.updateVerificationSession(verifiedGroup.sessionId, {
+                tokenBalance,
+                lastChecked: new Date(),
+                accessRevoked: !hasAccess
+            });
+        }
+        
+        // Update the verified group model too
+        try {
+            // Use direct MongoDB update to avoid mongoose
+            const db = await getDatabase();
+            const collection = db.collection('verifiedGroups');
+            
+            await collection.updateOne(
+                { groupId },
+                {
+                    $set: {
+                        tokenBalance,
+                        lastChecked: new Date(),
+                        isActive: hasAccess
+                    }
+                }
+            );
+        } catch (error) {
+            logger.error(`Failed to update verified group record: ${error.message}`);
+            // Continue anyway
+        }
+        
+        return {
+            hasAccess,
+            walletAddress: verifiedGroup.walletAddress,
+            tokenBalance
+        };
+    } catch (error) {
+        logger.error(`Error checking group verification status for "${groupId}":`, error);
+        
+        // If we can't check, default to last known state
+        const verifiedGroup = await this.getVerifiedGroup(groupId);
+        if (verifiedGroup) {
+            return {
+                hasAccess: verifiedGroup.tokenBalance >= MIN_TOKEN_THRESHOLD,
+                walletAddress: verifiedGroup.walletAddress,
+                tokenBalance: verifiedGroup.tokenBalance,
+                cached: true
+            };
+        }
+        
+        return { hasAccess: false, reason: 'error' };
+    }
+}
+
+/**
+ * Update the verified group record in the database
+ */
+static async updateVerifiedGroupRecord(groupId, groupName, adminUserId, adminUsername, walletAddress, tokenBalance, transactionHash, sessionId) {
+    try {
+        const verifiedGroupData = {
+            groupId,
+            groupName,
+            adminUserId,
+            adminUsername,
+            walletAddress,
+            tokenBalance,
+            verifiedAt: new Date(),
+            lastChecked: new Date(),
+            isActive: true,
+            transactionHash,
+            sessionId
+        };
+        
+        // Use direct MongoDB methods to avoid mongoose timeouts
+        const db = await getDatabase();
+        const collection = db.collection('verifiedGroups');
+        
+        await collection.updateOne(
+            { groupId },
+            { $set: verifiedGroupData },
+            { upsert: true }
+        );
+        
+        return true;
+    } catch (error) {
+        logger.error(`Error in updateVerifiedGroupRecord: ${error.message}`);
+        throw error;
+    }
+}
+
+/**
+ * Check and update token balances for all verified groups
+ * Part of periodic check process
+ */
+static async checkAllVerifiedGroups() {
+    try {
+        // Use direct MongoDB methods
+        const db = await getDatabase();
+        const collection = db.collection('verifiedGroups');
+        
+        // Get all active verified groups
+        const verifiedGroups = await collection.find({ isActive: true }).toArray();
+        
+        logger.info(`Checking balances for ${verifiedGroups.length} verified groups`);
+        
+        // Skip if TOKEN_ADDRESS is not defined
+        if (!TOKEN_ADDRESS || verifiedGroups.length === 0) {
+            return {
+                success: true,
+                checkedCount: verifiedGroups.length,
+                revokedCount: 0,
+                revokedGroups: []
+            };
+        }
+        
+        // Get all holders in one call for efficiency
+        const holders = await getHolders(TOKEN_ADDRESS);
+        const holdersMap = {};
+        
+        holders.forEach(holder => {
+            holdersMap[holder.address] = holder.balance;
+        });
+        
+        // Check each group and prepare bulk operations
+        const bulkOps = [];
+        const revokedGroups = [];
+        
+        for (const group of verifiedGroups) {
+            const tokenBalance = holdersMap[group.walletAddress] || 0;
+            const hasAccess = tokenBalance >= MIN_TOKEN_THRESHOLD;
+            
+            bulkOps.push({
+                updateOne: {
+                    filter: { _id: group._id },
+                    update: { 
+                        $set: { 
+                            tokenBalance, 
+                            lastChecked: new Date(),
+                            isActive: hasAccess
+                        } 
+                    }
+                }
+            });
+            
+            // If access was just revoked, track for notifications
+            if (!hasAccess && group.isActive) {
+                logger.info(`Access revoked for group ${group.groupId} - insufficient tokens`);
+                revokedGroups.push({
+                    groupId: group.groupId,
+                    groupName: group.groupName,
+                    tokenBalance,
+                    walletAddress: group.walletAddress
+                });
+            }
+        }
+        
+        // Execute all updates in bulk
+        if (bulkOps.length > 0) {
+            await collection.bulkWrite(bulkOps);
+        }
+        
+        logger.info(`Completed balance check for ${verifiedGroups.length} groups`);
+        return {
+            success: true,
+            checkedCount: verifiedGroups.length,
+            revokedCount: revokedGroups.length,
+            revokedGroups
+        };
+    } catch (error) {
+        logger.error('Error in group verification balance check:', error);
+        return { success: false, error: error.message };
+    }
+}
 }
 
 module.exports = TokenVerificationService;
