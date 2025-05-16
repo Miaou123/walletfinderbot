@@ -1,15 +1,18 @@
 // src/bot/commandHandlers/tokenVerifyHandler.js
 const BaseHandler = require('./baseHandler');
 const logger = require('../../utils/logger');
-const { TokenVerificationService } = require('../../database');
+const { TokenVerificationService } = require('../../database'); // Import directly
+const config = require('../../utils/config');
 
 class TokenVerifyHandler extends BaseHandler {
-    constructor() {
+    constructor(accessControl) {
         super();
         this.commandName = 'verify';
-        this.TOKEN_ADDRESS = process.env.TOKEN_ADDRESS;
-        this.TOKEN_SYMBOL = process.env.TOKEN_SYMBOL || 'tokens';
-        this.MIN_TOKEN_THRESHOLD = parseInt(process.env.MIN_TOKEN_THRESHOLD || '1');
+        this.accessControl = accessControl;
+        this.tokenVerificationService = TokenVerificationService; // Use directly imported service
+        this.TOKEN_ADDRESS = config.TOKEN_ADDRESS || process.env.TOKEN_ADDRESS;
+        this.TOKEN_SYMBOL = config.TOKEN_SYMBOL || process.env.TOKEN_SYMBOL || 'tokens';
+        this.MIN_TOKEN_THRESHOLD = parseInt(config.MIN_TOKEN_THRESHOLD || process.env.MIN_TOKEN_THRESHOLD || '1');
     }
 
     generateCallbackData(action, params = {}) {
@@ -44,8 +47,9 @@ class TokenVerifyHandler extends BaseHandler {
         const username = (msg.from.username || '').toLowerCase().replace(/^@/, '');
         
         try {
+            // Use the directly imported service instead of relying on accessControl
             // Check if user is already verified
-            const verifiedStatus = await TokenVerificationService.checkVerifiedStatus(userId);
+            const verifiedStatus = await this.tokenVerificationService.checkVerifiedStatus(userId);
             
             if (verifiedStatus.hasAccess) {
                 // User is already verified
@@ -72,7 +76,7 @@ class TokenVerifyHandler extends BaseHandler {
             }
             
             // Create verification session
-            const session = await TokenVerificationService.createVerificationSession(
+            const session = await this.tokenVerificationService.createVerificationSession(
                 userId,
                 username,
                 chatId
@@ -151,7 +155,7 @@ class TokenVerifyHandler extends BaseHandler {
             );
             
             // Get the verification session first to get the paymentAddress
-            const session = await TokenVerificationService.getVerificationSession(sessionId);
+            const session = await this.tokenVerificationService.getVerificationSession(sessionId);
             if (!session) {
                 logger.error(`Verification session not found: ${sessionId}`);
                 await bot.editMessageText(
@@ -175,7 +179,7 @@ class TokenVerifyHandler extends BaseHandler {
             logger.debug(`Verification session found: ${sessionId}, payment address: ${session.paymentAddress}`);
             
             // Check verification
-            const result = await TokenVerificationService.checkVerification(sessionId);
+            const result = await this.tokenVerificationService.checkVerification(sessionId);
             logger.debug(`Verification result:`, result);
             
             if (result.success) {

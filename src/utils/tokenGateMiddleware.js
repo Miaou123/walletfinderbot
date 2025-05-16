@@ -1,6 +1,5 @@
 // src/utils/tokenGateMiddleware.js
 const logger = require('./logger');
-const { TokenVerificationService } = require('../database');
 
 // Simple in-memory cache to reduce database lookups
 const verificationCache = new Map();
@@ -23,6 +22,24 @@ function tokenGatedCommand(handlerFunction) {
                 return await handlerFunction(bot, msg, args, messageThreadId);
             }
             
+            // Check if we have access control from message context
+            const accessControl = msg.accessControl || 
+                                 msg.context?.accessControl || 
+                                 global.accessControl;
+            
+            if (!accessControl || !accessControl.tokenVerificationService) {
+                logger.error('Token verification service not available in middleware');
+                
+                // If verification service is not available, default to allowing access
+                await bot.sendMessage(
+                    chatId,
+                    "⚠️ Token verification service is not available. Proceeding with limited functionality.",
+                    { message_thread_id: messageThreadId }
+                );
+                
+                return await handlerFunction(bot, msg, args, messageThreadId);
+            }
+            
             // Check cache first
             const cacheKey = `verify_${userId}`;
             const cachedResult = verificationCache.get(cacheKey);
@@ -39,7 +56,7 @@ function tokenGatedCommand(handlerFunction) {
             }
             
             // Not in cache or cache expired, check verification status
-            const verificationStatus = await TokenVerificationService.checkVerifiedStatus(userId);
+            const verificationStatus = await accessControl.tokenVerificationService.checkVerifiedStatus(userId);
             
             // Update cache
             verificationCache.set(cacheKey, {
@@ -68,6 +85,15 @@ function tokenGatedCommand(handlerFunction) {
             return await handlerFunction(bot, msg, args, messageThreadId);
         }
     };
+}
+
+/**
+ * Clear the verification cache for a user
+ * @param {string} userId - User ID to clear cache for
+ */
+function clearVerificationCache(userId) {
+    const cacheKey = `verify_${userId}`;
+    verificationCache.delete(cacheKey);
 }
 
 /**
@@ -108,10 +134,68 @@ function tokenGatedGroupCommand(handlerFunction) {
             // For group chats, check if the group itself has a subscription
             if (msg.chat.type !== 'private') {
                 // Group chat logic - typically check if the group has a subscription
-                // In your case, you might allow the command if the group is subscribed
-                // This would use your existing group subscription logic
-                // For now, just check if the user is verified
-                return await handlerFunction(bot, msg, args, messageThreadId);
+                // Logic to verify if the group has paid access or subscription
+                
+                // Access control should be available from message context
+                const accessControl = msg.accessControl || 
+                                    msg.context?.accessControl || 
+                                    global.accessControl;
+                                    
+                if (!accessControl) {
+                    logger.error('Access control not available in group middleware');
+                    return await handlerFunction(bot, msg, args, messageThreadId);
+                }
+                
+                // Check if this group has an active subscription
+                const hasSubscription = await accessControl.hasActiveGroupSubscription(chatId);
+                
+                if (hasSubscription) {
+                    // Group is subscribed - allow command
+                    return await handlerFunction(bot, msg, args, messageThreadId);
+                }
+                
+                // If group isn't subscribed, check if this specific user is verified
+                // This allows token holders to use commands in unsubscribed groups
+                const cacheKey = `verify_${userId}`;
+                const cachedResult = verificationCache.get(cacheKey);
+                
+                if (cachedResult && (Date.now() - cachedResult.timestamp < CACHE_DURATION)) {
+                    if (cachedResult.hasAccess) {
+                        // User has access from cache, proceed with command
+                        return await handlerFunction(bot, msg, args, messageThreadId);
+                    }
+                }
+                
+                // Not in cache, check verification status
+                if (accessControl.tokenVerificationService) {
+                    const verificationStatus = await accessControl.tokenVerificationService.checkVerifiedStatus(userId);
+                    
+                    // Update cache
+                    verificationCache.set(cacheKey, {
+                        hasAccess: verificationStatus.hasAccess,
+                        timestamp: Date.now()
+                    });
+                    
+                    if (verificationStatus.hasAccess) {
+                        // User is a token holder, allow command
+                        return await handlerFunction(bot, msg, args, messageThreadId);
+                    }
+                }
+                
+                // Neither group is subscribed nor user is a token holder
+                await bot.sendMessage(
+                    chatId,
+                    "🔒 <b>Access Required</b>\n\n" +
+                    "This command requires either:\n" +
+                    "• A group subscription (/subscribe_group), or\n" +
+                    "• Individual token verification (/verify in private chat with the bot)\n\n" +
+                    "Please use one of these methods to gain access.",
+                    { 
+                        parse_mode: 'HTML', 
+                        message_thread_id: messageThreadId 
+                    }
+                );
+                return;
             }
             
             // For private chats, use the regular token verification
@@ -133,5 +217,6 @@ function tokenGatedGroupCommand(handlerFunction) {
 
 module.exports = {
     tokenGatedCommand,
-    tokenGatedGroupCommand
+    tokenGatedGroupCommand,
+    clearVerificationCache
 };

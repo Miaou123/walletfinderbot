@@ -1,3 +1,5 @@
+// src/bot/accessManager/accessControlDB.js
+
 const logger = require('../../utils/logger');
 const { SubscriptionService, PaymentService, TokenVerificationService } = require('../../database');
 
@@ -28,6 +30,20 @@ class AccessControlDB {
            } else if (!usernameIndex) {
                await this.usersCollection.createIndex({ username: 1 }, { unique: false });
            }
+           
+           // Ensure indexes for tokenVerification and verifiedUsers collections
+           const verifiedUsersCollection = this.db.collection('verifiedUsers');
+           const tokenVerificationCollection = this.db.collection('tokenVerification');
+           
+           await verifiedUsersCollection.createIndex({ userId: 1 });
+           await verifiedUsersCollection.createIndex({ walletAddress: 1 });
+           await verifiedUsersCollection.createIndex({ isActive: 1 });
+           await verifiedUsersCollection.createIndex({ userId: 1, isActive: 1 });
+           
+           await tokenVerificationCollection.createIndex({ sessionId: 1 }, { unique: true });
+           await tokenVerificationCollection.createIndex({ userId: 1 });
+           await tokenVerificationCollection.createIndex({ paymentAddress: 1 });
+           await tokenVerificationCollection.createIndex({ status: 1 });
    
            logger.info('AccessControlDB indexes ensured');
            return true;
@@ -102,11 +118,33 @@ class AccessControlDB {
         }
     }
 
+    /**
+     * Check if user has token-verified status
+     * @param {string} userId - User ID from Telegram
+     * @returns {Promise<boolean>} Whether the user is token-verified
+     */
+    async hasTokenVerification(userId) {
+        if (!userId) return false;
+        
+        try {
+            if (!this.tokenVerificationService) {
+                logger.warn('Token verification service not available');
+                return false;
+            }
+            
+            const verificationStatus = await this.tokenVerificationService.checkVerifiedStatus(userId);
+            return verificationStatus.hasAccess;
+            
+        } catch (error) {
+            logger.error(`Error checking token verification for user "${userId}":`, error);
+            return false;
+        }
+    }
+
     async hasActiveGroupSubscription(chatId) {
         if (!chatId) return false;
 
         try {
-            // Pareil ici
             const subscription = await SubscriptionService.getGroupSubscription(chatId);
             return Boolean(subscription?.active);
         } catch (error) {
@@ -115,63 +153,29 @@ class AccessControlDB {
         }
     }
     
-    /**
-     * Check if user has token verification and meets minimum token requirement
-     * @param {string} userId - User ID from Telegram
-     * @returns {Promise<boolean>} Whether the user has a verified wallet with enough tokens
-     */
-    async hasTokenVerification(userId) {
-        if (!userId) return false;
-        
-        try {
-            // Check verification status via the token verification service
-            const verificationStatus = await this.tokenVerificationService.checkVerifiedStatus(userId);
-            return verificationStatus.hasAccess;
-        } catch (error) {
-            logger.error(`Error checking token verification for user "${userId}":`, error);
-            return false;
-        }
-    }
-    
-    /**
-     * Get the token verification status with details
-     * @param {string} userId - User ID from Telegram
-     * @returns {Promise<Object>} - Verification status details
-     */
-    async getTokenVerificationStatus(userId) {
-        if (!userId) return { hasAccess: false, reason: 'invalid_user_id' };
-        
-        try {
-            return await this.tokenVerificationService.checkVerifiedStatus(userId);
-        } catch (error) {
-            logger.error(`Error getting token verification status for user "${userId}":`, error);
-            return { hasAccess: false, reason: 'error', error: error.message };
-        }
-    }
-
    /**
-    * Check if a user has access based on specified context
-    * @param {string} identifier - User ID or group ID
-    * @param {string} context - Access context: 'user', 'admin', 'group', or 'token'
-    * @param {string} username - Username for subscription checks
-    * @returns {Promise<boolean>} - Whether access is allowed
+    * Check if a user has access via any method (subscription, token verification, or admin)
+    * @param {string} identifier - User ID or chat ID
+    * @param {string} context - Access context: 'user', 'group', 'admin', or 'token'
+    * @param {string} username - Username (optional, for subscription check)
     */
    async isAllowed(identifier, context = 'user', username = null) {
        try {
-           if (context === 'admin') return await this.isAdmin(identifier);
+           // Admin access trumps all
+           if (context === 'admin' || await this.isAdmin(identifier)) return true;
+           
+           // For group context, check group subscription
            if (context === 'group') return await this.hasActiveGroupSubscription(identifier);
+           
+           // For token context, check token verification
            if (context === 'token') return await this.hasTokenVerification(identifier);
            
-           // Default user check - either subscription or token verification is sufficient
+           // First check subscription (traditional paid access)
            const hasSubscription = await this.hasActiveSubscription(identifier, username);
+           if (hasSubscription) return true;
            
-           // If configured to accept either subscription or token verification
-           if (this.config.ALLOW_TOKEN_OR_SUBSCRIPTION) {
-               const hasTokens = await this.hasTokenVerification(identifier);
-               return hasSubscription || hasTokens;
-           }
-           
-           return hasSubscription;
+           // If no subscription, check token verification as fallback
+           return await this.hasTokenVerification(identifier);
        } catch (error) {
            logger.error(`Error in isAllowed check for ${identifier} (${context}):`, error);
            return false;

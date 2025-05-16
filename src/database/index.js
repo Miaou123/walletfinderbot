@@ -5,6 +5,7 @@ const SubscriptionService = require('./services/subscriptionService');
 const PaymentService = require('./services/paymentService');
 const TokenVerificationService = require('./services/tokenVerificationService');
 const SubscriptionConfig = require('./config/subscriptionConfig');
+const VerifiedUser = require('./models/verified_user');
 
 
 // Pour la compatibilité avec le code existant
@@ -34,4 +35,5 @@ module.exports = {
     PaymentService,
     SubscriptionConfig, 
     TokenVerificationService,
+    VerifiedUser
 };

@@ -27,17 +27,20 @@ const nonSensitiveConfig = {
     MOONSHOT: 'MoonCVVNZFSYkqNXP6bxHLPL6QQJiMagDL3qcqUQTrG',
   },
   
-  // Token verification settings
+};
+
+const tokenGatingConfig = {
   TOKEN_ADDRESS: process.env.TOKEN_ADDRESS,
-  TOKEN_SYMBOL: process.env.TOKEN_SYMBOL || 'token',
-  TOKEN_MIN_THRESHOLD: parseInt(process.env.TOKEN_MIN_THRESHOLD || '1'),
-  VERIFICATION_ADDRESS: process.env.VERIFICATION_ADDRESS,
-  ALLOW_TOKEN_OR_SUBSCRIPTION: process.env.ALLOW_TOKEN_OR_SUBSCRIPTION === 'true',
+  TOKEN_SYMBOL: process.env.TOKEN_SYMBOL || 'tokens',
+  MIN_TOKEN_THRESHOLD: parseInt(process.env.MIN_TOKEN_THRESHOLD || '1'),
+  BALANCE_CHECK_INTERVAL: parseInt(process.env.BALANCE_CHECK_INTERVAL || '24'),
+  NOTIFY_ON_REVOKE: process.env.NOTIFY_ON_REVOKE === 'true'
 };
 
 const config = {
   ...sensitiveConfig,
   ...nonSensitiveConfig,
+  ...tokenGatingConfig,
   HELIUS_RPC_URL: sensitiveConfig.HELIUS_API_KEY ? `https://mainnet.helius-rpc.com/?api-key=${sensitiveConfig.HELIUS_API_KEY}` : '',
 };
 

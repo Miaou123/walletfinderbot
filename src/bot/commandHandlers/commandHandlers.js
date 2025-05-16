@@ -68,11 +68,8 @@ class CommandHandlers {
                 'besttraders': this.bestTradersHandler,
                 'topholders': this.topHoldersHandler,
                 'cross': this.crossHandler,
-<<<<<<< HEAD
                 'earlybuyers': this.earlyBuyersHandler, 
-=======
                 'tokenverify': this.tokenVerifyHandler
->>>>>>> origin/dev
             };
 
             await this.setupCallbackHandler();
@@ -116,7 +113,7 @@ class CommandHandlers {
         this.topHoldersHandler = new TopHoldersHandler();
         this.helpHandler = new HelpHandler(this.bot);
         this.teamHandler = new TeamHandler(this.stateManager);
-        this.tokenVerifyHandler = new TokenVerifyHandler();
+        this.tokenVerifyHandler = new TokenVerifyHandler(this.accessControl);
         
         // Initialize the wallet searcher handler
         const WalletSearcherHandler = require('./walletSearcherHandler');

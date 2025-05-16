@@ -97,23 +97,22 @@ async function updateIndexes(db) {
             tokenVerification: {
                 collection: db.collection("tokenVerification"),
                 indexes: [
-                    { key: { sessionId: 1 }, options: { unique: true } },
-                    { key: { userId: 1 }, options: {} },
-                    { key: { paymentAddress: 1 }, options: { unique: true } },
-                    { key: { expiresAt: 1 }, options: {} },
-                    { key: { status: 1 }, options: {} }
+                  { key: { sessionId: 1 }, options: { unique: true } },
+                  { key: { userId: 1 }, options: {} },
+                  { key: { paymentAddress: 1 }, options: {} },
+                  { key: { walletAddress: 1 }, options: {} },
+                  { key: { status: 1 }, options: {} },
                 ]
-            },
-            verifiedUsers: {
+              },
+              verifiedUsers: {
                 collection: db.collection("verifiedUsers"),
                 indexes: [
-                    { key: { userId: 1 }, options: { unique: true } },
-                    { key: { walletAddress: 1 }, options: {} },
-                    { key: { isActive: 1 }, options: {} },
-                    { key: { verifiedAt: -1 }, options: {} },
-                    { key: { lastChecked: 1 }, options: {} }
+                  { key: { userId: 1 }, options: {} },
+                  { key: { walletAddress: 1 }, options: {} },
+                  { key: { isActive: 1 }, options: {} },
+                  { key: { userId: 1, isActive: 1 }, options: {} },
                 ]
-            }
+              }
         };
 
         await createCollections(db, collections);

@@ -1,50 +1,31 @@
-// models/verified_user.js
+// src/database/models/verified_user.js
 const { Schema, model } = require('mongoose');
+const logger = require('../../utils/logger');
 
-/**
- * Schema for storing token-verified users
- */
 const verifiedUserSchema = new Schema({
-  userId: {
-    type: String,
-    required: true,
-    unique: true,
-    index: true
-  },
-  username: {
-    type: String,
-    sparse: true,
-    index: true
-  },
-  walletAddress: {
-    type: String,
-    required: true
-  },
-  tokenBalance: {
-    type: Number,
-    default: 0
-  },
-  verifiedAt: {
-    type: Date,
-    default: Date.now
-  },
-  lastChecked: {
-    type: Date,
-    default: Date.now
-  },
-  isActive: {
-    type: Boolean,
-    default: true
-  },
+  userId: { type: String, required: true, index: true },
+  username: { type: String },
+  walletAddress: { type: String, required: true },
+  tokenBalance: { type: Number, default: 0 },
+  verifiedAt: { type: Date, default: Date.now },
+  lastChecked: { type: Date, default: Date.now },
+  isActive: { type: Boolean, default: true },
   transactionHash: String,
   sessionId: String
-});
+}, { timestamps: true });
 
-// Create indexes for performance
-verifiedUserSchema.index({ walletAddress: 1 });
-verifiedUserSchema.index({ verifiedAt: -1 });
-verifiedUserSchema.index({ isActive: 1 });
+// Create a compound index for quick lookups
+verifiedUserSchema.index({ userId: 1, isActive: 1 });
 
-const VerifiedUser = model('VerifiedUser', verifiedUserSchema);
+// Export using mongoose.model
+let VerifiedUser;
+try {
+  // Try to get existing model first
+  VerifiedUser = model('VerifiedUser');
+} catch (error) {
+  // Model doesn't exist yet, create it
+  VerifiedUser = model('VerifiedUser', verifiedUserSchema, 'verifiedUsers');
+  logger.debug('VerifiedUser model initialized');
+}
 
 module.exports = VerifiedUser;
