@@ -5,20 +5,22 @@ const logger = require('../../utils/logger');
 
 class HeliusRateLimiter {
   constructor() {
+    // Updated for Business tier: 200 RPC requests/s
     this.rpcLimiter = new Bottleneck({
-      reservoir: 30,            // 50 requests allowed
-      reservoirRefreshAmount: 50, // Replenish 50 permits
+      reservoir: 200,             // 200 requests allowed per second
+      reservoirRefreshAmount: 200, // Replenish 200 permits
       reservoirRefreshInterval: 1000, // Every 1 second (1000ms)
-      maxConcurrent: 5,        // Only 10 requests in parallel
-      minTime: 50            // Minimum 20ms between requests
+      maxConcurrent: 20,          // Increased parallel requests
+      minTime: 5                  // Minimum 5ms between requests
     });
     
+    // Updated for Business tier: 50 API requests/s (DAS & Enhanced)
     this.apiLimiter = new Bottleneck({
-      reservoir: 8,            // 10 requests allowed 
-      reservoirRefreshAmount: 10, // Replenish 10 permits
+      reservoir: 50,              // 50 requests allowed per second
+      reservoirRefreshAmount: 50,  // Replenish 50 permits
       reservoirRefreshInterval: 1000, // Every 1 second (1000ms)
-      maxConcurrent: 3,         // Only 5 requests in parallel 
-      minTime: 200              // Minimum 100ms between requests
+      maxConcurrent: 15,          // Increased parallel requests
+      minTime: 20                 // Minimum 20ms between requests
     });
 
     this.requestQueue = {
@@ -37,7 +39,7 @@ class HeliusRateLimiter {
 
     this.defaultTimeout = 45000;
 
-    // Démarrer le traitement automatique des batchs
+    // Start automatic batch processing
     setInterval(() => this.processBatches(), 100);
   }
 
@@ -51,8 +53,6 @@ class HeliusRateLimiter {
     const requestId = Math.random().toString(36).substring(7);
     const requestKey = this.getRequestKey(requestConfig);
     
-
-
     return new Promise((resolve, reject) => {
       if (!this.requestQueue[apiType].has(requestKey)) {
         this.requestQueue[apiType].set(requestKey, []);
@@ -77,7 +77,8 @@ class HeliusRateLimiter {
           continue;
         }
 
-        const batch = requests.splice(0, 20);
+        // Increased batch size to handle higher throughput
+        const batch = requests.splice(0, apiType === 'rpc' ? 40 : 20);
         this.processBatch(batch, apiType);
       }
     }
@@ -109,7 +110,7 @@ class HeliusRateLimiter {
     this.stats.totalRequests++;
   
     try {
-      // Augmenter progressivement le timeout en fonction du nombre de tentatives
+      // Gradually increase timeout based on attempt number
       const dynamicTimeout = (config.timeout || this.defaultTimeout) * Math.min(attempt, 2);
       
       const response = await axios({
@@ -131,7 +132,7 @@ class HeliusRateLimiter {
         return null;
       }
   
-      // Si c'était une retry réussie, comptabiliser
+      // Count successful retries
       if (attempt > 1) {
         this.stats.retrySuccesses++;
       }
@@ -143,7 +144,7 @@ class HeliusRateLimiter {
       const isTimeout = error.code === 'ECONNABORTED' || error.message.includes('timeout');
       
       if ((error.response && error.response.status === 429 || isTimeout) && attempt < maxAttempts) {
-        // Backoff exponentiel avec un peu de jitter pour réduire les pics de charge
+        // Exponential backoff with jitter to reduce load spikes
         const baseDelay = Math.pow(2, attempt) * 1000;
         const jitter = Math.random() * 1000;
         const delay = Math.min(baseDelay + jitter, 30000);
