@@ -41,72 +41,91 @@ class TokenVerifyHandler extends BaseHandler {
         };
     }
 
-    async handleCommand(bot, msg, args, messageThreadId) {
-        const userId = msg.from.id.toString();
-        const chatId = msg.chat.id.toString(); 
-        const username = (msg.from.username || '').toLowerCase().replace(/^@/, '');
-        
-        try {
-            // Use the directly imported service instead of relying on accessControl
-            // Check if user is already verified
-            const verifiedStatus = await this.tokenVerificationService.checkVerifiedStatus(userId);
-            
-            if (verifiedStatus.hasAccess) {
-                // User is already verified
-                await bot.sendMessage(
-                    chatId,
-                    `✅ You are already verified!\n\n` +
-                    `Your wallet: \`${verifiedStatus.walletAddress.substring(0, 6)}...${verifiedStatus.walletAddress.substring(verifiedStatus.walletAddress.length - 4)}\`\n` +
-                    `Token balance: ${verifiedStatus.tokenBalance} ${this.TOKEN_SYMBOL}\n\n` +
-                    `You have access to all token-gated features.`,
-                    { 
-                        parse_mode: 'Markdown',
-                        message_thread_id: messageThreadId,
-                        reply_markup: {
-                            inline_keyboard: [[
-                                { 
-                                    text: "🔄 Update Verification", 
-                                    callback_data: this.generateCallbackData('reverify') 
-                                }
-                            ]]
-                        }
-                    }
-                );
-                return;
-            }
-            
-            // Create verification session
-            const session = await this.tokenVerificationService.createVerificationSession(
-                userId,
-                username,
-                chatId
-            );
-            
-            // Send verification instructions
-            const message = await this.formatVerificationMessage(session);
-            
-            await bot.sendMessage(
-                chatId,
-                message,
-                {
-                    parse_mode: 'HTML',
-                    message_thread_id: messageThreadId,
-                    reply_markup: {
-                        inline_keyboard: [[
-                            this.createVerificationCheckButton(session.sessionId)
-                        ]]
-                    }
+ /**
+ * Handle the command
+ * @param {Object} bot - The telegram bot instance
+ * @param {Object} msg - The message object from Telegram
+ * @param {Array} args - Command arguments
+ * @param {number|undefined} messageThreadId - The message thread ID if applicable
+ */
+async handleCommand(bot, msg, args, messageThreadId) {
+    const userId = msg.from.id.toString();
+    const chatId = msg.chat.id.toString();
+    const username = (msg.from.username || '').toLowerCase().replace(/^@/, '');
+    
+    try {
+      // Verify this command is used only in private chats
+      const isPrivateChat = msg.chat.type === 'private';
+      if (!isPrivateChat) {
+        await bot.sendMessage(
+          chatId,
+          "❌ The /verify command can only be used in private chat with the bot.\n\n" +
+          "To verify a group, use /verifygroup in the group chat instead.\n\n",
+          { message_thread_id: messageThreadId }
+        );
+        return;
+      }
+      
+      // Use the directly imported service instead of relying on accessControl
+      // Check if user is already verified
+      const verifiedStatus = await this.tokenVerificationService.checkVerifiedStatus(userId);
+      
+      if (verifiedStatus.hasAccess) {
+        // User is already verified
+        await bot.sendMessage(
+          chatId,
+          `✅ You are already verified!\n\n` +
+          `Your wallet: \`${verifiedStatus.walletAddress.substring(0, 6)}...${verifiedStatus.walletAddress.substring(verifiedStatus.walletAddress.length - 4)}\`\n` +
+          `Token balance: ${verifiedStatus.tokenBalance} ${this.TOKEN_SYMBOL}\n\n` +
+          `You have access to all token-gated features.`,
+          { 
+            parse_mode: 'Markdown',
+            message_thread_id: messageThreadId,
+            reply_markup: {
+              inline_keyboard: [[
+                { 
+                  text: "🔄 Update Verification", 
+                  callback_data: this.generateCallbackData('reverify') 
                 }
-            );
-        } catch (error) {
-            logger.error(`Error in token verification for user ${userId}:`, error);
-            await bot.sendMessage(
-                chatId,
-                "An error occurred while processing your verification request. Please try again later.",
-                { message_thread_id: messageThreadId }
-            );
+              ]]
+            }
+          }
+        );
+        return;
+      }
+      
+      // Create verification session
+      const session = await this.tokenVerificationService.createVerificationSession(
+        userId,
+        username,
+        chatId
+      );
+      
+      // Send verification instructions
+      const message = await this.formatVerificationMessage(session);
+      
+      await bot.sendMessage(
+        chatId,
+        message,
+        {
+          parse_mode: 'HTML',
+          message_thread_id: messageThreadId,
+          reply_markup: {
+            inline_keyboard: [[
+              this.createVerificationCheckButton(session.sessionId)
+            ]]
+          }
         }
+      );
+    } catch (error) {
+      logger.error(`Error in token verification for user ${userId}:`, error);
+      await bot.sendMessage(
+        chatId,
+        "An error occurred while processing your verification request. Please try again later.",
+        { message_thread_id: messageThreadId }
+      );
     }
+  }
     
     async handleCallback(bot, query) {
         try {

@@ -123,282 +123,289 @@ class TokenVerificationService {
         }
     }
     
-    /**
-     * Check if a verification transaction has been completed
-     * @param {string} sessionId - Session identifier
-     * @returns {Promise<Object>} - Status information
-     */
-    static async checkVerification(sessionId) {
-        try {
-            const collection = await this.getCollection();
-            const session = await collection.findOne({ sessionId });
+/**
+ * Check if a verification transaction has been completed
+ * @param {string} sessionId - Session identifier
+ * @returns {Promise<Object>} - Status information
+ */
+static async checkVerification(sessionId) {
+    try {
+      const collection = await this.getCollection();
+      const session = await collection.findOne({ sessionId });
+      
+      if (!session) {
+        return { success: false, reason: 'Session not found' };
+      }
+      
+      if (session.status === 'verified') {
+        return { success: true, alreadyVerified: true, walletAddress: session.walletAddress };
+      }
+      
+      if (session.expiresAt < new Date()) {
+        return { success: false, reason: 'Session expired' };
+      }
+      
+      // Check for token transfer to verification address
+      const solanaApi = getSolanaApi();
+      
+      // Get recent transactions to the verification address
+      const verificationAddress = session.paymentAddress;
+      if (!verificationAddress) {
+        return { success: false, reason: 'Invalid verification address' };
+      }
+      
+      // Track this check attempt
+      let retryAttempt = (session.retryCount || 0) + 1;
+      await this.updateVerificationSession(sessionId, { 
+        retryCount: retryAttempt,
+        lastChecked: new Date()
+      });
+      
+      // 1) Get transaction signatures for the address
+      let signatures = [];
+      try {
+        logger.debug(`Getting signatures for address ${verificationAddress} (attempt ${retryAttempt})`);
+        signatures = await solanaApi.getSignaturesForAddress(
+          new PublicKey(verificationAddress),
+          { limit: 10 }
+        );
+      } catch (error) {
+        logger.error(`Error getting signatures for address ${verificationAddress}:`, error);
+        return { success: false, reason: 'Error checking signatures' };
+      }
+      
+      // If third attempt with no signatures, provide clearer feedback
+      if (signatures.length === 0 && retryAttempt >= 3) {
+        return { 
+          success: false, 
+          reason: 'Verification transfer not detected yet',
+          note: 'No transactions found after multiple attempts. Please check if you sent the tokens to the correct address.'
+        };
+      }
+      
+      // Find a transaction that happened after session creation
+      let senderWallet = null;
+      let transactionHash = null;
+      
+      // If we have signatures, check them
+      if (signatures && signatures.length > 0) {
+        for (const tx of signatures) {
+          // Skip if transaction has an error or was before the session was created
+          if (tx.err || (tx.blockTime && new Date(tx.blockTime * 1000) < session.createdAt)) {
+            continue;
+          }
+          
+          // Get transaction details
+          try {
+            const txDetails = await solanaApi.getTransaction(
+              tx.signature,
+              { encoding: 'jsonParsed' }
+            );
             
-            if (!session) {
-                return { success: false, reason: 'Session not found' };
+            // Check for token transfer
+            if (TOKEN_ADDRESS ? 
+              this.isTokenTransfer(txDetails, TOKEN_ADDRESS, verificationAddress) : 
+              this.hasAnyTokenTransfer(txDetails, verificationAddress)) {
+              senderWallet = this.getSenderFromTransaction(txDetails);
+              transactionHash = tx.signature;
+              break;
             }
-            
-            if (session.status === 'verified') {
-                return { success: true, alreadyVerified: true, walletAddress: session.walletAddress };
-            }
-            
-            if (session.expiresAt < new Date()) {
-                return { success: false, reason: 'Session expired' };
-            }
-            
-            // Check for token transfer to verification address
-            const solanaApi = getSolanaApi();
-            
-            // Get recent transactions to the verification address
-            const verificationAddress = session.paymentAddress;
-            if (!verificationAddress) {
-                return { success: false, reason: 'Invalid verification address' };
-            }
-            
-            // 1) Get transaction signatures for the address
-            let signatures;
-            try {
-                logger.debug(`Getting signatures for address ${verificationAddress}`);
-                signatures = await solanaApi.getSignaturesForAddress(
-                    new PublicKey(verificationAddress),
-                    { limit: 10 }
-                );
-            } catch (error) {
-                logger.error(`Error getting signatures for address ${verificationAddress}:`, error);
-                return { success: false, reason: 'Error checking signatures' };
-            }
-            
-            // 2) Check the current balance
-            let balanceLamports;
-            let balanceSol = 0;
-            try {
-                balanceLamports = await solanaApi.getBalance(
-                    new PublicKey(verificationAddress)
-                );
-                
-                if (balanceLamports !== null && balanceLamports !== undefined) {
-                    balanceSol = balanceLamports / 1e9;
-                    logger.debug(`Balance of verification address ${verificationAddress}: ${balanceSol} SOL`);
-                } else {
-                    logger.warn(`Received null/undefined balance for ${verificationAddress}`);
-                }
-            } catch (error) {
-                logger.error(`Error getting balance for address ${verificationAddress}:`, error);
-                // Continue execution even with balance error - we'll rely on signatures
-                logger.debug(`Continuing verification despite balance error`);
-            }
-            
-            // Find a transaction that happened after session creation
-            let senderWallet = null;
-            let transactionHash = null;
-            
-            // If we have signatures, check them
-            if (signatures && signatures.length > 0) {
-                for (const tx of signatures) {
-                    if (tx.err || (tx.blockTime && new Date(tx.blockTime * 1000) < session.createdAt)) {
-                        continue;
-                    }
-                    
-                    // Get transaction details
-                    try {
-                        const txDetails = await solanaApi.getTransaction(
-                            tx.signature,
-                            { encoding: 'jsonParsed' }
-                        );
-                        
-                        // Check for token transfer - either specific token or any token
-                        if (TOKEN_ADDRESS ? 
-                            this.isTokenTransfer(txDetails, TOKEN_ADDRESS, verificationAddress) : 
-                            this.hasAnyTokenTransfer(txDetails, verificationAddress)) {
-                            senderWallet = this.getSenderFromTransaction(txDetails);
-                            transactionHash = tx.signature;
-                            break;
-                        }
-                    } catch (error) {
-                        logger.error(`Error checking transaction ${tx.signature}:`, error);
-                        continue;
-                    }
-                }
-            } else if (balanceSol > 0) {
-                // If we don't have signatures yet but have balance, check again after a short delay
-                logger.debug("No signatures found on first attempt. Retrying in 2 seconds...");
-                await new Promise(res => setTimeout(res, 2000));
-                
-                try {
-                    signatures = await solanaApi.getSignaturesForAddress(
-                        new PublicKey(verificationAddress),
-                        { limit: 10 }
-                    );
-                    
-                    if (signatures && signatures.length > 0) {
-                        // Process the first valid transaction
-                        for (const tx of signatures) {
-                            try {
-                                const txDetails = await solanaApi.getTransaction(
-                                    tx.signature,
-                                    { encoding: 'jsonParsed' }
-                                );
-                                
-                                // Check for token transfer
-                                if (TOKEN_ADDRESS ? 
-                                    this.isTokenTransfer(txDetails, TOKEN_ADDRESS, verificationAddress) : 
-                                    this.hasAnyTokenTransfer(txDetails, verificationAddress)) {
-                                    senderWallet = this.getSenderFromTransaction(txDetails);
-                                    transactionHash = tx.signature;
-                                    break;
-                                }
-                            } catch (error) {
-                                logger.error(`Error in retry checking tx ${tx.signature}:`, error);
-                                continue;
-                            }
-                        }
-                    }
-                } catch (error) {
-                    logger.error(`Error in retry getting signatures:`, error);
-                }
-            }
-            
-            if (!senderWallet) {
-                return { 
-                    success: false, 
-                    reason: 'Verification transfer not detected yet',
-                    partialBalance: balanceSol
-                };
-            }
-            
-            // Check if token address is available
-            if (!TOKEN_ADDRESS) {
-                logger.warn(`TOKEN_ADDRESS is not defined. Skipping token balance check.`);
-                
-                // If no token address is defined, consider verification successful based on transfer only
-                await this.updateVerificationSession(sessionId, {
-                    status: 'verified',
-                    walletAddress: senderWallet,
-                    tokenBalance: MIN_TOKEN_THRESHOLD, // Default to minimum
-                    verifiedAt: new Date(),
-                    lastChecked: new Date(),
-                    transactionHash
-                });
-                
-                // Also create/update the verified user record
-                try {
-                    await this.updateVerifiedUserRecord(
-                        session.userId,
-                        session.username,
-                        senderWallet,
-                        MIN_TOKEN_THRESHOLD,
-                        transactionHash,
-                        sessionId
-                    );
-                } catch (error) {
-                    logger.error(`Error updating verified user record: ${error.message}`);
-                    // Continue anyway to return success to the user
-                }
-                
-                return { 
-                    success: true, 
-                    walletAddress: senderWallet, 
-                    tokenBalance: MIN_TOKEN_THRESHOLD,
-                    transactionHash,
-                    note: 'Token balance check skipped - TOKEN_ADDRESS not defined'
-                };
-            }
-            
-            // Get user's token balance
-            let tokenBalance = 0;
-            
-            try {
-                // Check if sender holds enough tokens
-                const holders = await getHolders(TOKEN_ADDRESS);
-                logger.debug(`Found ${holders?.length || 0} holders for token ${TOKEN_ADDRESS}`);
-                
-                // Find the holder and safely assign it
-                const holderInfo = holders?.find(h => h.address === senderWallet);
-                
-                if (!holderInfo || holderInfo.balance < MIN_TOKEN_THRESHOLD) {
-                    return { 
-                        success: false, 
-                        reason: 'Insufficient token balance',
-                        walletAddress: senderWallet,
-                        tokenBalance: holderInfo ? holderInfo.balance : 0
-                    };
-                }
-                
-                // If we get here, we have a valid holder with sufficient tokens
-                tokenBalance = holderInfo.balance;
-                
-            } catch (error) {
-                logger.error(`Error checking token balance for wallet ${senderWallet}:`, error);
-                
-                // If token balance check fails, proceed with verification anyway using default values
-                await this.updateVerificationSession(sessionId, {
-                    status: 'verified',
-                    walletAddress: senderWallet,
-                    tokenBalance: MIN_TOKEN_THRESHOLD, // Default to minimum
-                    verifiedAt: new Date(),
-                    lastChecked: new Date(),
-                    transactionHash
-                });
-                
-                // Also create/update the verified user record
-                try {
-                    await this.updateVerifiedUserRecord(
-                        session.userId,
-                        session.username,
-                        senderWallet,
-                        MIN_TOKEN_THRESHOLD,
-                        transactionHash,
-                        sessionId
-                    );
-                } catch (error) {
-                    logger.error(`Error updating verified user record: ${error.message}`);
-                    // Continue anyway to return success to the user
-                }
-                
-                return { 
-                    success: true, 
-                    walletAddress: senderWallet, 
-                    tokenBalance: MIN_TOKEN_THRESHOLD, // Default to minimum
-                    transactionHash,
-                    note: 'Token balance check failed but proceeding with verification'
-                };
-            }
-            
-            // Now update verification session with our safely established values
-            await this.updateVerificationSession(sessionId, {
-                status: 'verified',
-                walletAddress: senderWallet,
-                tokenBalance: tokenBalance, // Using our safely set tokenBalance
-                verifiedAt: new Date(),
-                lastChecked: new Date(),
-                transactionHash
-            });
-            
-            // Also create/update the verified user record in the main model
-            try {
-                await this.updateVerifiedUserRecord(
-                    session.userId,
-                    session.username,
-                    senderWallet,
-                    tokenBalance,
-                    transactionHash,
-                    sessionId
-                );
-            } catch (error) {
-                logger.error(`Error updating verified user record: ${error.message}`);
-                // Continue anyway to return success to the user
-            }
-            
-            return { 
-                success: true, 
-                walletAddress: senderWallet, 
-                tokenBalance: tokenBalance,
-                transactionHash
-            };
-        } catch (error) {
-            logger.error(`Error checking verification for session ${sessionId}:`, error);
-            return { success: false, reason: 'Error checking verification' };
+          } catch (error) {
+            logger.error(`Error checking transaction ${tx.signature}:`, error);
+            continue;
+          }
         }
+      }
+      
+      if (!senderWallet) {
+        return { 
+          success: false, 
+          reason: 'Verification transfer not detected yet'
+        };
+      }
+      
+      // Check if token address is available
+      if (!TOKEN_ADDRESS) {
+        logger.warn(`TOKEN_ADDRESS is not defined. Skipping token balance check.`);
+        
+        // If no token address is defined, consider verification successful based on transfer only
+        await this.updateVerificationSession(sessionId, {
+          status: 'verified',
+          walletAddress: senderWallet,
+          tokenBalance: MIN_TOKEN_THRESHOLD, // Default to minimum
+          verifiedAt: new Date(),
+          lastChecked: new Date(),
+          transactionHash
+        });
+        
+        // Also create/update the verified record - IMPORTANT: Only update the appropriate collection
+        try {
+          // Check if this is a group verification session
+          if (session.type === 'group') {
+            // This is a group verification - only update verifiedGroups
+            await this.updateVerifiedGroupRecord(
+              session.groupId,
+              session.groupName,
+              session.adminUserId,
+              session.adminUsername,
+              senderWallet,
+              MIN_TOKEN_THRESHOLD,
+              transactionHash,
+              sessionId
+            );
+          } else {
+            // This is a user verification - only update verifiedUsers
+            await this.updateVerifiedUserRecord(
+              session.userId,
+              session.username,
+              senderWallet,
+              MIN_TOKEN_THRESHOLD,
+              transactionHash,
+              sessionId
+            );
+          }
+        } catch (error) {
+          logger.error(`Error updating verified record: ${error.message}`);
+          // Continue anyway to return success to the user
+        }
+        
+        return { 
+          success: true, 
+          walletAddress: senderWallet, 
+          tokenBalance: MIN_TOKEN_THRESHOLD,
+          transactionHash,
+          note: 'Token balance check skipped - TOKEN_ADDRESS not defined'
+        };
+      }
+      
+      // Get user's token balance
+      let tokenBalance = 0;
+      
+      try {
+        // Check if sender holds enough tokens
+        const holders = await getHolders(TOKEN_ADDRESS);
+        logger.debug(`Found ${holders?.length || 0} holders for token ${TOKEN_ADDRESS}`);
+        
+        // Find the holder and safely assign it
+        const holderInfo = holders?.find(h => h.address === senderWallet);
+        
+        if (!holderInfo || holderInfo.balance < MIN_TOKEN_THRESHOLD) {
+          return { 
+            success: false, 
+            reason: 'Insufficient token balance',
+            walletAddress: senderWallet,
+            tokenBalance: holderInfo ? holderInfo.balance : 0
+          };
+        }
+        
+        // If we get here, we have a valid holder with sufficient tokens
+        tokenBalance = holderInfo.balance;
+        
+      } catch (error) {
+        logger.error(`Error checking token balance for wallet ${senderWallet}:`, error);
+        
+        // If token balance check fails, proceed with verification anyway using default values
+        await this.updateVerificationSession(sessionId, {
+          status: 'verified',
+          walletAddress: senderWallet,
+          tokenBalance: MIN_TOKEN_THRESHOLD, // Default to minimum
+          verifiedAt: new Date(),
+          lastChecked: new Date(),
+          transactionHash
+        });
+        
+        // IMPORTANT: Only update the appropriate collection based on session type
+        try {
+          // Check if this is a group verification
+          if (session.type === 'group') {
+            // Group verification - only update verifiedGroups
+            await this.updateVerifiedGroupRecord(
+              session.groupId,
+              session.groupName,
+              session.adminUserId,
+              session.adminUsername,
+              senderWallet,
+              MIN_TOKEN_THRESHOLD,
+              transactionHash,
+              sessionId
+            );
+          } else {
+            // User verification - only update verifiedUsers
+            await this.updateVerifiedUserRecord(
+              session.userId,
+              session.username,
+              senderWallet,
+              MIN_TOKEN_THRESHOLD,
+              transactionHash,
+              sessionId
+            );
+          }
+        } catch (error) {
+          logger.error(`Error updating verified record: ${error.message}`);
+          // Continue anyway to return success to the user
+        }
+        
+        return { 
+          success: true, 
+          walletAddress: senderWallet, 
+          tokenBalance: MIN_TOKEN_THRESHOLD, // Default to minimum
+          transactionHash,
+          note: 'Token balance check failed but proceeding with verification'
+        };
+      }
+      
+      // Now update verification session with our safely established values
+      await this.updateVerificationSession(sessionId, {
+        status: 'verified',
+        walletAddress: senderWallet,
+        tokenBalance: tokenBalance, // Using our safely set tokenBalance
+        verifiedAt: new Date(),
+        lastChecked: new Date(),
+        transactionHash
+      });
+      
+      // IMPORTANT: Only update the appropriate collection based on session type
+      try {
+        // Check if this is a group verification
+        if (session.type === 'group') {
+          // Group verification - only update verifiedGroups collection
+          await this.updateVerifiedGroupRecord(
+            session.groupId,
+            session.groupName,
+            session.adminUserId,
+            session.adminUsername,
+            senderWallet,
+            tokenBalance,
+            transactionHash,
+            sessionId
+          );
+        } else {
+          // User verification - only update verifiedUsers collection
+          await this.updateVerifiedUserRecord(
+            session.userId,
+            session.username,
+            senderWallet,
+            tokenBalance,
+            transactionHash,
+            sessionId
+          );
+        }
+      } catch (error) {
+        logger.error(`Error updating verified record: ${error.message}`);
+        // Continue anyway to return success to the user
+      }
+      
+      return { 
+        success: true, 
+        walletAddress: senderWallet, 
+        tokenBalance: tokenBalance,
+        transactionHash
+      };
+    } catch (error) {
+      logger.error(`Error checking verification for session ${sessionId}:`, error);
+      return { success: false, reason: 'Error checking verification' };
     }
+  }
     
     /**
      * Update the verified user record in the database
@@ -708,102 +715,121 @@ class TokenVerificationService {
         }
     }
     
-    /**
-     * Check if a user has verified status with sufficient tokens
-     * @param {string} userId - User ID
-     * @returns {Promise<Object>} - Access status
-     */
-    static async checkVerifiedStatus(userId) {
-        try {
-            const verifiedWallet = await this.getVerifiedWallet(userId);
-            
-            if (!verifiedWallet) {
-                return { 
-                    hasAccess: false, 
-                    reason: 'not_verified' 
-                };
-            }
-            
-            // If last check was recent, use cached result
-            const cacheTime = 30 * 60 * 1000; // 30 minutes
-            if (verifiedWallet.lastChecked && 
-                (new Date() - new Date(verifiedWallet.lastChecked)) < cacheTime) {
-                
-                return {
-                    hasAccess: verifiedWallet.tokenBalance >= MIN_TOKEN_THRESHOLD,
-                    walletAddress: verifiedWallet.walletAddress,
-                    tokenBalance: verifiedWallet.tokenBalance
-                };
-            }
-            
-            // If TOKEN_ADDRESS is not defined, skip balance check
-            if (!TOKEN_ADDRESS) {
-                return {
-                    hasAccess: true,
-                    walletAddress: verifiedWallet.walletAddress,
-                    tokenBalance: verifiedWallet.tokenBalance || MIN_TOKEN_THRESHOLD
-                };
-            }
-            
-            // Check current token balance
-            const holders = await getHolders(TOKEN_ADDRESS);
-            const holder = holders.find(h => h.address === verifiedWallet.walletAddress);
-            
-            const tokenBalance = holder ? holder.balance : 0;
-            const hasAccess = tokenBalance >= MIN_TOKEN_THRESHOLD;
-            
-            // Update cached balance in both models
-            if (verifiedWallet.sessionId) {
-                await this.updateVerificationSession(verifiedWallet.sessionId, {
-                    tokenBalance,
-                    lastChecked: new Date(),
-                    accessRevoked: !hasAccess
-                });
-            }
-            
-            // Update the verified user model too
-            try {
-                // Use direct MongoDB update to avoid mongoose
-                const db = await getDatabase();
-                const collection = db.collection('verifiedUsers');
-                
-                await collection.updateOne(
-                    { userId },
-                    {
-                        $set: {
-                            tokenBalance,
-                            lastChecked: new Date(),
-                            isActive: hasAccess
-                        }
-                    }
-                );
-            } catch (error) {
-                logger.error(`Failed to update verified user record: ${error.message}`);
-                // Continue anyway
-            }
-            
-            return {
-                hasAccess,
-                walletAddress: verifiedWallet.walletAddress,
-                tokenBalance
-            };
-        } catch (error) {
-            logger.error(`Error checking verified status for user ${userId}:`, error);
-            
-            // If we can't check, default to last known state
-            const verifiedWallet = await this.getVerifiedWallet(userId);
-            if (verifiedWallet) {
-                return {
-                    hasAccess: verifiedWallet.tokenBalance >= MIN_TOKEN_THRESHOLD,
-                    walletAddress: verifiedWallet.walletAddress,
-                    tokenBalance: verifiedWallet.tokenBalance,
-                    cached: true
-                };
-            }
-            
-            return { hasAccess: false, reason: 'error' };
+/**
+ * Check if a user has verified status with sufficient tokens
+ * @param {string} userId - User ID
+ * @returns {Promise<Object>} - Access status
+ */
+static async checkVerifiedStatus(userId) {
+    try {
+      // Always check the verifiedUsers collection first
+      const db = await getDatabase();
+      const verifiedUsersCollection = db.collection('verifiedUsers');
+      
+      // Look for the user in the correct collection
+      const verifiedUser = await verifiedUsersCollection.findOne({ 
+        userId: userId.toString(),
+        isActive: true 
+      });
+      
+      if (verifiedUser) {
+        logger.debug(`Found verified user ${userId} in verifiedUsers collection`);
+        
+        // If last check was recent, use cached result
+        const cacheTime = 30 * 60 * 1000; // 30 minutes
+        if (verifiedUser.lastChecked && 
+            (new Date() - new Date(verifiedUser.lastChecked)) < cacheTime) {
+          
+          return {
+            hasAccess: verifiedUser.tokenBalance >= MIN_TOKEN_THRESHOLD,
+            walletAddress: verifiedUser.walletAddress,
+            tokenBalance: verifiedUser.tokenBalance,
+            fromCollection: 'verifiedUsers'
+          };
         }
+        
+        // If TOKEN_ADDRESS is not defined, skip balance check
+        if (!TOKEN_ADDRESS) {
+          return {
+            hasAccess: true,
+            walletAddress: verifiedUser.walletAddress,
+            tokenBalance: verifiedUser.tokenBalance || MIN_TOKEN_THRESHOLD,
+            fromCollection: 'verifiedUsers'
+          };
+        }
+        
+        // Check current token balance
+        const holders = await getHolders(TOKEN_ADDRESS);
+        const holder = holders.find(h => h.address === verifiedUser.walletAddress);
+        
+        const tokenBalance = holder ? holder.balance : 0;
+        const hasAccess = tokenBalance >= MIN_TOKEN_THRESHOLD;
+        
+        // Update cached balance in verifiedUsers collection
+        await verifiedUsersCollection.updateOne(
+          { userId: userId.toString() },
+          {
+            $set: {
+              tokenBalance,
+              lastChecked: new Date(),
+              isActive: hasAccess
+            }
+          }
+        );
+        
+        return {
+          hasAccess,
+          walletAddress: verifiedUser.walletAddress,
+          tokenBalance,
+          fromCollection: 'verifiedUsers'
+        };
+      }
+      
+      // Only as a fallback, check the tokenVerification collection
+      logger.debug(`User ${userId} not found in verifiedUsers collection, checking tokenVerification as fallback`);
+      
+      const tokenVerificationCollection = await this.getCollection();
+      const session = await tokenVerificationCollection.findOne({
+        userId: userId.toString(),
+        status: 'verified',
+        type: { $ne: 'group' } // Ensure it's not a group verification
+      }, { sort: { verifiedAt: -1 } });
+      
+      if (session) {
+        logger.warn(`Found user ${userId} in tokenVerification but not in verifiedUsers - data inconsistency`);
+        
+        // If found in tokenVerification, migrate it to verifiedUsers for future lookups
+        try {
+          await this.updateVerifiedUserRecord(
+            session.userId,
+            session.username || null,
+            session.walletAddress,
+            session.tokenBalance || MIN_TOKEN_THRESHOLD,
+            session.transactionHash || null,
+            session.sessionId
+          );
+          
+          logger.info(`Migrated user ${userId} from tokenVerification to verifiedUsers collection`);
+        } catch (error) {
+          logger.error(`Failed to migrate user ${userId} to verifiedUsers:`, error);
+        }
+        
+        return {
+          hasAccess: session.tokenBalance >= MIN_TOKEN_THRESHOLD,
+          walletAddress: session.walletAddress,
+          tokenBalance: session.tokenBalance,
+          fromCollection: 'tokenVerification'
+        };
+      }
+      
+      return { hasAccess: false, reason: 'not_verified' };
+    } catch (error) {
+      logger.error(`Error checking verified status for user ${userId}:`, error);
+      
+      // If we can't check, assume no access
+      return { hasAccess: false, reason: 'error' };
     }
+  }
     
     /**
      * Periodic check of all verified wallets to update token balances
@@ -984,34 +1010,40 @@ static async getVerifiedGroup(groupId) {
  */
 static async checkGroupVerifiedStatus(groupId) {
     try {
-        const verifiedGroup = await this.getVerifiedGroup(groupId);
-        
-        if (!verifiedGroup) {
-            return { 
-                hasAccess: false, 
-                reason: 'not_verified' 
-            };
-        }
+      // Always check the verifiedGroups collection first for proper status
+      const db = await getDatabase();
+      const verifiedGroupsCollection = db.collection('verifiedGroups');
+      
+      // Look for the group in the correct collection
+      const verifiedGroup = await verifiedGroupsCollection.findOne({ 
+        groupId: groupId.toString(),
+        isActive: true
+      });
+      
+      if (verifiedGroup) {
+        logger.debug(`Found verified group ${groupId} in verifiedGroups collection`);
         
         // If last check was recent, use cached result
         const cacheTime = 30 * 60 * 1000; // 30 minutes
         if (verifiedGroup.lastChecked && 
             (new Date() - new Date(verifiedGroup.lastChecked)) < cacheTime) {
-            
-            return {
-                hasAccess: verifiedGroup.tokenBalance >= MIN_TOKEN_THRESHOLD,
-                walletAddress: verifiedGroup.walletAddress,
-                tokenBalance: verifiedGroup.tokenBalance
-            };
+          
+          return {
+            hasAccess: verifiedGroup.tokenBalance >= MIN_TOKEN_THRESHOLD,
+            walletAddress: verifiedGroup.walletAddress,
+            tokenBalance: verifiedGroup.tokenBalance,
+            fromCollection: 'verifiedGroups'
+          };
         }
         
         // If TOKEN_ADDRESS is not defined, skip balance check
         if (!TOKEN_ADDRESS) {
-            return {
-                hasAccess: true,
-                walletAddress: verifiedGroup.walletAddress,
-                tokenBalance: verifiedGroup.tokenBalance || MIN_TOKEN_THRESHOLD
-            };
+          return {
+            hasAccess: true,
+            walletAddress: verifiedGroup.walletAddress,
+            tokenBalance: verifiedGroup.tokenBalance || MIN_TOKEN_THRESHOLD,
+            fromCollection: 'verifiedGroups'
+          };
         }
         
         // Check current token balance
@@ -1021,58 +1053,73 @@ static async checkGroupVerifiedStatus(groupId) {
         const tokenBalance = holder ? holder.balance : 0;
         const hasAccess = tokenBalance >= MIN_TOKEN_THRESHOLD;
         
-        // Update cached balance in both models
-        if (verifiedGroup.sessionId) {
-            await this.updateVerificationSession(verifiedGroup.sessionId, {
-                tokenBalance,
-                lastChecked: new Date(),
-                accessRevoked: !hasAccess
-            });
-        }
+        // Update the verified group record
+        await verifiedGroupsCollection.updateOne(
+          { groupId: groupId.toString() },
+          {
+            $set: {
+              tokenBalance,
+              lastChecked: new Date(),
+              isActive: hasAccess
+            }
+          }
+        );
         
-        // Update the verified group model too
+        return {
+          hasAccess,
+          walletAddress: verifiedGroup.walletAddress,
+          tokenBalance,
+          fromCollection: 'verifiedGroups'
+        };
+      }
+      
+      // If not found in verifiedGroups, ONLY as a fallback check the tokenVerification collection
+      logger.debug(`Group ${groupId} not found in verifiedGroups collection, checking tokenVerification as fallback`);
+      
+      const tokenVerificationCollection = await this.getCollection();
+      const session = await tokenVerificationCollection.findOne({
+        groupId: groupId.toString(),
+        status: 'verified',
+        type: 'group'
+      }, { sort: { verifiedAt: -1 } });
+      
+      if (session) {
+        logger.warn(`Found group ${groupId} in tokenVerification but not in verifiedGroups - data inconsistency`);
+        
+        // If found in tokenVerification, migrate it to verifiedGroups for future lookups
         try {
-            // Use direct MongoDB update to avoid mongoose
-            const db = await getDatabase();
-            const collection = db.collection('verifiedGroups');
-            
-            await collection.updateOne(
-                { groupId },
-                {
-                    $set: {
-                        tokenBalance,
-                        lastChecked: new Date(),
-                        isActive: hasAccess
-                    }
-                }
-            );
+          await this.updateVerifiedGroupRecord(
+            session.groupId,
+            session.groupName || 'Unknown Group',
+            session.adminUserId || null,
+            session.adminUsername || null,
+            session.walletAddress,
+            session.tokenBalance || MIN_TOKEN_THRESHOLD,
+            session.transactionHash || null,
+            session.sessionId
+          );
+          
+          logger.info(`Migrated group ${groupId} from tokenVerification to verifiedGroups collection`);
         } catch (error) {
-            logger.error(`Failed to update verified group record: ${error.message}`);
-            // Continue anyway
+          logger.error(`Failed to migrate group ${groupId} to verifiedGroups:`, error);
         }
         
         return {
-            hasAccess,
-            walletAddress: verifiedGroup.walletAddress,
-            tokenBalance
+          hasAccess: session.tokenBalance >= MIN_TOKEN_THRESHOLD,
+          walletAddress: session.walletAddress,
+          tokenBalance: session.tokenBalance,
+          fromCollection: 'tokenVerification'
         };
+      }
+      
+      return { hasAccess: false, reason: 'not_verified' };
     } catch (error) {
-        logger.error(`Error checking group verification status for "${groupId}":`, error);
-        
-        // If we can't check, default to last known state
-        const verifiedGroup = await this.getVerifiedGroup(groupId);
-        if (verifiedGroup) {
-            return {
-                hasAccess: verifiedGroup.tokenBalance >= MIN_TOKEN_THRESHOLD,
-                walletAddress: verifiedGroup.walletAddress,
-                tokenBalance: verifiedGroup.tokenBalance,
-                cached: true
-            };
-        }
-        
-        return { hasAccess: false, reason: 'error' };
+      logger.error(`Error checking group verification status for "${groupId}":`, error);
+      
+      // If we can't check, assume no access
+      return { hasAccess: false, reason: 'error' };
     }
-}
+  }
 
 /**
  * Update the verified group record in the database

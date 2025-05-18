@@ -42,123 +42,132 @@ class GroupVerifyHandler extends BaseHandler {
         };
     }
 
-    async handleCommand(bot, msg, args, messageThreadId) {
-        const userId = msg.from.id.toString();
-        const chatId = msg.chat.id.toString();
-        const username = (msg.from.username || '').toLowerCase().replace(/^@/, '');
-        const groupName = msg.chat.title || 'Group';
-        
-        try {
-            // First verify this is a group chat
-            const isGroup = msg.chat.type === 'group' || msg.chat.type === 'supergroup';
-            if (!isGroup) {
-                await bot.sendMessage(
-                    chatId,
-                    "⚠️ This command must be used in a group.\n\n" +
-                    "Please:\n" +
-                    "1. Add the bot to your group\n" +
-                    "2. Make sure the bot is admin\n" +
-                    "3. Use /verifygroup command in the group"
-                );
-                return;
-            }
-            
-            // Verify the user is an admin
-            const chatMember = await bot.getChatMember(chatId, userId);
-            const isAdmin = ['creator', 'administrator'].includes(chatMember.status);
-            
-            if (!isAdmin) {
-                await bot.sendMessage(
-                    chatId,
-                    "❌ Only group administrators can verify the group.",
-                    { message_thread_id: messageThreadId }
-                );
-                return;
-            }
-            
-            // Verify the bot is an admin
-            try {
-                const botInfo = await bot.getMe();
-                const botMember = await bot.getChatMember(chatId, botInfo.id);
-                if (!botMember.can_delete_messages || !botMember.can_restrict_members) {
-                    await bot.sendMessage(
-                        chatId,
-                        "⚠️ The bot needs administrator rights to function properly in this group.\n" +
-                        "Please make the bot admin and try again.",
-                        { message_thread_id: messageThreadId }
-                    );
-                    return;
-                }
-            } catch (error) {
-                logger.error('Error checking bot permissions:', error);
-                await bot.sendMessage(
-                    chatId,
-                    "⚠️ Failed to verify bot permissions. Please ensure the bot is an administrator in this group and try again.",
-                    { message_thread_id: messageThreadId }
-                );
-                return;
-            }
-            
-            // Check if group is already verified
-            const verifiedStatus = await this.accessControl.tokenVerificationService.checkGroupVerifiedStatus(chatId);
-            
-            if (verifiedStatus.hasAccess) {
-                // Group is already verified
-                await bot.sendMessage(
-                    chatId,
-                    `✅ This group is already verified!\n\n` +
-                    `Wallet: \`${verifiedStatus.walletAddress.substring(0, 6)}...${verifiedStatus.walletAddress.substring(verifiedStatus.walletAddress.length - 4)}\`\n` +
-                    `Token balance: ${verifiedStatus.tokenBalance} ${this.TOKEN_SYMBOL}\n\n` +
-                    `This group has access to all token-gated features.`,
-                    { 
-                        parse_mode: 'Markdown',
-                        message_thread_id: messageThreadId,
-                        reply_markup: {
-                            inline_keyboard: [[
-                                { 
-                                    text: "🔄 Update Verification", 
-                                    callback_data: this.generateCallbackData('reverify') 
-                                }
-                            ]]
-                        }
-                    }
-                );
-                return;
-            }
-            
-            // Create verification session
-            const session = await this.accessControl.tokenVerificationService.createGroupVerificationSession(
-                chatId,
-                groupName,
-                userId,
-                username
-            );
-            
-            // Send verification instructions
-            const message = await this.formatVerificationMessage(session);
-            
-            await bot.sendMessage(
-                chatId,
-                message,
-                {
-                    parse_mode: 'HTML',
-                    message_thread_id: messageThreadId,
-                    reply_markup: {
-                        inline_keyboard: [[
-                            this.createVerificationCheckButton(session.sessionId)
-                        ]]
-                    }
-                }
-            );
-        } catch (error) {
-            logger.error(`Error in group verification for group ${chatId}:`, error);
-            await bot.sendMessage(
-                chatId,
-                "An error occurred while processing your verification request. Please try again later.",
-                { message_thread_id: messageThreadId }
-            );
+/**
+ * Handle the command
+ * @param {Object} bot - The telegram bot instance
+ * @param {Object} msg - The message object from Telegram
+ * @param {Array} args - Command arguments
+ * @param {number|undefined} messageThreadId - The message thread ID if applicable
+ */
+async handleCommand(bot, msg, args, messageThreadId) {
+    const userId = msg.from.id.toString();
+    const chatId = msg.chat.id.toString();
+    const username = (msg.from.username || '').toLowerCase().replace(/^@/, '');
+    const groupName = msg.chat.title || 'Group';
+    
+    try {
+      // First verify this is a group chat
+      const isGroup = msg.chat.type === 'group' || msg.chat.type === 'supergroup';
+      if (!isGroup) {
+        await bot.sendMessage(
+          chatId,
+          "❌ The /verifygroup command must be used in a group chat.\n\n" +
+          "Please:\n" +
+          "1. Add the bot to your group\n" +
+          "2. Make sure the bot is admin\n" +
+          "3. Use /verifygroup command in the group\n\n" +
+          "To verify your personal account, use /verify in a private chat with the bot instead.",
+          { message_thread_id: messageThreadId }
+        );
+        return;
+      }
+      
+      // Verify the user is an admin
+      const chatMember = await bot.getChatMember(chatId, userId);
+      const isAdmin = ['creator', 'administrator'].includes(chatMember.status);
+      
+      if (!isAdmin) {
+        await bot.sendMessage(
+          chatId,
+          "❌ Only group administrators can verify the group.",
+          { message_thread_id: messageThreadId }
+        );
+        return;
+      }
+      
+      // Verify the bot is an admin
+      try {
+        const botInfo = await bot.getMe();
+        const botMember = await bot.getChatMember(chatId, botInfo.id);
+        if (!botMember.can_delete_messages || !botMember.can_restrict_members) {
+          await bot.sendMessage(
+            chatId,
+            "⚠️ The bot needs administrator rights to function properly in this group.\n" +
+            "Please make the bot admin and try again.",
+            { message_thread_id: messageThreadId }
+          );
+          return;
         }
+      } catch (error) {
+        logger.error('Error checking bot permissions:', error);
+        await bot.sendMessage(
+          chatId,
+          "⚠️ Failed to verify bot permissions. Please ensure the bot is an administrator in this group and try again.",
+          { message_thread_id: messageThreadId }
+        );
+        return;
+      }
+      
+      // Check if group is already verified
+      const verifiedStatus = await this.accessControl.tokenVerificationService.checkGroupVerifiedStatus(chatId);
+      
+      if (verifiedStatus.hasAccess) {
+        // Group is already verified
+        await bot.sendMessage(
+          chatId,
+          `✅ This group is already verified!\n\n` +
+          `Wallet: \`${verifiedStatus.walletAddress.substring(0, 6)}...${verifiedStatus.walletAddress.substring(verifiedStatus.walletAddress.length - 4)}\`\n` +
+          `Token balance: ${verifiedStatus.tokenBalance} ${this.TOKEN_SYMBOL}\n\n` +
+          `This group has access to all token-gated features.`,
+          { 
+            parse_mode: 'Markdown',
+            message_thread_id: messageThreadId,
+            reply_markup: {
+              inline_keyboard: [[
+                { 
+                  text: "🔄 Update Verification", 
+                  callback_data: this.generateCallbackData('reverify') 
+                }
+              ]]
+            }
+          }
+        );
+        return;
+      }
+      
+      // Create verification session
+      const session = await this.accessControl.tokenVerificationService.createGroupVerificationSession(
+        chatId,
+        groupName,
+        userId,
+        username
+      );
+      
+      // Send verification instructions
+      const message = await this.formatVerificationMessage(session);
+      
+      await bot.sendMessage(
+        chatId,
+        message,
+        {
+          parse_mode: 'HTML',
+          message_thread_id: messageThreadId,
+          reply_markup: {
+            inline_keyboard: [[
+              this.createVerificationCheckButton(session.sessionId)
+            ]]
+          }
+        }
+      );
+    } catch (error) {
+      logger.error(`Error in group verification for group ${chatId}:`, error);
+      await bot.sendMessage(
+        chatId,
+        "An error occurred while processing your verification request. Please try again later.",
+        { message_thread_id: messageThreadId }
+      );
     }
+  }
     
     async handleCallback(bot, query) {
         try {
