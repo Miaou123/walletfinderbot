@@ -104,8 +104,8 @@ const commandConfigs = {
     aliases: ['wc'],
     minArgs: 2,
     maxArgs: 2,
-    requiresAuth: true,
-    requiresToken: true,
+    requiresAuth: false,
+    requiresToken: false,
     description: 'Analyze wallet trading performance',
     usage: '/w [wallet_address] [timeframe](30d)*',
     helpMessage: 'Analyzes a wallet\'s trading performance, including metrics like:\n- Balance and portfolio value\n- Trading activity and patterns\n- Win rate and ROI\n- Risk metrics and trading behavior'
