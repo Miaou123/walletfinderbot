@@ -433,6 +433,53 @@ const adminCommandConfigs = {
     usage: '/imagebroadcastlocal',
     helpMessage: 'Preview how an image broadcast will look without sending to users.'
 },
+'commandrecap': {
+  aliases: ['cmdrecap'],
+  minArgs: 0,
+  maxArgs: 2,
+  requiresAuth: true,
+  description: 'Show command usage statistics',
+  usage: '/commandrecap [period] [command]',
+  helpMessage: 'Show detailed command usage statistics.\n\n' +
+              'Parameters:\n' +
+              '• period: today, week, month, all (default: all)\n' +
+              '• command: specific command name (optional)\n\n' +
+              'Examples:\n' +
+              '/commandrecap - Show all-time stats\n' +
+              '/commandrecap week - Show this week\'s stats\n' +
+              '/commandrecap all scan - Show stats for scan command\n' +
+              '/commandrecap today - Show today\'s stats'
+},
+'topusers': {
+  aliases: ['tu'],
+  minArgs: 0,
+  maxArgs: 2,
+  requiresAuth: true,
+  description: 'Show top users by command usage',
+  usage: '/topusers [limit] [period]',
+  helpMessage: 'Show top users by command usage.\n\n' +
+              'Parameters:\n' +
+              '• limit: number of users to show (default: 15, max: 50)\n' +
+              '• period: today, week, month, all (default: all)\n\n' +
+              'Examples:\n' +
+              '/topusers - Show top 15 users\n' +
+              '/topusers 25 - Show top 25 users\n' +
+              '/topusers 10 week - Show top 10 users this week'
+},
+'commandstats': {
+  aliases: ['cs'],
+  minArgs: 1,
+  maxArgs: 1,
+  requiresAuth: true,
+  description: 'Show statistics for a specific command',
+  usage: '/commandstats <command>',
+  helpMessage: 'Show detailed statistics for a specific command.\n\n' +
+              'Parameters:\n' +
+              '• command: name of the command to analyze\n\n' +
+              'Examples:\n' +
+              '/commandstats scan - Show stats for scan command\n' +
+              '/commandstats besttraders - Show stats for besttraders command'
+}
 };
 
 module.exports = {

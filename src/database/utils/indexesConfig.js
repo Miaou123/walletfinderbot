@@ -112,7 +112,16 @@ async function updateIndexes(db) {
                   { key: { isActive: 1 }, options: {} },
                   { key: { userId: 1, isActive: 1 }, options: {} },
                 ]
-              }
+              },
+              commandUsage: {
+                collection: db.collection("commandUsage"),
+                indexes: [
+                    { key: { command: 1 }, options: { unique: true } },
+                    { key: { totalUsage: -1 }, options: {} },
+                    { key: { lastUsed: -1 }, options: {} },
+                    { key: { 'dailyStats.date': 1 }, options: {} }
+                ]
+            }
         };
 
         await createCollections(db, collections);

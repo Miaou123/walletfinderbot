@@ -18,21 +18,17 @@ const CheckSubscriptionHandler = require('./subscriptionManagement/checkSubscrip
 const ListSubscriptionsHandler = require('./subscriptionManagement/listSubscriptionsHandler');
 const ListGroupSubscriptionsHandler = require('./subscriptionManagement/listGroupSubscriptionsHandler');
 
-
-
 // Import System Command Handlers
 const BroadcastHandler = require('./systemCommands/broadcastHandler');
-const UsageStatsHandler = require('./systemCommands/usageStatsHandler');
 const BroadcastLocalHandler = require('./systemCommands/broadcastLocalHandler');
 const ImageBroadcastHandler = require('./systemCommands/imageBroadcastHandler');
-
+const UsageStatsHandlers = require('./systemCommands/usageStatsHandlers');
 
 //Utils
 const logger = require('../../../utils/logger');
 
 class AdminCommandManager {
     constructor(accessControl, bot, usageTracker) {
-
         if (!accessControl || !bot) {
             throw new Error('Required dependencies missing');
         }
@@ -61,10 +57,14 @@ class AdminCommandManager {
             
             // System Commands
             broadcast: new BroadcastHandler(accessControl, bot),
-            usagestats: new UsageStatsHandler(accessControl, bot, usageTracker),
             broadcastlocal: new BroadcastLocalHandler(accessControl, bot),
             imagebroadcast: new ImageBroadcastHandler(accessControl, bot),
             imagebroadcastlocal: new ImageBroadcastHandler(accessControl, bot),
+            
+            // Usage Stats Commands (NEW)
+            commandrecap: new UsageStatsHandlers(bot, accessControl),
+            topusers: new UsageStatsHandlers(bot, accessControl),
+            commandstats: new UsageStatsHandlers(bot, accessControl),
         };
     }
 
@@ -72,7 +72,7 @@ class AdminCommandManager {
         return this.handlers[command];
     }
 
-     async handleCommand(command, msg, args) {
+    async handleCommand(command, msg, args) {
         try {
             // Debug du message reçu
             logger.debug('AdminCommandManager received message:', {
@@ -89,6 +89,22 @@ class AdminCommandManager {
                 }
             });
 
+            // Handle the new usage stats commands
+            switch (command) {
+                case 'commandrecap':
+                    await this.handlers.commandrecap.handleCommandRecap(msg, args);
+                    return;
+
+                case 'topusers':
+                    await this.handlers.topusers.handleTopUsers(msg, args);
+                    return;
+
+                case 'commandstats':
+                    await this.handlers.commandstats.handleCommandStats(msg, args);
+                    return;
+            }
+
+            // Handle regular commands
             const handler = this.handlers[command];
             if (!handler) {
                 throw new Error(`No handler found for admin command: ${command}`);

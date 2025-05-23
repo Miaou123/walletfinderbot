@@ -1,4 +1,5 @@
 const CommandParser = require('./commandsManager/commandParser');  // Nouvelle classe
+const CommandUsageService = require('../database/services/commandUsageService');
 const groupMessageLogger = require('./messageDataManager/groupMessageLogger');
 const UserService = require('../database/services/userService'); 
 
@@ -62,38 +63,32 @@ class MessageHandler {
             return;
         }
     
-        if (!msg.text || !msg.from.username) {
-            if (!msg.from.username) {
-                await this.bot.sendMessage(msg.chat.id, 
-                    "Please set a username in your Telegram settings to use this bot."
-                );
-            }
+        if (!msg.text) {
             return;
         }
     
         const isGroup = msg.chat.type === 'group' || msg.chat.type === 'supergroup';
         const messageThreadId = msg.message_thread_id;
-        const username = msg.from.username;
+        const username = msg.from.username || null; // Allow null username
         const userId = msg.from.id.toString();
         const chatId = msg.chat.id.toString();
     
-        // Vérification de l'ancienneté du message
+        // Age check stays the same...
         const currentTimestamp = Math.floor(Date.now() / 1000);
         const messageAge = currentTimestamp - msg.date;
         
         if (messageAge > this.MAX_MESSAGE_AGE) {
-            this.logger.info(`Ignored old message from user ${username} (ID: ${userId}): ${msg.text}`);
+            this.logger.info(`Ignored old message from user ${username || userId} (ID: ${userId}): ${msg.text}`);
             return;
         }
-
-        // Vérification de l'enregistrement de l'utilisateur pour les messages privés
+    
+        // Registration check for private messages (allow commands without username for free commands)
         if (!isGroup && msg.text.startsWith('/')) {
             const { command } = this.commandParser.parseCommand(msg.text);
-            // On permet /start et /help sans enregistrement
             if (command !== 'start' && command !== 'help') {
                 const isRegistered = await UserService.isUserRegistered(userId);
                 if (!isRegistered) {
-                    this.logger.debug(`Unregistered user ${username} (${userId}) attempted to use command: ${command}`);
+                    this.logger.debug(`Unregistered user ${username || userId} (${userId}) attempted to use command: ${command}`);
                     await this.bot.sendMessage(chatId,
                         "⚠️ Please /start the bot before using any commands.",
                         { message_thread_id: messageThreadId }
@@ -102,37 +97,56 @@ class MessageHandler {
                 }
             }
         }
-    
         
-        // Vérification des commandes
+        // Command handling
         if (msg.text.startsWith('/')) {
             const { command, isAdmin } = this.commandParser.parseCommand(msg.text);
-
+    
             if (!command) {
                 if (!isGroup) {
                     await this.bot.sendMessage(chatId, "Unknown command. Use /help to see available commands.");
                 }
                 return;
             }
-
-            // Vérification des commandes admin
+    
+            // Admin commands
             if (isAdmin) {
                 const isAdminUser = await this.accessControl.isAdmin(userId);
                 if (!isAdminUser) {
-                    this.logger.warn(`Non-admin user ${username} (ID: ${userId}) tried to use admin command: ${command}`);
+                    this.logger.warn(`Non-admin user ${username || userId} (ID: ${userId}) tried to use admin command: ${command}`);
                     return;
                 }
-                await this.handleCommand(msg, isGroup, messageThreadId);
+                await this.handleCommand(msg, isGroup, messageThreadId, username);
                 return;
             }
-
-            // Vérifier si la commande nécessite une authentification
+    
+            // Check command requirements
             const commandConfig = this.commandConfigs[command];
             const requiresAuth = commandConfig?.requiresAuth ?? false;
             const requiresToken = commandConfig?.requiresToken ?? false;
-
-            // Handle token verification first if command requires token specifically
-            // These commands are ONLY available via token verification, not subscription
+    
+            // Username check for premium commands in PRIVATE chats only
+            if (!isGroup && (requiresAuth || requiresToken) && !username) {
+                // Skip username check for subscription and verify commands themselves
+                if (command !== 'subscribe' && command !== 'verify') {
+                    await this.bot.sendMessage(chatId,
+                        "🔒 <b>Username Required</b>\n\n" +
+                        "Premium commands require a Telegram username.\n\n" +
+                        "Please:\n" +
+                        "1. Go to Telegram Settings\n" +
+                        "2. Set a username\n" +
+                        "3. Try the command again\n\n" +
+                        "Free commands like /help and /ping work without a username.",
+                        { 
+                            parse_mode: 'HTML',
+                            message_thread_id: messageThreadId 
+                        }
+                    );
+                    return;
+                }
+            }
+    
+            // Token verification check (existing logic)
             if (requiresToken && !isGroup) {
                 const hasTokenVerification = await this.accessControl.hasTokenVerification(userId);
                 
@@ -156,17 +170,14 @@ class MessageHandler {
                     return;
                 }
             }
-
-            // Check regular subscription if required
-            // These commands are available via EITHER subscription OR token verification
+    
+            // Regular auth check (existing logic)
             if (requiresAuth) {
                 if (isGroup) {
-                    // Exception for the commands that are always allowed in groups
+                    // Group logic - username not required
                     if (command !== 'subscribe_group' && command !== 'verifygroup') {
-                        // Check if the group has a subscription
                         const hasActiveGroupSub = await this.accessControl.hasActiveGroupSubscription(chatId);
                         
-                        // Also check if the group has token verification
                         let hasGroupVerification = false;
                         try {
                             hasGroupVerification = !hasActiveGroupSub ? 
@@ -175,7 +186,6 @@ class MessageHandler {
                             this.logger.error(`Error checking group verification: ${error.message}`);
                         }
                         
-                        // Also check if this specific user has token verification
                         let userHasAccess = false;
                         if (!hasActiveGroupSub && !hasGroupVerification) {
                             try {
@@ -185,7 +195,6 @@ class MessageHandler {
                             }
                         }
                         
-                        // If no valid access method, show access required message
                         if (!hasActiveGroupSub && !hasGroupVerification && !userHasAccess) {
                             await this.bot.sendMessage(chatId,
                                 "🔒 <b>Access Required</b>\n\n" +
@@ -207,10 +216,9 @@ class MessageHandler {
                         }
                     }
                 } else {
-                    // Private chat - check user access either through subscription or token verification
+                    // Private chat - check user access
                     const hasAccess = await this.accessControl.isAllowed(userId, 'user', username);
                     
-                    // Skip access check for subscription and verify commands themselves
                     if (!hasAccess && command !== 'subscribe' && command !== 'verify') {
                         await this.bot.sendMessage(chatId,
                             "🔒 <b>Access Required</b>\n\n" +
@@ -227,14 +235,14 @@ class MessageHandler {
                     }
                 }
             }
-
-            await this.handleCommand(msg, isGroup, messageThreadId);
+    
+            await this.handleCommand(msg, isGroup, messageThreadId, username);
         } else {
             await this.handleNonCommand(msg, messageThreadId);
         }
-    }
+    }    
     
-    async handleCommand(msg, isGroup, messageThreadId) {
+    async handleCommand(msg, isGroup, messageThreadId, username) { 
         const { command, args, isAdmin } = this.commandParser.parseCommand(msg.text);
         const userId = msg.from.id.toString();
         const chatId = msg.chat.id.toString();
@@ -297,6 +305,9 @@ class MessageHandler {
                 const handlerName = command.toLowerCase();
                 if (typeof this.commandHandlers[handlerName] === 'function') {
                     await this.commandHandlers[handlerName](this.bot, msg, args, messageThreadId);
+                    
+                    await CommandUsageService.trackCommandUsage(command, userId, username, isAdmin);
+                    
                 } else {
                     throw new Error(`No handler found for command: ${command}`);
                 }                

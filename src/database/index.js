@@ -4,6 +4,7 @@ const UserService = require('./services/userService');
 const SubscriptionService = require('./services/subscriptionService');
 const PaymentService = require('./services/paymentService');
 const TokenVerificationService = require('./services/tokenVerificationService');
+const CommandUsageService = require('./services/commandUsageService');
 const SubscriptionConfig = require('./config/subscriptionConfig');
 const VerifiedUser = require('./models/verified_user');
 const VerifiedGroup = require('./models/verified_group');
@@ -36,6 +37,7 @@ module.exports = {
     PaymentService,
     SubscriptionConfig, 
     TokenVerificationService,
+    CommandUsageService,
     VerifiedUser,
     VerifiedGroup
 };

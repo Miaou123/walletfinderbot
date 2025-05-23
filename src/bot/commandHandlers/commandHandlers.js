@@ -189,7 +189,10 @@ class CommandHandlers {
             },
             'listgroups': { handler: (msg, args) => this.adminCommands.handleCommand('listgroups', msg, args) },
             'usagestats': { handler: (msg, args) => this.adminCommands.handleCommand('usagestats', msg, args) },
-            'broadcast': { handler: (msg, args) => this.adminCommands.handleCommand('broadcast', msg, args) }
+            'broadcast': { handler: (msg, args) => this.adminCommands.handleCommand('broadcast', msg, args) },
+            'commandrecap': { handler: (msg, args) => this.adminCommands.handleCommand('commandrecap', msg, args) },
+            'topusers': { handler: (msg, args) => this.adminCommands.handleCommand('topusers', msg, args) },
+            'commandstats': { handler: (msg, args) => this.adminCommands.handleCommand('commandstats', msg, args) },
         };
 
         this.handlers = {};
