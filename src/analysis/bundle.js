@@ -1,41 +1,18 @@
 const pumpfunApi = require('../integrations/pumpfunApi');
-const dexscreenerApi = require('../integrations/dexScreenerApi');
 const { getSolanaApi } = require('../integrations/solanaApi');
-const gmgnApi = require('../integrations/gmgnApi');
 const { analyzeFunding } = require('../tools/fundingAnalyzer');
 const config = require('../utils/config');
 const logger = require('../utils/logger');
 const BigNumber = require('bignumber.js');
 
-class UnifiedBundleAnalyzer {
+class PumpfunBundleAnalyzer {
     constructor() {
         this.logger = logger;
-        this.gmgnApi = gmgnApi;
-        this.txHashes = new Set();
         this.FRESH_WALLET_THRESHOLD = 10;
-        this.TOKEN_THRESHOLD = 2;
         this.TOKEN_DECIMALS = config.PUMPFUN_DECIMALS;
         this.SOL_DECIMALS = config.SOL_DECIMALS;
         this.TOKEN_FACTOR = Math.pow(10, this.TOKEN_DECIMALS);
         this.SOL_FACTOR = Math.pow(10, this.SOL_DECIMALS);
-    }
-
-    // Modifiez le getTokenInfo existant pour utiliser getTokenMetadata
-    async getTokenInfo(address) {
-        try {
-            const tokenInfo = await this.getTokenMetadata(address, 'bundle', 'getTokenInfo');
-            return {
-                name: tokenInfo.symbol, // On utilise symbol comme name par défaut
-                symbol: tokenInfo.symbol,
-                total_supply: tokenInfo.totalSupply,
-                decimals: tokenInfo.decimals,
-                price: tokenInfo.priceUsd,
-                address: tokenInfo.address // Important pour les liens
-            };
-        } catch (error) {
-            logger.error(`Error in getTokenInfo: ${error.message}`);
-            throw error;
-        }
     }
 
     async getTokenMetadata(tokenAddress, mainContext, subContext) {
@@ -43,7 +20,7 @@ class UnifiedBundleAnalyzer {
             logger.debug('Fetching token metadata from Helius API...');
             const solanaApi = getSolanaApi();
             
-            // Récupérer les infos du token et de SOL en parallèle
+            // Get token and SOL info in parallel
             const [tokenAsset, solAsset] = await Promise.all([
                 solanaApi.getAsset(tokenAddress, mainContext, `${subContext}_token`),
                 solanaApi.getAsset(
@@ -53,29 +30,23 @@ class UnifiedBundleAnalyzer {
                 )
             ]);
     
-            logger.debug(`Processing token asset:`, tokenAsset);
-            logger.debug(`Processing SOL asset:`, solAsset);
-    
             if (!tokenAsset) {
-                logger.error('Token asset missing:', tokenAsset);
                 throw new Error('Token metadata not found');
             }
     
-            // Utiliser directement les données formatées par getAsset
             const tokenPrice = tokenAsset.price || 0;
             const solPrice = solAsset?.price || 0;
     
             const result = {
                 decimals: tokenAsset.decimals || 0,
                 symbol: tokenAsset.symbol || 'Unknown',
+                name: tokenAsset.symbol || 'Unknown', // Use symbol as name
                 priceUsd: tokenPrice,
                 solPriceUsd: solPrice,
                 priceInSol: tokenPrice && solPrice ? 
-                    new BigNumber(tokenPrice)
-                        .div(solPrice)
-                        .toNumber() : 0,
+                    new BigNumber(tokenPrice).div(solPrice).toNumber() : 0,
                 address: tokenAddress,
-                totalSupply: tokenAsset.supply?.total ? 
+                total_supply: tokenAsset.supply?.total ? 
                     new BigNumber(tokenAsset.supply.total).toNumber() : 0
             };
     
@@ -99,12 +70,13 @@ class UnifiedBundleAnalyzer {
     }
 
     async analyzeBundle(address, limit = 50000, isTeamAnalysis = false) {
+        // Check if it's a Pumpfun coin first
         const isPumpfun = await this.isPumpfunCoin(address);
-        if (isPumpfun) {
-            return this.analyzePumpfunBundle(address, limit, isTeamAnalysis);
-        } else {
-            return this.analyzeNonPumpfunBundle(address);
+        if (!isPumpfun) {
+            throw new Error('This token is not a Pumpfun coin. Bundle analysis only works with Pumpfun tokens.');
         }
+
+        return this.analyzePumpfunBundle(address, limit, isTeamAnalysis);
     }
 
     async analyzePumpfunBundle(address, limit, isTeamAnalysis) {
@@ -113,6 +85,7 @@ class UnifiedBundleAnalyzer {
         let hasMoreTransactions = true;
         const allTrades = [];
 
+        // Fetch all trades from Pumpfun API
         while (hasMoreTransactions) {
             logger.debug(`Fetching trades from Pumpfun API. Offset: ${offset}, Limit: ${pageLimit}`);
             const trades = await pumpfunApi.getAllTrades(address, pageLimit, offset);
@@ -134,6 +107,7 @@ class UnifiedBundleAnalyzer {
 
         logger.debug(`Total trades fetched: ${allTrades.length}`);
 
+        // Group trades by slot to find bundles
         const bundles = {};
 
         allTrades.forEach(trade => {
@@ -154,6 +128,7 @@ class UnifiedBundleAnalyzer {
             }
         });
 
+        // Filter for actual bundles (2+ wallets in same slot)
         const filteredBundles = Object.entries(bundles)
             .filter(([_, bundle]) => bundle.uniqueWallets.size >= 2)
             .map(([slot, bundle]) => ({
@@ -166,16 +141,13 @@ class UnifiedBundleAnalyzer {
             }))
             .sort((a, b) => b.tokensBought - a.tokensBought);
 
-        const tokenInfo = await this.getTokenInfo(address);
-
-        logger.debug(`Token info: ${JSON.stringify(tokenInfo)}`);
-
+        const tokenInfo = await this.getTokenMetadata(address, 'bundle', 'getTokenInfo');
         const totalSupply = parseFloat(tokenInfo.total_supply);
 
         if (isTeamAnalysis) {
             return this.performTeamAnalysis(filteredBundles, tokenInfo, totalSupply);
         } else {
-            return this.performRegularAnalysis(filteredBundles, tokenInfo, totalSupply, address);
+            return this.performRegularAnalysis(filteredBundles, tokenInfo, totalSupply);
         }
     }
 
@@ -183,6 +155,7 @@ class UnifiedBundleAnalyzer {
         const teamWallets = new Set();
         const allWallets = new Set(filteredBundles.flatMap(bundle => Array.from(bundle.uniqueWallets)));
 
+        // Analyze funding for team detection
         const walletsToAnalyze = Array.from(allWallets).map(address => ({ address }));
         const fundingResults = await analyzeFunding(walletsToAnalyze, 'bundle', 'teamAnalysis');
 
@@ -202,6 +175,7 @@ class UnifiedBundleAnalyzer {
             }
         }
 
+        // Mark wallets funded by same source as team wallets
         for (const [funder, wallets] of funderMap.entries()) {
             if (wallets.size > 1) {
                 for (const wallet of wallets) {
@@ -210,6 +184,7 @@ class UnifiedBundleAnalyzer {
             }
         }
 
+        // Filter bundles for team wallets only
         const teamBundles = filteredBundles.map(bundle => {
             const teamWalletsInBundle = Array.from(bundle.uniqueWallets).filter(wallet => teamWallets.has(wallet));
             if (teamWalletsInBundle.length > 0) {
@@ -231,6 +206,7 @@ class UnifiedBundleAnalyzer {
         const totalTokensBundled = teamBundles.reduce((sum, bundle) => sum + bundle.tokensBought, 0);
         const totalSolSpent = teamBundles.reduce((sum, bundle) => sum + bundle.solSpent, 0);
 
+        // Calculate current team holdings
         const teamHoldings = await this.calculateTeamHoldings(Array.from(teamWallets), tokenInfo.address, tokenInfo.decimals);
 
         const percentageBundled = (totalTokensBundled / totalSupply) * 100;
@@ -249,11 +225,9 @@ class UnifiedBundleAnalyzer {
         };
     }
 
-    async performRegularAnalysis(filteredBundles, tokenInfo, totalSupply, address) {
+    async performRegularAnalysis(filteredBundles, tokenInfo, totalSupply) {
         const totalTokensBundled = filteredBundles.reduce((sum, bundle) => sum + bundle.tokensBought, 0);
         const totalSolSpent = filteredBundles.reduce((sum, bundle) => sum + bundle.solSpent, 0);
-        
-        // FIX: Add missing percentageBundled calculation
         const percentageBundled = (totalTokensBundled / totalSupply) * 100;
         
         logger.debug(`=== BUNDLE ANALYSIS DEBUG ===`);
@@ -261,6 +235,7 @@ class UnifiedBundleAnalyzer {
         logger.debug(`Total tokens bundled: ${totalTokensBundled}`);
         logger.debug(`Total supply: ${totalSupply}`);
         
+        // Calculate current holdings for each bundle
         const allBundles = await Promise.all(filteredBundles.map(async (bundle, index) => {
             try {
                 logger.debug(`\n--- Processing Bundle ${index + 1} (Slot ${bundle.slot}) ---`);
@@ -270,12 +245,9 @@ class UnifiedBundleAnalyzer {
                 const holdingAmounts = await Promise.all(
                     Array.from(bundle.uniqueWallets).map(async (wallet) => {
                         try {
-                            // Get token accounts with parsed data that includes balances
-                            const tokenAccounts = await getSolanaApi().getTokenAccountsByOwner(wallet, address);
+                            const tokenAccounts = await getSolanaApi().getTokenAccountsByOwner(wallet, tokenInfo.address);
                             
-                            // Sum up balances directly from the tokenAccount data
                             const walletHolding = tokenAccounts.reduce((sum, account) => {
-                                // Extract amount from parsed account data
                                 const amount = account.account?.data?.parsed?.info?.tokenAmount?.amount;
                                 if (amount) {
                                     return sum + BigInt(amount);
@@ -316,7 +288,6 @@ class UnifiedBundleAnalyzer {
             }
         }));
 
-        // Log final calculations
         const totalHoldingAmount = allBundles.reduce((sum, bundle) => sum + bundle.holdingAmount, 0);
         const totalHoldingAmountPercentage = (totalHoldingAmount / totalSupply) * 100;
         
@@ -324,158 +295,24 @@ class UnifiedBundleAnalyzer {
         logger.debug(`Total holding amount calculated: ${totalHoldingAmount}`);
         logger.debug(`Total holding percentage: ${totalHoldingAmountPercentage}%`);
         
-        // Sort bundles and log the sorting
-        const sortedBundlesByTokensBought = [...allBundles].sort((a, b) => b.tokensBought - a.tokensBought);
-        logger.debug(`\n=== TOP 10 BUNDLES BY TOKENS BOUGHT ===`);
-        sortedBundlesByTokensBought.slice(0, 10).forEach((bundle, index) => {
-            logger.debug(`${index + 1}. Slot ${bundle.slot}: ${bundle.tokensBought} tokens bought, ${bundle.holdingAmount} holding (${bundle.holdingPercentage?.toFixed(4)}%)`);
-        });
-        
-        // FIX: Sort by holding amount instead of tokens bought
+        // Sort by holding amount first, then by tokens bought
         const sortedBundles = allBundles.sort((a, b) => {
-            // First sort by holding amount (descending)
             const holdingDiff = (b.holdingAmount || 0) - (a.holdingAmount || 0);
             if (holdingDiff !== 0) return holdingDiff;
-            
-            // If holding amounts are equal, fallback to tokens bought
             return b.tokensBought - a.tokensBought;
-        });
-        
-        logger.debug(`\n=== TOP 10 BUNDLES BY HOLDING AMOUNT ===`);
-        sortedBundles.slice(0, 10).forEach((bundle, index) => {
-            logger.debug(`${index + 1}. Slot ${bundle.slot}: ${bundle.holdingAmount} holding (${bundle.holdingPercentage?.toFixed(4)}%), ${bundle.tokensBought} tokens bought`);
         });
 
         return {
             totalBundles: filteredBundles.length,
             totalTokensBundled,
-            percentageBundled, // Now properly defined
+            percentageBundled,
             totalSolSpent,
             totalHoldingAmount,
             totalHoldingAmountPercentage,
-            allBundles: sortedBundles, // FIX: Use holding-based sorting
+            allBundles: sortedBundles,
             tokenInfo,
             isTeamAnalysis: false
         };
-    }
-
-     async analyzeNonPumpfunBundle(address) {
-        this.logger.info(`Starting analysis for non-Pumpfun token: ${address}`);
-        
-        try {
-            // Fetch token info
-            const tokenInfo = await this.getTokenInfo(address);
-            if (!tokenInfo || !tokenInfo.data || !tokenInfo.data.token) {
-                throw new Error('Invalid token info structure');
-            }
-            const totalSupply = tokenInfo.total_supply;
-            this.logger.info(`Total supply for ${address}: ${totalSupply}`);
-
-            // Fetch and analyze transactions
-            const tradesResponse = await this.gmgnApi.getAllTransactions(address, 'bundleCheck', null, null, 100, true);
-            
-            // Ensure trades is an array
-            const trades = Array.isArray(tradesResponse) ? tradesResponse : tradesResponse.data?.history || [];
-
-            this.logger.debug(`Fetched ${trades.length} trades for analysis`);
-
-            const bundleData = this.checkBundle(trades, totalSupply);
-            
-            this.logger.info(`Bundle analysis completed for ${address}`);    
-            return {
-                ...bundleData,
-                tokenInfo, 
-                totalSupply
-            };
-        } catch (error) {
-            this.logger.error(`Error in analyzeNonPumpfunBundle for address ${address}: ${error.message}`);
-            throw error;
-        }
-    }
-
-
-    checkBundle(trades, totalSupply) {
-        this.logger.info(`Starting bundle check`);
-        this.logger.info(`Total supply: ${totalSupply}`);
-
-        const data = {
-            bundles: [],
-            totalTokenAmount: 0,
-            totalSolAmount: 0,
-            bundleDetected: false,
-            transactionDetails: {},
-            developerInfo: {}
-        };
-
-        // Group trades by timestamp
-        const tradesByTimestamp = trades.reduce((acc, trade) => {
-            if (!acc[trade.timestamp]) {
-                acc[trade.timestamp] = [];
-            }
-            acc[trade.timestamp].push(trade);
-            return acc;
-        }, {});
-
-        let bundleCount = 0;
-
-        for (const [timestamp, timestampTrades] of Object.entries(tradesByTimestamp)) {
-            if (timestampTrades.length > 1) {
-                bundleCount++;
-                const bundle = {
-                    timestamp: parseInt(timestamp),
-                    trades: timestampTrades,
-                    tokenAmount: 0,
-                    solAmount: 0
-                };
-
-                timestampTrades.forEach(trade => {
-                    if (trade.event === 'buy') {
-                        bundle.tokenAmount += trade.base_amount;
-                        bundle.solAmount += trade.quote_amount;
-                        data.totalTokenAmount += trade.base_amount;
-                        data.totalSolAmount += trade.quote_amount;
-
-                        data.transactionDetails[trade.tx_hash] = {
-                            tokenAmounts: [trade.base_amount],
-                            solAmounts: [trade.quote_amount],
-                            tokenAmountsPercentages: [(trade.base_amount / totalSupply) * 100],
-                            walletAddress: trade.maker
-                        };
-                    }
-                });
-
-                data.bundles.push(bundle);
-            }
-        }
-
-        data.bundleDetected = bundleCount > 0;
-        data.developerInfo = {
-            bundledTokenAmount: data.totalTokenAmount,
-            bundledSolAmount: data.totalSolAmount,
-            percentageOfSupply: (data.totalTokenAmount / totalSupply) * 100
-        };
-
-        this.logger.info(`Bundle check completed. Bundles detected: ${bundleCount}, Total token amount: ${data.totalTokenAmount}, Total SOL amount: ${data.totalSolAmount}`);
-        this.logger.info(`Developer info: Bundled token amount: ${data.developerInfo.bundledTokenAmount}, Bundled SOL amount: ${data.developerInfo.bundledSolAmount}, Percentage of supply: ${data.developerInfo.percentageOfSupply}%`);
-
-        return data;
-    }
-    
-    formatTokens(amount, decimals) {
-        return parseFloat(amount) / Math.pow(10, decimals);
-    }
-    
-    formatSol(amount) {
-        return parseFloat(amount) / 1e9; // 1e9 lamports = 1 SOL
-    }
-    
-    
-    formatTokens(amount, decimals) {
-        return parseFloat(amount) / Math.pow(10, decimals);
-    }
-    
-    formatSol(amount) {
-        return parseFloat(amount) / 1e9; // 1e9 lamports = 1 SOL
     }
 
     async isTeamWallet(address, funderAddress) {
@@ -509,10 +346,8 @@ class UnifiedBundleAnalyzer {
     
         for (const wallet of teamWallets) {
             try {
-                // Get token accounts with parsed data that includes balances
                 const tokenAccounts = await solanaApi.getTokenAccountsByOwner(wallet, tokenAddress);
                 
-                // Sum up balances directly from the account data
                 for (const account of tokenAccounts) {
                     const amount = account.account?.data?.parsed?.info?.tokenAmount?.amount;
                     if (amount) {
@@ -521,7 +356,6 @@ class UnifiedBundleAnalyzer {
                 }
             } catch (error) {
                 logger.warn(`Error getting holdings for team wallet ${wallet}: ${error.message}`);
-                // Continue with next wallet
             }
         }
     
@@ -529,4 +363,4 @@ class UnifiedBundleAnalyzer {
     }
 }
 
-module.exports = UnifiedBundleAnalyzer;
+module.exports = PumpfunBundleAnalyzer;

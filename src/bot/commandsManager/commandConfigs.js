@@ -98,7 +98,15 @@ const commandConfigs = {
     requiresAuth: false, 
     description: 'Analyze bundled trades', 
     usage: '/bundle [contract_address]',
-    helpMessage: `Analyze bundled trades for a specific contract address (Raydium, Meteora, and Pumpfun are supported). A bundle is defined as two wallets buying on the same block; it does not have to be the first block bundle. Most pumpfun developers sell and buy in bundles multiple times, so the total bundled amount can be greater than 100%. The "total holding amount" is the most important data to check; if it is close to 0, it means that all bundles have been sold. Finally, not just the team can bundle a coin (for example, some tools with multi-wallet purchases will be detected as a bundle).`
+    helpMessage: `
+<b>⚠️ Pumpfun tokens only!</b> This command only works on pump.fun coins.
+
+Analyze bundled trades where two or more wallets buy on the same block. The "total holding amount" shows if bundlers still hold their tokens - if close to 0%, they've likely sold everything.
+
+<b>Key points:</b>
+- Bundles don't have to be first block
+- Total bundled can exceed 100% (multiple bundle rounds)
+- Multi-wallet tools may also appear as bundles`
   },
   'walletchecker': { 
     aliases: ['wc'],
