@@ -252,13 +252,21 @@ class UnifiedBundleAnalyzer {
     async performRegularAnalysis(filteredBundles, tokenInfo, totalSupply, address) {
         const totalTokensBundled = filteredBundles.reduce((sum, bundle) => sum + bundle.tokensBought, 0);
         const totalSolSpent = filteredBundles.reduce((sum, bundle) => sum + bundle.solSpent, 0);
-        logger.debug(`totalTokensBundled: ${totalTokensBundled}`);
-        logger.debug(`totalSupply: ${totalSupply}`);
+        
+        // FIX: Add missing percentageBundled calculation
         const percentageBundled = (totalTokensBundled / totalSupply) * 100;
-        logger.debug(`percentageBundled (calculated): ${percentageBundled}`);
-
+        
+        logger.debug(`=== BUNDLE ANALYSIS DEBUG ===`);
+        logger.debug(`Total bundles found: ${filteredBundles.length}`);
+        logger.debug(`Total tokens bundled: ${totalTokensBundled}`);
+        logger.debug(`Total supply: ${totalSupply}`);
+        
         const allBundles = await Promise.all(filteredBundles.map(async (bundle, index) => {
             try {
+                logger.debug(`\n--- Processing Bundle ${index + 1} (Slot ${bundle.slot}) ---`);
+                logger.debug(`Wallets in bundle: ${Array.from(bundle.uniqueWallets).join(', ')}`);
+                logger.debug(`Tokens bought: ${bundle.tokensBought}`);
+                
                 const holdingAmounts = await Promise.all(
                     Array.from(bundle.uniqueWallets).map(async (wallet) => {
                         try {
@@ -266,7 +274,7 @@ class UnifiedBundleAnalyzer {
                             const tokenAccounts = await getSolanaApi().getTokenAccountsByOwner(wallet, address);
                             
                             // Sum up balances directly from the tokenAccount data
-                            return tokenAccounts.reduce((sum, account) => {
+                            const walletHolding = tokenAccounts.reduce((sum, account) => {
                                 // Extract amount from parsed account data
                                 const amount = account.account?.data?.parsed?.info?.tokenAmount?.amount;
                                 if (amount) {
@@ -274,20 +282,28 @@ class UnifiedBundleAnalyzer {
                                 }
                                 return sum;
                             }, BigInt(0));
+                            
+                            const walletHoldingNumber = Number(walletHolding) / Math.pow(10, tokenInfo.decimals);
+                            logger.debug(`  Wallet ${wallet}: ${walletHoldingNumber} tokens`);
+                            
+                            return walletHolding;
                         } catch (error) {
                             logger.warn(`Error processing wallet ${wallet}: ${error.message}`);
                             return BigInt(0);
                         }
                     })
                 );
-        
+
                 const totalHolding = holdingAmounts.reduce((sum, amount) => sum + amount, BigInt(0));
                 const totalHoldingNumber = Number(totalHolding) / Math.pow(10, tokenInfo.decimals);
-        
+                const holdingPercentage = (totalHoldingNumber / totalSupply) * 100;
+                
+                logger.debug(`Bundle ${index + 1} total holding: ${totalHoldingNumber} (${holdingPercentage.toFixed(4)}%)`);
+
                 return {
                     ...bundle,
                     holdingAmount: totalHoldingNumber,
-                    holdingPercentage: (totalHoldingNumber / totalSupply) * 100
+                    holdingPercentage: holdingPercentage
                 };
             } catch (error) {
                 logger.error(`Error processing bundle ${index}: ${error.message}`);
@@ -300,17 +316,44 @@ class UnifiedBundleAnalyzer {
             }
         }));
 
+        // Log final calculations
         const totalHoldingAmount = allBundles.reduce((sum, bundle) => sum + bundle.holdingAmount, 0);
         const totalHoldingAmountPercentage = (totalHoldingAmount / totalSupply) * 100;
+        
+        logger.debug(`\n=== FINAL TOTALS ===`);
+        logger.debug(`Total holding amount calculated: ${totalHoldingAmount}`);
+        logger.debug(`Total holding percentage: ${totalHoldingAmountPercentage}%`);
+        
+        // Sort bundles and log the sorting
+        const sortedBundlesByTokensBought = [...allBundles].sort((a, b) => b.tokensBought - a.tokensBought);
+        logger.debug(`\n=== TOP 10 BUNDLES BY TOKENS BOUGHT ===`);
+        sortedBundlesByTokensBought.slice(0, 10).forEach((bundle, index) => {
+            logger.debug(`${index + 1}. Slot ${bundle.slot}: ${bundle.tokensBought} tokens bought, ${bundle.holdingAmount} holding (${bundle.holdingPercentage?.toFixed(4)}%)`);
+        });
+        
+        // FIX: Sort by holding amount instead of tokens bought
+        const sortedBundles = allBundles.sort((a, b) => {
+            // First sort by holding amount (descending)
+            const holdingDiff = (b.holdingAmount || 0) - (a.holdingAmount || 0);
+            if (holdingDiff !== 0) return holdingDiff;
+            
+            // If holding amounts are equal, fallback to tokens bought
+            return b.tokensBought - a.tokensBought;
+        });
+        
+        logger.debug(`\n=== TOP 10 BUNDLES BY HOLDING AMOUNT ===`);
+        sortedBundles.slice(0, 10).forEach((bundle, index) => {
+            logger.debug(`${index + 1}. Slot ${bundle.slot}: ${bundle.holdingAmount} holding (${bundle.holdingPercentage?.toFixed(4)}%), ${bundle.tokensBought} tokens bought`);
+        });
 
         return {
             totalBundles: filteredBundles.length,
             totalTokensBundled,
-            percentageBundled,
+            percentageBundled, // Now properly defined
             totalSolSpent,
             totalHoldingAmount,
             totalHoldingAmountPercentage,
-            allBundles,
+            allBundles: sortedBundles, // FIX: Use holding-based sorting
             tokenInfo,
             isTeamAnalysis: false
         };

@@ -1,4 +1,6 @@
 const { formatNumber, truncateAddress, getEmojiForPnl } = require('./generalFormatters');
+const logger = require('../../utils/logger');
+
 
 function formatMainMessage(results) {
     const {
@@ -14,6 +16,30 @@ function formatMainMessage(results) {
         isTeamAnalysis,
         totalTeamWallets
     } = results;
+
+    logger.debug(`\n=== FORMATTER DEBUG ===`);
+    logger.debug(`Total holding amount received: ${totalHoldingAmount}`);
+    logger.debug(`Total holding percentage: ${totalHoldingAmountPercentage}%`);
+    logger.debug(`Number of bundles to format: ${allBundles?.length || 0}`);
+    
+    if (allBundles && allBundles.length > 0) {
+        logger.debug(`\n=== TOP 10 BUNDLES RECEIVED BY FORMATTER ===`);
+        allBundles.slice(0, 10).forEach((bundle, index) => {
+            logger.debug(`${index + 1}. Slot ${bundle.slot}:`);
+            logger.debug(`   Tokens bought: ${bundle.tokensBought}`);
+            logger.debug(`   Holding amount: ${bundle.holdingAmount || 'undefined'}`);
+            logger.debug(`   Holding percentage: ${bundle.holdingPercentage || 'undefined'}%`);
+            logger.debug(`   Wallets: ${Array.from(bundle.uniqueWallets || []).length}`);
+        });
+        
+        // Check if there are any bundles with holdings
+        const bundlesWithHoldings = allBundles.filter(b => (b.holdingAmount || 0) > 0);
+        logger.debug(`\n=== BUNDLES WITH NON-ZERO HOLDINGS ===`);
+        logger.debug(`Found ${bundlesWithHoldings.length} bundles with holdings`);
+        bundlesWithHoldings.forEach((bundle, index) => {
+            logger.debug(`${index + 1}. Slot ${bundle.slot}: ${bundle.holdingAmount} (${bundle.holdingPercentage?.toFixed(4)}%)`);
+        });
+    }
 
     const analysisType = isTeamAnalysis ? "Team" : "Total";
 
