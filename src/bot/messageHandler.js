@@ -201,10 +201,8 @@ class MessageHandler {
                                 "This command requires access which you can get through:\n\n" +
                                 "1️⃣ <b>Group Subscription</b>\n" +
                                 "• Use /subscribe_group to subscribe this group\n\n" + 
-                                "2️⃣ <b>Group Verification</b>\n" +
-                                "• Use /verifygroup to verify this group with tokens (<b>no wallet connection necessary</b>)\n\n" +
-                                "3️⃣ <b>Individual Access</b>\n" +
-                                "• Members can use /verify in private chat with the bot\n\n" +
+                                "2️⃣ <b>Individual Access</b>\n" +
+                                "Use /subscribe in private chat with the bot\n\n" +
                                 "Try /preview to test our features\n\n" +
                                 "Need help? Contact @Rengon0x for support",
                                 { 
@@ -222,12 +220,10 @@ class MessageHandler {
                     if (!hasAccess && command !== 'subscribe' && command !== 'verify') {
                         await this.bot.sendMessage(chatId,
                             "🔒 <b>Access Required</b>\n\n" +
-                            "This command requires access which you can get through either:\n\n" +
-                            "1️⃣ <b>Subscription</b>\n" +
+                            "This command requires access which you can get through:\n\n" +
+                            "<b>Subscription</b>\n" +
                             "• Use /subscribe to view our subscription plans\n\n" + 
-                            "2️⃣ <b>Token Verification</b>\n" +
-                            "• Use /verify to start the verification process (<b>no wallet connection necessary</b>)\n\n" +
-                            "Try /preview to test our features before subscribing/verifying\n\n" +
+                            "Try /preview to test our features before subscribing\n\n" +
                             "Need help? Contact @Rengon0x for support",
                             { parse_mode: 'HTML' }
                         );

@@ -288,10 +288,32 @@ class SubscriptionService {
         const database = await getDatabase();
         const subscription = await database.collection("subscriptions").findOne({ userId });
         if (!subscription) return null;
-
-        subscription.active = subscription.expiresAt > new Date();
+    
+        const isActive = subscription.expiresAt > new Date();
+        
+        // Update the database if the active status has changed
+        if (subscription.active !== isActive) {
+            try {
+                await database.collection("subscriptions").updateOne(
+                    { userId },
+                    { 
+                        $set: { 
+                            active: isActive, 
+                            lastUpdated: new Date() 
+                        }
+                    }
+                );
+                subscription.active = isActive;
+                logger.info(`Updated subscription active status for user ${userId}: ${isActive}`);
+            } catch (error) {
+                logger.error(`Error updating subscription active status for user ${userId}:`, error);
+                // Still return the subscription with the correct active status calculated
+                subscription.active = isActive;
+            }
+        }
+    
         return subscription;
-    }
+    }    
 
     static async getSubscriptionByChatId(chatId) {
         const database = await getDatabase();
@@ -306,8 +328,29 @@ class SubscriptionService {
         const database = await getDatabase();
         const subscription = await database.collection("group_subscriptions").findOne({ chatId });
         if (!subscription) return null;
-
-        subscription.active = subscription.expiresAt > new Date();
+    
+        const isActive = subscription.expiresAt > new Date();
+        
+        // Update the database if the active status has changed
+        if (subscription.active !== isActive) {
+            try {
+                await database.collection("group_subscriptions").updateOne(
+                    { chatId },
+                    { 
+                        $set: { 
+                            active: isActive, 
+                            lastUpdated: new Date() 
+                        }
+                    }
+                );
+                subscription.active = isActive;
+                logger.info(`Updated group subscription active status for chat ${chatId}: ${isActive}`);
+            } catch (error) {
+                logger.error(`Error updating group subscription active status for chat ${chatId}:`, error);
+                subscription.active = isActive;
+            }
+        }
+    
         return subscription;
     }
 
