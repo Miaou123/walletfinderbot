@@ -19,7 +19,8 @@ class HelpHandler {
 You can use "/help [command]" or "/[command]" for a full detail on how the command works.
 
 <b>🔥 NEW BETA FEATURE 🔥</b>
-/walletsearch (/ws) - Search for wallets based on criteria like winrate and portfolio value (Subscribers only)
+/walletsearch (/ws) - Search through our database (more than 100k wallets indexed) for wallets based on criteria like winrate and portfolio value (Subscribers only)
+The /bundle command now supports tracking! Run /bundle and click "Track Bundle Wallet" to get notifications when bundled wallets start selling.
 
 <b>Available commands:</b>
 
@@ -51,7 +52,7 @@ You can use "/help [command]" or "/[command]" for a full detail on how the comma
 /tracker - Show tracked supplies
 
 <b>📊 Tracking Feature:</b>
-Several commands (/scan, /team, /fresh) include a tracking feature that lets you monitor wallet movements in real-time. 
+Several commands (/scan, /team, /fresh, /bundle) include a tracking feature that lets you monitor wallet movements in real-time. 
 After running these commands, click the "Track" button to receive notifications when wallets buy or sell. 
 Use /tracker to manage your active tracking sessions.
 
