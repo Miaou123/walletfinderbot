@@ -100,7 +100,7 @@ class CommandHandlers {
         this.previewHandler = new PreviewHandler();
         this.scanHandler = new ScanHandler(this.stateManager);
         this.referralHandler = new ReferralHandler(this.stateManager, this.claimSystem);
-        this.bundleHandler = new BundleHandler(); // This now has tracking support
+        this.bundleHandler = new BundleHandler(this.accessControl); 
         this.walletCheckerHandler = new WalletCheckerHandler();
         this.crossBtHandler = new CrossBtHandler();
         this.freshHandler = new FreshHandler(this.stateManager);

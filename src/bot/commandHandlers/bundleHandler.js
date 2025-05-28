@@ -5,9 +5,10 @@ const { validateSolanaAddress } = require('./helpers');
 const stateManager = require('../../utils/stateManager');
 
 class BundleHandler {
-    constructor() {
+    constructor(accessControl = null) {
         this.bundleAnalyzer = new UnifiedBundleAnalyzer();
         this.COMMAND_NAME = 'bundle';
+        this.accessControl = accessControl;
     }
 
     generateCallbackData(action, params = {}) {
@@ -36,11 +37,11 @@ class BundleHandler {
     async handleCommand(bot, msg, args, messageThreadId) {
         const username = msg.from.username;
         logger.info(`Starting Bundle command for user ${username}`);
-
+    
         try {
             const address = args[0];
             const isTeamAnalysis = args.length > 1 && args[1].toLowerCase() === 'team';
-
+    
             if (!validateSolanaAddress(address)) {
                 await bot.sendLongMessage(
                     msg.chat.id,
@@ -49,7 +50,7 @@ class BundleHandler {
                 );
                 return;
             }
-
+    
             logger.info(`Processing bundle analysis for address ${address}${isTeamAnalysis ? ' (team analysis)' : ''}`);
             
             const results = await this.bundleAnalyzer.analyzeBundle(address, 50000, isTeamAnalysis);
@@ -60,14 +61,15 @@ class BundleHandler {
             } else {
                 formattedMessage = formatNonPumpfunBundleResponse(results, results.tokenInfo);
             }
-
-            // Prepare tracking data for bundle wallets
-            const trackingData = this.prepareTrackingData(results, address, msg.chat.id);
-            stateManager.setTrackingInfo(msg.chat.id, address, trackingData);
-
-            // Send message with tracking buttons if bundles were found
+    
+            // Always prepare tracking data for potential use
             const hasTrackableWallets = this.hasTrackableWallets(results);
-            
+            if (hasTrackableWallets) {
+                const trackingData = this.prepareTrackingData(results, address, msg.chat.id);
+                stateManager.setTrackingInfo(msg.chat.id, address, trackingData);
+            }
+    
+            // Show tracking buttons to EVERYONE if bundles were found
             const replyMarkup = hasTrackableWallets ? {
                 inline_keyboard: [
                     [
@@ -76,7 +78,7 @@ class BundleHandler {
                     ]
                 ]
             } : undefined;
-
+    
             await bot.sendMessage(
                 msg.chat.id,
                 formattedMessage,
@@ -87,10 +89,10 @@ class BundleHandler {
                     reply_markup: replyMarkup
                 }
             );
-
+    
         } catch (error) {
             logger.error('Error in bundle command:', error);
-            throw error; // Let the MessageHandler handle the error
+            throw error; 
         }
     }
 
