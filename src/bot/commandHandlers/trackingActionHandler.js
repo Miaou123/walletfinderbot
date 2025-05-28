@@ -25,163 +25,165 @@ class TrackingActionHandler {
     
     this.supplyTracker = supplyTracker;
     this.accessControl = accessControl;
-}
-
-generateCallbackData(action, params = {}) {
-  // Format standard: track:action:tokenAddress[:extraParam]
-  let callbackData = `track:${action}:${params.tokenAddress}`;
-  
-  if (params.threshold) {
-    callbackData += `:${params.threshold}`;
   }
-  if (params.trackType) {
-    callbackData += `:${params.trackType}`;
+
+  generateCallbackData(action, params = {}) {
+    // Format standard: track:action:tokenAddress[:extraParam]
+    let callbackData = `track:${action}:${params.tokenAddress}`;
+    
+    if (params.threshold) {
+      callbackData += `:${params.threshold}`;
+    }
+    if (params.trackType) {
+      callbackData += `:${params.trackType}`;
+    }
+    
+    return callbackData;
   }
-  
-  return callbackData;
-}
 
-async handleCallback(bot, query) {
-  try {
-      const [category, action, tokenAddress, threshold] = query.data.split(':');
-      const chatId = query.message.chat.id.toString();
-      const userId = query.from.id.toString();
-      const isGroup = query.message.chat.type === 'group' || query.message.chat.type === 'supergroup';
+  async handleCallback(bot, query) {
+    try {
+        const [category, action, tokenAddress, threshold] = query.data.split(':');
+        const chatId = query.message.chat.id.toString();
+        const userId = query.from.id.toString();
+        const isGroup = query.message.chat.type === 'group' || query.message.chat.type === 'supergroup';
 
-      logger.debug('TrackingActionHandler callback received:', {
-          isGroup,
-          chatId,
-          userId,
-          action,
-          tokenAddress
-      });
-
-      // Check subscription before any tracking action
-      let hasSubscription;
-      if (isGroup) {
-          const groupSub = await this.accessControl.subscriptionService.getGroupSubscription(chatId);
-          hasSubscription = groupSub?.active === true && groupSub.expiresAt > new Date();
-      } else {
-          const userSub = await this.accessControl.subscriptionService.getUserSubscription(userId);
-          hasSubscription = userSub?.active === true && userSub.expiresAt > new Date();
-      }
-
-      logger.debug('Subscription check result:', {
-          hasSubscription,
-          isGroup,
-          chatId,
-          userId
-      });
-
-      if (!hasSubscription) {
-          await bot.answerCallbackQuery(query.id);
-          await bot.sendMessage(chatId,
-              "🔒 This command requires an active subscription\n\n" +
-              "• Use /subscribe to view our subscription plans\n" +
-              "• Try /preview to test our features before subscribing\n\n" +
-              "Need help? Contact @Rengon0x for support"
-          );
-          return;
-      }
-
-      if (action === 'stop') {
-        // First check if this is a tracking setup cancellation (no active tracker)
-        const activeTrackers = this.supplyTracker.getTrackedSuppliesByUser(chatId);
-        const hasActiveTracker = activeTrackers.some(t => t.tokenAddress === tokenAddress);
-        
-        if (!hasActiveTracker) {
-          logger.debug('Canceling tracking setup process (no active tracker)', {
+        logger.debug('TrackingActionHandler callback received:', {
+            isGroup,
             chatId,
+            userId,
+            action,
             tokenAddress
-          });
-          
-          // Clean up any potential custom threshold states
-          const groupKey = `grp_${chatId}`;
-          stateManager.deleteUserState(groupKey);
-          
-          // If enhanced stateManager is available, do a comprehensive cleanup
-          // Here we want to preserve tracking info since we're just canceling the setup
-          if (typeof stateManager.cleanAllChatStates === 'function') {
-            stateManager.cleanAllChatStates(chatId, { preserveTrackingInfo: true });
-          } else {
-            this.cleanupAllInputStates?.(chatId);
-          }
-          
-          // Update the message to show cancellation
-          try {
-            await bot.editMessageText(
-              "Tracking setup canceled.", 
-              {
-                chat_id: chatId,
-                message_id: query.message.message_id
-              }
+        });
+
+        // Check subscription before any tracking action
+        let hasSubscription;
+        if (isGroup) {
+            const groupSub = await this.accessControl.subscriptionService.getGroupSubscription(chatId);
+            hasSubscription = groupSub?.active === true && groupSub.expiresAt > new Date();
+        } else {
+            const userSub = await this.accessControl.subscriptionService.getUserSubscription(userId);
+            hasSubscription = userSub?.active === true && userSub.expiresAt > new Date();
+        }
+
+        logger.debug('Subscription check result:', {
+            hasSubscription,
+            isGroup,
+            chatId,
+            userId
+        });
+
+        if (!hasSubscription) {
+            await bot.answerCallbackQuery(query.id);
+            await bot.sendMessage(chatId,
+                "🔒 This command requires an active subscription\n\n" +
+                "• Use /subscribe to view our subscription plans\n" +
+                "• Try /preview to test our features before subscribing\n\n" +
+                "Need help? Contact @Rengon0x for support"
             );
-          } catch (error) {
-            logger.error('Error updating message for cancellation:', error);
-            // Try to send a new message if editing fails
-            await bot.sendMessage(chatId, "Tracking setup canceled.");
+            return;
+        }
+
+        if (action === 'stop') {
+          // First check if this is a tracking setup cancellation (no active tracker)
+          const activeTrackers = this.supplyTracker.getTrackedSuppliesByUser(chatId);
+          const hasActiveTracker = activeTrackers.some(t => t.tokenAddress === tokenAddress);
+          
+          if (!hasActiveTracker) {
+            logger.debug('Canceling tracking setup process (no active tracker)', {
+              chatId,
+              tokenAddress
+            });
+            
+            // Clean up any potential custom threshold states
+            const groupKey = `grp_${chatId}`;
+            stateManager.deleteUserState(groupKey);
+            
+            // If enhanced stateManager is available, do a comprehensive cleanup
+            // Here we want to preserve tracking info since we're just canceling the setup
+            if (typeof stateManager.cleanAllChatStates === 'function') {
+              stateManager.cleanAllChatStates(chatId, { preserveTrackingInfo: true });
+            } else {
+              this.cleanupAllInputStates?.(chatId);
+            }
+            
+            // Update the message to show cancellation
+            try {
+              await bot.editMessageText(
+                "Tracking setup canceled.", 
+                {
+                  chat_id: chatId,
+                  message_id: query.message.message_id
+                }
+              );
+            } catch (error) {
+              logger.error('Error updating message for cancellation:', error);
+              // Try to send a new message if editing fails
+              await bot.sendMessage(chatId, "Tracking setup canceled.");
+            }
+            
+            await bot.answerCallbackQuery(query.id, { 
+              text: "Tracking setup canceled." 
+            });
+            return;
           }
           
-          await bot.answerCallbackQuery(query.id, { 
-            text: "Tracking setup canceled." 
-          });
+          // Otherwise, this is a normal tracking stop action
+          await this.executeAction(action, bot, query, { tokenAddress });
           return;
         }
+
+        // Initial tracking from scan, team, fresh, or bundle
+        if (action === 'supply' || action === 'team' || action === 'fresh' || action === 'bundle') {
+            // Determine track type based on action
+            let trackType;
+            if (action === 'team') {
+                trackType = 'team';
+            } else if (action === 'fresh') {
+                trackType = 'fresh';
+            } else if (action === 'bundle') {
+                trackType = 'bundle';
+            } else {
+                trackType = 'topHolders';
+            }
+            
+            let trackingInfo = stateManager.getTrackingInfo(chatId, tokenAddress);
+            
+            logger.debug('Retrieved tracking info for initial action:', trackingInfo 
+                ? { trackType: trackingInfo.trackType, tokenSymbol: trackingInfo.tokenInfo?.symbol } 
+                : 'No tracking info found');
+
+            if (!this.validateTrackingInfo(trackingInfo, tokenAddress)) {
+                logger.warn('Invalid tracking info detected for initial action');
+                return await this.handleInvalidTracking(bot, query);
+            }
+
+            trackingInfo.trackType = trackType;
+            // Store the query user ID for later use in private chats
+            trackingInfo.queryFromId = userId;
+            await this.handleTrackAction(bot, chatId, tokenAddress, trackingInfo);
+        }
+        // Actions de configuration et contrôle (sd, sc, st, stop)
+        else {
+            let trackingInfo = stateManager.getTrackingInfo(chatId, tokenAddress);
+
+            if (!this.validateTrackingInfo(trackingInfo, tokenAddress)) {
+                logger.warn('Invalid tracking info detected for configuration action');
+                return await this.handleInvalidTracking(bot, query);
+            }
+
+            // Store the query user ID for later use in private chats
+            trackingInfo.queryFromId = userId;
+            await this.executeAction(action, bot, query, trackingInfo);
+        }
         
-        // Otherwise, this is a normal tracking stop action
-        await this.executeAction(action, bot, query, { tokenAddress });
-        return;
-      }
-
-      // Initial tracking from scan, team or fresh
-      if (action === 'supply' || action === 'team' || action === 'fresh') {
-          // Determine track type based on action
-          let trackType;
-          if (action === 'team') {
-              trackType = 'team';
-          } else if (action === 'fresh') {
-              trackType = 'fresh';
-          } else {
-              trackType = 'topHolders';
-          }
-          
-          let trackingInfo = stateManager.getTrackingInfo(chatId, tokenAddress);
-          
-          logger.debug('Retrieved tracking info for initial action:', trackingInfo 
-              ? { trackType: trackingInfo.trackType, tokenSymbol: trackingInfo.tokenInfo?.symbol } 
-              : 'No tracking info found');
-
-          if (!this.validateTrackingInfo(trackingInfo, tokenAddress)) {
-              logger.warn('Invalid tracking info detected for initial action');
-              return await this.handleInvalidTracking(bot, query);
-          }
-
-          trackingInfo.trackType = trackType;
-          // Store the query user ID for later use in private chats
-          trackingInfo.queryFromId = userId;
-          await this.handleTrackAction(bot, chatId, tokenAddress, trackingInfo);
-      }
-      // Actions de configuration et contrôle (sd, sc, st, stop)
-      else {
-          let trackingInfo = stateManager.getTrackingInfo(chatId, tokenAddress);
-
-          if (!this.validateTrackingInfo(trackingInfo, tokenAddress)) {
-              logger.warn('Invalid tracking info detected for configuration action');
-              return await this.handleInvalidTracking(bot, query);
-          }
-
-          // Store the query user ID for later use in private chats
-          trackingInfo.queryFromId = userId;
-          await this.executeAction(action, bot, query, trackingInfo);
-      }
-      
-      if (!query.answered) {
-          await bot.answerCallbackQuery(query.id);
-      }
-  } catch (error) {
-      await this.handleError(bot, query, error);
+        if (!query.answered) {
+            await bot.answerCallbackQuery(query.id);
+        }
+    } catch (error) {
+        await this.handleError(bot, query, error);
+    }
   }
-}
 
   validateTrackingInfo(trackingInfo, tokenAddress) {
     logger.debug('Validating tracking info:', JSON.stringify(trackingInfo, null, 2));
@@ -236,7 +238,21 @@ async handleCallback(bot, query) {
  }
 
  async handleTrackAction(bot, chatId, tokenAddress, trackingInfo) {
-   const supplyType = trackingInfo.trackType === 'team' ? 'team supply' : 'total supply';
+   let supplyType;
+   switch (trackingInfo.trackType) {
+     case 'team':
+       supplyType = 'team supply';
+       break;
+     case 'fresh':
+       supplyType = 'fresh wallet supply';
+       break;
+     case 'bundle':
+       supplyType = 'bundle wallet supply';
+       break;
+     default:
+       supplyType = 'total supply';
+   }
+   
    const message = this.createTrackingMessage(trackingInfo, supplyType);
    const keyboard = this.createTrackingKeyboard(tokenAddress);
 
@@ -250,7 +266,7 @@ async handleCallback(bot, query) {
  }
 
  async handleDetails(bot, chatId, trackingInfo) {
-   if (!trackingInfo?.allWalletsDetails) {
+   if (!trackingInfo?.allWalletsDetails && !trackingInfo?.bundleDetails) {
      throw new Error("No wallet details found");
    }
    
@@ -258,12 +274,43 @@ async handleCallback(bot, query) {
    // Use the appropriate formatter based on track type
    if (trackingInfo.trackType === 'fresh') {
      message = formatFreshWalletDetails(trackingInfo.allWalletsDetails, trackingInfo.tokenInfo);
+   } else if (trackingInfo.trackType === 'bundle') {
+     message = this.formatBundleDetails(trackingInfo.bundleDetails, trackingInfo.tokenInfo);
    } else {
      // Default to team wallet formatter for other types
      message = formatTeamWalletDetails(trackingInfo.allWalletsDetails, trackingInfo.tokenInfo);
    }
    
    await bot.sendMessage(chatId, message, { parse_mode: 'HTML' });
+ }
+
+ formatBundleDetails(bundleDetails, tokenInfo) {
+   const { bundles, isTeamAnalysis, totalBundles, totalTokensBundled, totalHoldingAmount } = bundleDetails;
+   
+   let message = `<b>${tokenInfo.symbol}</b> (<a href="https://dexscreener.com/solana/${tokenInfo.address}">📈</a>)\n`;
+   message += `<b>${totalBundles} ${isTeamAnalysis ? 'team' : ''} bundle${totalBundles !== 1 ? 's' : ''} details:</b>\n\n`;
+   
+   message += `📦 Total Bundles: ${totalBundles}\n`;
+   message += `🪙 Total Tokens Bundled: ${this.formatNumber(totalTokensBundled)} ${tokenInfo.symbol}\n`;
+   message += `🔒 Total Holding Amount: ${this.formatNumber(totalHoldingAmount)} ${tokenInfo.symbol}\n\n`;
+   
+   bundles.forEach((bundle, index) => {
+     const walletLinks = Array.from(bundle.uniqueWallets || []).map(wallet => {
+       const truncated = this.truncateAddress(wallet);
+       return `<a href="https://solscan.io/account/${wallet}">${truncated}</a>`;
+     }).join(', ');
+     
+     message += `<b>Bundle ${index + 1} (Slot ${bundle.slot}):</b>\n`;
+     message += `├ 💼 Wallets (${bundle.uniqueWalletsCount || bundle.uniqueWallets?.size || 0}): ${walletLinks}\n`;
+     message += `├ 🪙 Tokens: ${this.formatNumber(bundle.tokensBought)} ${tokenInfo.symbol}\n`;
+     message += `├ 💰 SOL Spent: ${this.formatNumber(bundle.solSpent)} SOL\n`;
+     if (bundle.holdingAmount !== undefined) {
+       message += `└ 🔒 Current Holdings: ${this.formatNumber(bundle.holdingAmount)} ${tokenInfo.symbol}\n`;
+     }
+     message += `\n`;
+   });
+   
+   return message;
  }
 
  async handleSetDefaultThreshold(bot, chatId, trackingInfo) {
@@ -447,7 +494,7 @@ async handleCallback(bot, query) {
   }
 
  async handleStartTracking(bot, chatId, trackingInfo, threshold) {
-   const { tokenAddress, teamWallets, freshWallets, topHoldersWallets, wallets: directWallets, tokenInfo } = trackingInfo;
+   const { tokenAddress, teamWallets, freshWallets, bundleWallets, topHoldersWallets, wallets: directWallets, tokenInfo } = trackingInfo;
    const trackType = trackingInfo.trackType || 'topHolders';
    
    // First check if there are direct wallets provided (from wallets field)
@@ -459,6 +506,8 @@ async handleCallback(bot, query) {
        wallets = teamWallets;
      } else if (trackType === 'fresh') {
        wallets = freshWallets?.map(w => w.address || w);
+     } else if (trackType === 'bundle') {
+       wallets = bundleWallets;
      } else {
        wallets = topHoldersWallets;
      }
@@ -470,6 +519,7 @@ async handleCallback(bot, query) {
      hasDirectWallets: !!directWallets?.length,
      hasTeamWallets: !!teamWallets?.length,
      hasFreshWallets: !!freshWallets?.length,
+     hasBundleWallets: !!bundleWallets?.length,
      wallets: wallets?.slice(0, 3) // Log just a few for brevity
    });
 
@@ -588,10 +638,22 @@ async handleCallback(bot, query) {
   }
 
  async updateTrackingMessage(bot, chatId, trackingInfo) {
-   const message = this.createTrackingMessage(trackingInfo, 
-     trackingInfo.trackType === 'team' ? 'team supply' : 'total supply', 
-     trackingInfo.threshold);
-     
+   let supplyType;
+   switch (trackingInfo.trackType) {
+     case 'team':
+       supplyType = 'team supply';
+       break;
+     case 'fresh':
+       supplyType = 'fresh wallet supply';
+       break;
+     case 'bundle':
+       supplyType = 'bundle wallet supply';
+       break;
+     default:
+       supplyType = 'total supply';
+   }
+   
+   const message = this.createTrackingMessage(trackingInfo, supplyType, trackingInfo.threshold);
    const keyboard = this.createThresholdKeyboard(
      trackingInfo.tokenAddress, 
      trackingInfo.threshold
@@ -610,20 +672,10 @@ async handleCallback(bot, query) {
  }
 
  createTrackingMessage(trackingInfo, supplyType, threshold = 1) {
-   // Determine the appropriate supply type description
-   let supplyTypeDesc;
-   if (trackingInfo.trackType === 'fresh') {
-     supplyTypeDesc = 'fresh wallet supply';
-   } else if (trackingInfo.trackType === 'team') {
-     supplyTypeDesc = 'team supply';
-   } else {
-     supplyTypeDesc = 'total supply';
-   }
-   
-   const baseMessage = `🔁 Ready to track ${trackingInfo.tokenInfo.symbol} ${supplyTypeDesc} ` +
+   const baseMessage = `🔁 Ready to track ${trackingInfo.tokenInfo.symbol} ${supplyType} ` +
                       `(${trackingInfo.totalSupplyControlled.toFixed(2)}%)\n\n`;
                       
-   return baseMessage + `You will receive a notification when ${supplyTypeDesc} changes by more than ${threshold}%`;
+   return baseMessage + `You will receive a notification when ${supplyType} changes by more than ${threshold}%`;
  }
 
   createTrackingKeyboard(tokenAddress) {
@@ -653,9 +705,6 @@ async handleCallback(bot, query) {
     };
   }
 
-  // NOTE: This is a duplicate method that is not being used
-  // The main implementation is above at line ~293
-
 createThresholdKeyboard(tokenAddress, threshold) {
   const isCustomThreshold = threshold !== 1;
   return {
@@ -684,6 +733,22 @@ createThresholdKeyboard(tokenAddress, threshold) {
   };
 }
 
+  formatNumber(num, decimals = 2) {
+    if (num === undefined || num === null || isNaN(num)) return '0';
+    
+    if (num >= 1000000) {
+      return (num / 1000000).toFixed(decimals) + 'M';
+    } else if (num >= 1000) {
+      return (num / 1000).toFixed(decimals) + 'K';
+    }
+    
+    return num.toFixed(decimals);
+  }
+
+  truncateAddress(address, start = 4, end = 4) {
+    if (!address) return 'Unknown';
+    return `${address.slice(0, start)}...${address.slice(-end)}`;
+  }
 }
 
 module.exports = TrackingActionHandler;

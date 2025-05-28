@@ -47,7 +47,7 @@ async function retryWithBackoff(operation, maxRetries = 5, initialDelay = 1000) 
 
 /**
  * @class SupplyTracker
- * @description Classe responsable de suivre la supply (top holders ou team) d'un token.
+ * @description Classe responsable de suivre la supply (top holders, team, fresh, ou bundle) d'un token.
  */
 class SupplyTracker {
   /**
@@ -85,7 +85,7 @@ class SupplyTracker {
   }
 
   /**
-   * Nettoie les trackers qui ont dépassé la durée d'expiration (48h).
+   * Nettoie les trackers qui ont dépassé la durée d'expiration (31 jours).
    */
   async cleanupExpiredTrackers() {
     const now = Date.now();
@@ -201,7 +201,7 @@ class SupplyTracker {
   }
 
   /**
-   * Démarre un nouveau tracking (top holders ou team).
+   * Démarre un nouveau tracking (top holders, team, fresh, ou bundle).
    */
   async startTracking(
     tokenAddress,
@@ -261,8 +261,8 @@ class SupplyTracker {
       trackType,
       tokenAddress,
       startTimestamp: now,
-      // Store wallets for team or fresh tracking
-      ...((trackType === 'team' || trackType === 'fresh') && { wallets }),
+      // Store wallets for team, fresh, or bundle tracking
+      ...((trackType === 'team' || trackType === 'fresh' || trackType === 'bundle') && { wallets }),
       intervalId: setInterval(() => this.checkSupply(chatId, trackerId), CHECK_INTERVAL)
     };
 
@@ -303,6 +303,7 @@ class SupplyTracker {
     }
     return true;
   }
+
   /**
    * Retourne la liste des supply trackées par un utilisateur.
    */
@@ -320,12 +321,12 @@ class SupplyTracker {
       currentSupplyPercentage: tracker.currentSupplyPercentage.toFixed(2),
       trackType: tracker.trackType,
       significantChangeThreshold: tracker.significantChangeThreshold.toFixed(2),
-      wallets: (tracker.trackType === 'team' || tracker.trackType === 'fresh') ? tracker.wallets : [] // Include wallets for team and fresh tracking
+      wallets: (tracker.trackType === 'team' || tracker.trackType === 'fresh' || tracker.trackType === 'bundle') ? tracker.wallets : [] // Include wallets for team, fresh, and bundle tracking
     }));
    }
 
   /**
-   * Vérifie la supply (team ou top holders) et notifie en cas de changement significatif.
+   * Vérifie la supply (team, fresh, bundle, ou top holders) et notifie en cas de changement significatif.
    */
   async checkSupply(chatId, trackerId) {
     logger.debug(`Checking supply for ${chatId}, trackerId: ${trackerId}`);
@@ -365,6 +366,16 @@ class SupplyTracker {
             tracker.decimals,
             'supply',
             'freshCheck'
+          );
+        } else if (tracker.trackType === 'bundle') {
+          // Pour le tracking bundle wallets, utiliser getControlledSupply
+          newSupplyPercentage = await this.getControlledSupply(
+            tracker.wallets,
+            tracker.tokenAddress,
+            tracker.totalSupply,
+            tracker.decimals,
+            'supply',
+            'bundleCheck'
           );
         } else {
           // Pour le tracking top holders, utiliser scanToken
@@ -520,6 +531,8 @@ class SupplyTracker {
       holderType = 'Team';
     } else if (tracker.trackType === 'fresh') {
       holderType = 'Fresh wallets';
+    } else if (tracker.trackType === 'bundle') {
+      holderType = 'Bundle wallets';
     } else {
       holderType = 'Top holders';
     }
@@ -565,7 +578,7 @@ async function initializeSupplyTracker(bot, accessControlInstance) {
   const supplyTrackerInstance = new SupplyTracker(bot, accessControlInstance);
   try {
     await supplyTrackerInstance.init();
-    // L’instance est prête à l’emploi
+    // L'instance est prête à l'emploi
     return supplyTrackerInstance;
   } catch (error) {
     logger.error('Error initializing SupplyTracker:', error);

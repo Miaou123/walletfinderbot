@@ -1,7 +1,6 @@
 const AdminCommandManager = require('./adminCommands');
 const BundleHandler = require('./bundleHandler');
 const CrossBtHandler = require('./crossBtHandler');
-const FreshRatioHandler = require('./freshRatioHandler');
 const FreshHandler = require('./freshHandler');
 const DexPaidHandler = require('./dexPaidHandler');
 const EntryMapHandler = require('./entryMapHandler');
@@ -55,7 +54,7 @@ class CommandHandlers {
 
             this.initializeCommandMapping();
             
-            // Mapping des callbacks par catégorie
+            // Mapping des callbacks par catégorie - ADDED bundle support
             this.callbackHandlers = {
                 'sub': this.subscriptionHandler,
                 'group': this.groupSubscriptionHandler,
@@ -63,6 +62,7 @@ class CommandHandlers {
                 'scan': this.scanHandler,
                 'team': this.teamHandler,
                 'fresh': this.freshHandler,
+                'bundle': this.bundleHandler, // ADD THIS LINE
                 'referral': this.referralHandler,
                 'preview': this.previewHandler,
                 'walletsearch': this.walletSearcherHandler,
@@ -100,10 +100,9 @@ class CommandHandlers {
         this.previewHandler = new PreviewHandler();
         this.scanHandler = new ScanHandler(this.stateManager);
         this.referralHandler = new ReferralHandler(this.stateManager, this.claimSystem);
-        this.bundleHandler = new BundleHandler();
+        this.bundleHandler = new BundleHandler(); // This now has tracking support
         this.walletCheckerHandler = new WalletCheckerHandler();
         this.crossBtHandler = new CrossBtHandler();
-        this.freshRatioHandler = new FreshRatioHandler();
         this.freshHandler = new FreshHandler(this.stateManager);
         this.dexPaidHandler = new DexPaidHandler();
         this.entryMapHandler = new EntryMapHandler();
@@ -154,7 +153,6 @@ class CommandHandlers {
             'bundle': { handler: this.bundleHandler.handleCommand, context: this.bundleHandler },
             'walletchecker': { handler: this.walletCheckerHandler.handleCommand, context: this.walletCheckerHandler },
             'crossbt': { handler: this.crossBtHandler.handleCommand, context: this.crossBtHandler },
-            'freshratio': { handler: this.freshRatioHandler.handleCommand, context: this.freshRatioHandler },
             'dexpaid': { handler: this.dexPaidHandler.handleCommand, context: this.dexPaidHandler },
             'entrymap': { handler: this.entryMapHandler.handleCommand, context: this.entryMapHandler },
             'dev': { handler: this.devHandler.handleCommand, context: this.devHandler },
