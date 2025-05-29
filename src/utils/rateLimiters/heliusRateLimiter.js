@@ -7,20 +7,20 @@ class HeliusRateLimiter {
   constructor() {
     // Updated for Business tier: 200 RPC requests/s
     this.rpcLimiter = new Bottleneck({
-      reservoir: 200,             // 200 requests allowed per second
-      reservoirRefreshAmount: 200, // Replenish 200 permits
-      reservoirRefreshInterval: 1000, // Every 1 second (1000ms)
-      maxConcurrent: 20,          // Increased parallel requests
-      minTime: 5                  // Minimum 5ms between requests
+      reservoir: 200,
+      reservoirRefreshAmount: 200,
+      reservoirRefreshInterval: 1000,
+      maxConcurrent: 20,
+      minTime: 5
     });
     
     // Updated for Business tier: 50 API requests/s (DAS & Enhanced)
     this.apiLimiter = new Bottleneck({
-      reservoir: 50,              // 50 requests allowed per second
-      reservoirRefreshAmount: 50,  // Replenish 50 permits
-      reservoirRefreshInterval: 1000, // Every 1 second (1000ms)
-      maxConcurrent: 15,          // Increased parallel requests
-      minTime: 20                 // Minimum 20ms between requests
+      reservoir: 50,
+      reservoirRefreshAmount: 50,
+      reservoirRefreshInterval: 1000,
+      maxConcurrent: 15,
+      minTime: 20
     });
 
     this.requestQueue = {
@@ -34,13 +34,18 @@ class HeliusRateLimiter {
       timeoutRequests: 0,
       nullResponseErrors: 0,
       longTermStorageErrors: 0,
-      retrySuccesses: 0, 
+      retrySuccesses: 0,
     };
 
     this.defaultTimeout = 45000;
+    this.processingBatches = false; // Add flag to prevent race conditions
 
-    // Start automatic batch processing
-    setInterval(() => this.processBatches(), 100);
+    // Start automatic batch processing with race condition protection
+    setInterval(() => {
+      if (!this.processingBatches) {
+        this.processBatches();
+      }
+    }, 100);
   }
 
   getRequestKey(config) {
@@ -54,6 +59,11 @@ class HeliusRateLimiter {
     const requestKey = this.getRequestKey(requestConfig);
     
     return new Promise((resolve, reject) => {
+      // Add timeout for queued requests
+      const timeoutId = setTimeout(() => {
+        reject(new Error('Request timeout in queue'));
+      }, 60000); // 60 second queue timeout
+
       if (!this.requestQueue[apiType].has(requestKey)) {
         this.requestQueue[apiType].set(requestKey, []);
       }
@@ -62,45 +72,91 @@ class HeliusRateLimiter {
         config: requestConfig,
         context,
         requestId,
-        resolve,
-        reject,
+        resolve: (result) => {
+          clearTimeout(timeoutId);
+          resolve(result);
+        },
+        reject: (error) => {
+          clearTimeout(timeoutId);
+          reject(error);
+        },
         timestamp: Date.now()
       });
     });
   }
 
   async processBatches() {
-    for (const apiType of ['rpc', 'api']) {
-      for (const [key, requests] of this.requestQueue[apiType].entries()) {
-        if (requests.length === 0) {
-          this.requestQueue[apiType].delete(key);
-          continue;
-        }
+    if (this.processingBatches) return;
+    this.processingBatches = true;
 
-        // Increased batch size to handle higher throughput
-        const batch = requests.splice(0, apiType === 'rpc' ? 40 : 20);
-        this.processBatch(batch, apiType);
+    try {
+      for (const apiType of ['rpc', 'api']) {
+        const keysToProcess = [...this.requestQueue[apiType].keys()];
+        
+        for (const key of keysToProcess) {
+          const requests = this.requestQueue[apiType].get(key);
+          if (!requests || requests.length === 0) {
+            this.requestQueue[apiType].delete(key);
+            continue;
+          }
+
+          // Remove old requests (older than 5 minutes)
+          const now = Date.now();
+          const validRequests = requests.filter(req => now - req.timestamp < 300000);
+          
+          if (validRequests.length === 0) {
+            this.requestQueue[apiType].delete(key);
+            continue;
+          }
+
+          // Process batch
+          const batchSize = apiType === 'rpc' ? 40 : 20;
+          const batch = validRequests.splice(0, batchSize);
+          
+          if (batch.length > 0) {
+            // Don't await here to allow parallel processing
+            this.processBatch(batch, apiType).catch(error => {
+              logger.error('Batch processing error:', error);
+            });
+          }
+
+          // Update the queue
+          if (validRequests.length === 0) {
+            this.requestQueue[apiType].delete(key);
+          } else {
+            this.requestQueue[apiType].set(key, validRequests);
+          }
+        }
       }
+    } finally {
+      this.processingBatches = false;
     }
   }
 
   async processBatch(batch, apiType) {
     const limiter = apiType === 'api' ? this.apiLimiter : this.rpcLimiter;
     
-    try {
-      const promises = batch.map(request => 
-        limiter.schedule(() => this.executeRequest(request))
-      );
+    // Process each request individually to avoid Promise.all issues
+    const promises = batch.map(async (request) => {
+      try {
+        const result = await limiter.schedule(() => this.executeRequest(request));
+        request.resolve(result);
+        return result;
+      } catch (error) {
+        request.reject(error);
+        throw error;
+      }
+    });
 
-      const results = await Promise.all(promises);
-      
-      batch.forEach((request, index) => {
-        request.resolve(results[index]);
-      });
-    } catch (error) {
-      logger.error('Batch processing error:', error);
-      batch.forEach(request => request.reject(error));
-    }
+    // Use Promise.allSettled to handle individual failures
+    const results = await Promise.allSettled(promises);
+    
+    // Log any rejected promises for debugging
+    results.forEach((result, index) => {
+      if (result.status === 'rejected') {
+        logger.debug(`Batch request ${index} failed:`, result.reason?.message);
+      }
+    });
   }
 
   async executeRequest(request, attempt = 1) {
@@ -108,60 +164,87 @@ class HeliusRateLimiter {
     const maxAttempts = 5;
     const startTime = Date.now();
     this.stats.totalRequests++;
-  
+
     try {
-      // Gradually increase timeout based on attempt number
+      // Add debug logging for null responses
+      logger.debug(`[${requestId}] Executing request attempt ${attempt}`, {
+        method: config.data?.method,
+        hasParams: !!config.data?.params,
+        timeout: config.timeout || this.defaultTimeout
+      });
+
       const dynamicTimeout = (config.timeout || this.defaultTimeout) * Math.min(attempt, 2);
       
       const response = await axios({
         ...config,
         timeout: dynamicTimeout
       });
-  
-      if (!response || !response.data) {
+
+      // More detailed null response checking
+      if (!response) {
+        logger.warn(`[${requestId}] Axios returned null/undefined response`);
         this.stats.nullResponseErrors++;
         return null;
       }
-  
+
+      if (!response.data) {
+        logger.warn(`[${requestId}] Response has no data property`, {
+          status: response.status,
+          statusText: response.statusText
+        });
+        this.stats.nullResponseErrors++;
+        return null;
+      }
+
+      // Check for Helius-specific errors
       if (this.isHeliusError(response.data)) {
+        logger.debug(`[${requestId}] Helius API error:`, response.data.error);
+        
         if (this.isLongTermStorageError(response.data.error)) {
           this.stats.longTermStorageErrors++;
           return null;
         }
+        
         this.stats.failedRequests++;
         return null;
       }
-  
-      // Count successful retries
+
+      // Success case
       if (attempt > 1) {
         this.stats.retrySuccesses++;
+        logger.debug(`[${requestId}] Retry successful on attempt ${attempt}`);
       }
       
       return response;
-  
+
     } catch (error) {
-      // Check if this is a rate limit error (429) or a timeout
       const isTimeout = error.code === 'ECONNABORTED' || error.message.includes('timeout');
+      const isRateLimit = error.response && error.response.status === 429;
       
-      if ((error.response && error.response.status === 429 || isTimeout) && attempt < maxAttempts) {
-        // Exponential backoff with jitter to reduce load spikes
+      if ((isRateLimit || isTimeout) && attempt < maxAttempts) {
         const baseDelay = Math.pow(2, attempt) * 1000;
         const jitter = Math.random() * 1000;
         const delay = Math.min(baseDelay + jitter, 30000);
         
         const errorType = isTimeout ? "timeout" : "rate limit";
-        logger.warn(`${errorType} hit. Attempt ${attempt}/${maxAttempts}. Waiting ${Math.round(delay/1000)}s before retry.`);
+        logger.warn(`[${requestId}] ${errorType} hit. Attempt ${attempt}/${maxAttempts}. Waiting ${Math.round(delay/1000)}s before retry.`);
         
         await new Promise(resolve => setTimeout(resolve, delay));
         return this.executeRequest(request, attempt + 1);
       }
       
+      // Final failure
       if (error.code === 'ECONNABORTED') {
         this.stats.timeoutRequests++;
       }
       
       this.stats.failedRequests++;
-      logger.error(`[${requestId}] Request failed (attempt ${attempt}/${maxAttempts}):`, error.message);
+      logger.error(`[${requestId}] Final request failure (attempt ${attempt}/${maxAttempts}):`, {
+        message: error.message,
+        code: error.code,
+        status: error.response?.status
+      });
+      
       return null;
     }
   }
@@ -183,6 +266,10 @@ class HeliusRateLimiter {
       timeoutRate: `${((this.stats.timeoutRequests / total) * 100).toFixed(2)}%`,
       nullResponseRate: `${((this.stats.nullResponseErrors / total) * 100).toFixed(2)}%`,
       longTermStorageRate: `${((this.stats.longTermStorageErrors / total) * 100).toFixed(2)}%`,
+      queueSizes: {
+        rpc: this.requestQueue.rpc.size,
+        api: this.requestQueue.api.size
+      }
     };
   }
 
@@ -194,6 +281,27 @@ class HeliusRateLimiter {
       nullResponseErrors: 0,
       longTermStorageErrors: 0,
       retrySuccesses: 0,
+    };
+  }
+
+  // Add method to check queue health
+  getQueueHealth() {
+    const now = Date.now();
+    let totalQueuedRequests = 0;
+    let oldRequests = 0;
+
+    for (const apiType of ['rpc', 'api']) {
+      for (const requests of this.requestQueue[apiType].values()) {
+        totalQueuedRequests += requests.length;
+        oldRequests += requests.filter(req => now - req.timestamp > 60000).length;
+      }
+    }
+
+    return {
+      totalQueuedRequests,
+      oldRequests,
+      processingBatches: this.processingBatches,
+      healthy: oldRequests < 10 // Consider unhealthy if > 10 old requests
     };
   }
 }
