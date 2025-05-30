@@ -243,10 +243,32 @@ class GmgnApi {
         return gmgnRateLimiter.enqueue(requestFunction);
     }
 
-    // All your existing API methods remain the same...
+    // ===== ALL API METHODS FROM YOUR ORIGINAL FILE =====
+
     async getTokenInfo(contractAddress, mainContext = 'default', subContext = null) {
         const url = `${this.baseUrl}/tokens/sol/${contractAddress}`;
         return this.fetchData(url, 'getTokenInfo', mainContext, subContext);
+    }
+
+    async getTeamTrades(contractAddress, mainContext = 'default', subContext = null) {
+        const url = `${this.baseUrl}/trades/sol/${contractAddress}?limit=100&maker=&tag%5B%5D=creator&tag%5B%5D=dev_team`;
+        return this.fetchData(url, 'getTeamTrades', mainContext, subContext);
+    }
+
+    async getTopTraders(contractAddress, mainContext = 'default', subContext = null) {
+        const url = `${this.baseUrl}/tokens/top_traders/sol/${contractAddress}`;
+        return this.fetchData(url, 'getTopTraders', mainContext, subContext);
+    }
+
+    async getAllTransactions(contractAddress, mainContext = 'default', subContext = null, cursor = null, limit = 100, revert = false) {
+        let url = `${this.baseUrl}/trades/sol/${contractAddress}?limit=${limit}`;
+        if (cursor) {
+            url += `&cursor=${cursor}`;
+        }
+        if (revert) {
+            url += '&revert=true';
+        }
+        return this.fetchData(url, 'getAllTransactions', mainContext, subContext);
     }
 
     async getWalletData(wallet, mainContext = 'default', subContext = null, period = '30d') {
@@ -260,8 +282,109 @@ class GmgnApi {
         return this.fetchData(url, 'getWalletData', mainContext, subContext);
     }
 
-    // Add all your other existing methods here...
-    // They all follow the same pattern: this.fetchData(url, methodName, mainContext, subContext)
+    async getNewPairs(limit = 50, mainContext = 'default', subContext = null) {
+        if (limit > 50) {
+            throw new Error("You cannot check more than 50 pairs.");
+        }
+        const url = `${this.baseUrl}/pairs/sol/new_pairs?limit=${limit}&orderby=open_timestamp&direction=desc&filters[]=not_honeypot`;
+        return this.fetchData(url, 'getNewPairs', mainContext, subContext);
+    }
+
+    async getTrendingWallets(timeframe = '7d', walletTag = 'smart_degen', mainContext = 'default', subContext = null) {
+        const validTimeframes = ['1d', '7d', '30d'];
+        const validWalletTags = ['pump_smart', 'smart_degen', 'reowned', 'snipe_bot'];
+
+        if (!validTimeframes.includes(timeframe)) {
+            throw new Error("Invalid timeframe. Valid options are '1d', '7d', '30d'.");
+        }
+
+        if (!validWalletTags.includes(walletTag)) {
+            throw new Error("Invalid wallet tag. Valid options are 'pump_smart', 'smart_degen', 'reowned', 'snipe_bot'.");
+        }
+
+        const url = `${this.baseUrl}/rank/sol/wallets/${timeframe}?tag=${walletTag}&orderby=pnl_${timeframe}&direction=desc`;
+        return this.fetchData(url, 'getTrendingWallets', mainContext, subContext);
+    }
+
+    async getTrendingTokens(timeframe = '1h', mainContext = 'default', subContext = null) {
+        const validTimeframes = ['1m', '5m', '1h', '6h', '24h'];
+        if (!validTimeframes.includes(timeframe)) {
+            throw new Error("Invalid timeframe. Valid options are '1m', '5m', '1h', '6h', '24h'.");
+        }
+
+        let url;
+        if (timeframe === '1m') {
+            url = `${this.baseUrl}/rank/sol/swaps/${timeframe}?orderby=swaps&direction=desc&limit=20`;
+        } else {
+            url = `${this.baseUrl}/rank/sol/swaps/${timeframe}?orderby=swaps&direction=desc`;
+        }
+        return this.fetchData(url, 'getTrendingTokens', mainContext, subContext);
+    }
+
+    async getTokensByCompletion(limit = 50, mainContext = 'default', subContext = null) {
+        if (limit > 50) {
+            throw new Error("Limit cannot be above 50.");
+        }
+
+        const url = `${this.baseUrl}/rank/sol/pump?limit=${limit}&orderby=progress&direction=desc&pump=true`;
+        return this.fetchData(url, 'getTokensByCompletion', mainContext, subContext);
+    }
+
+    async findSnipedTokens(size = 10, mainContext = 'default', subContext = null) {
+        if (size > 39) {
+            throw new Error("Size cannot be more than 39.");
+        }
+
+        const url = `${this.baseUrl}/signals/sol/snipe_new?size=${size}&is_show_alert=false&featured=false`;
+        return this.fetchData(url, 'findSnipedTokens', mainContext, subContext);
+    }
+
+    async getGasFee(mainContext = 'default', subContext = null) {
+        const url = `${this.baseUrl}/chains/sol/gas_price`;
+        return this.fetchData(url, 'getGasFee', mainContext, subContext);
+    }
+
+    async getTokenUsdPrice(contractAddress, mainContext = 'default', subContext = null) {
+        if (!contractAddress) {
+            throw new Error("You must input a contract address.");
+        }
+
+        const url = `${this.baseUrl}/sol/tokens/realtime_token_price?address=${contractAddress}`;
+        return this.fetchData(url, 'getTokenUsdPrice', mainContext, subContext);
+    }
+
+    async getTopBuyers(contractAddress, mainContext = 'default', subContext = null) {
+        if (!contractAddress) {
+            throw new Error("You must input a contract address.");
+        }
+
+        const url = `${this.baseUrl}/tokens/top_buyers/sol/${contractAddress}`;
+        return this.fetchData(url, 'getTopBuyers', mainContext, subContext);
+    }
+
+    async getSecurityInfo(contractAddress, mainContext = 'default', subContext = null) {
+        if (!contractAddress) {
+            throw new Error("You must input a contract address.");
+        }
+
+        const url = `${this.baseUrl}/tokens/security/sol/${contractAddress}`;
+        return this.fetchData(url, 'getSecurityInfo', mainContext, subContext);
+    }
+
+    async getWalletInfo(walletAddress, period = '7d', mainContext = 'default', subContext = null) {
+        const validPeriods = ['7d', '30d'];
+
+        if (!walletAddress) {
+            throw new Error("You must input a wallet address.");
+        }
+
+        if (!validPeriods.includes(period)) {
+            throw new Error("Invalid period. Valid options are '7d' or '30d'.");
+        }
+
+        const url = `${this.baseUrl}/smartmoney/sol/walletNew/${walletAddress}?period=${period}`;
+        return this.fetchData(url, 'getWalletInfo', mainContext, subContext);
+    }
 
     // Cleanup method
     async closeBrowser() {
