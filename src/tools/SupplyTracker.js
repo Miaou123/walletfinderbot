@@ -13,7 +13,7 @@ const solanaApi = getSolanaApi();
 const CHECK_INTERVAL = 1 * 60 * 1000;       // 1 minute
 const SAVE_INTERVAL = 0.5 * 60 * 1000;      // 30 secondes
 const CLEANUP_INTERVAL = 1 * 60 * 60 * 1000; // 1 heure
-const EXPIRY_TIME = 31 * 24 * 60 * 60 * 1000;    // 31 days (1 month)
+const EXPIRY_TIME = 2 * 24 * 60 * 60 * 1000;    // 2 days
 
 /**
  * Petite fonction utilitaire pour attendre `ms` millisecondes.
