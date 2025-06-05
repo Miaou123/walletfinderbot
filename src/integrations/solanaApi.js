@@ -229,60 +229,153 @@ class SolanaApi {
     }
   }
 
-  async getTokenAccountsByOwner(walletAddress, tokenAddress, mainContext = 'default', subContext = null) {
-    // Validation des paramètres
-    if (!walletAddress || !tokenAddress) {
-        console.error('Missing required parameters in getTokenAccountsByOwner:', { walletAddress, tokenAddress });
-        return [];
-    }
+ // Enhanced getTokenAccountsByOwner method for SolanaApi.js
+// Replace the existing method with this improved version
 
-    // S'assurer que walletAddress est une chaîne de caractères valide
-    const validWalletAddress = typeof walletAddress === 'string' 
-        ? walletAddress 
-        : walletAddress?.address || null;
+async getTokenAccountsByOwner(walletAddress, tokenAddress, mainContext = 'default', subContext = null) {
+  // Enhanced validation
+  if (!walletAddress || !tokenAddress) {
+      logger.error('Missing required parameters in getTokenAccountsByOwner:', { walletAddress, tokenAddress });
+      return [];
+  }
 
-    if (!validWalletAddress) {
-        console.error('Invalid wallet address format:', walletAddress);
-        return [];
-    }
-    
-    const validTokenAddress = typeof tokenAddress === 'string' 
-        ? tokenAddress 
-        : tokenAddress?.address || null;
+  // Normalize addresses
+  const validWalletAddress = typeof walletAddress === 'string' 
+      ? walletAddress.trim() 
+      : walletAddress?.address?.trim() || null;
 
-    if (!validTokenAddress) {
-        console.error('Invalid token address format:', tokenAddress);
-        return [];
-    }
+  const validTokenAddress = typeof tokenAddress === 'string' 
+      ? tokenAddress.trim() 
+      : tokenAddress?.address?.trim() || null;
 
-    try {
-        // Use jsonParsed encoding to get balance information directly
-        const result = await this.callHelius('getTokenAccountsByOwner', [
-            validWalletAddress,
-            { mint: validTokenAddress },
-            { encoding: 'jsonParsed', commitment: 'confirmed' }
-        ], 'rpc', mainContext, subContext);
+  if (!validWalletAddress || !validTokenAddress) {
+      logger.error('Invalid address format:', { walletAddress: validWalletAddress, tokenAddress: validTokenAddress });
+      return [];
+  }
 
-        if (!result || !Array.isArray(result.value)) {
-            console.error(`Unexpected result structure from Helius for method getTokenAccountsByOwner:`, result);
-            return [];
-        }
+  // Add retry mechanism with exponential backoff
+  const maxRetries = 3;
+  let attempt = 0;
 
-        // Enhance the response with token amount info to save additional API calls
-        const enhancedAccounts = result.value.map(account => {
-            // Extract token amount directly from the parsed data
-            const tokenAmount = account.account?.data?.parsed?.info?.tokenAmount || null;
-            return {
-                ...account,
-                tokenAmount // Include token amount directly
-            };
-        });
+  while (attempt < maxRetries) {
+      try {
+          attempt++;
+          
+          // Add a small delay between retries
+          if (attempt > 1) {
+              const delay = Math.min(1000 * Math.pow(2, attempt - 2), 5000); // 1s, 2s, 4s max
+              logger.debug(`Retrying getTokenAccountsByOwner for ${validWalletAddress}, attempt ${attempt}, delay: ${delay}ms`);
+              await new Promise(resolve => setTimeout(resolve, delay));
+          }
 
-        return enhancedAccounts;
-    } catch (error) {
-        console.error(`Error in getTokenAccountsByOwner for wallet ${validWalletAddress}:`, error);
-        return [];
-    }
+          const result = await this.callHelius('getTokenAccountsByOwner', [
+              validWalletAddress,
+              { mint: validTokenAddress },
+              { encoding: 'jsonParsed', commitment: 'confirmed' }
+          ], 'rpc', mainContext, subContext);
+
+          // Enhanced result validation
+          if (!result) {
+              logger.warn(`Null result from Helius for getTokenAccountsByOwner (attempt ${attempt}/${maxRetries}):`, {
+                  wallet: validWalletAddress.slice(0, 8) + '...',
+                  token: validTokenAddress.slice(0, 8) + '...',
+                  mainContext,
+                  subContext
+              });
+              
+              // If it's the last attempt, return empty array
+              if (attempt === maxRetries) {
+                  return [];
+              }
+              continue; // Try again
+          }
+
+          if (!Array.isArray(result.value)) {
+              logger.warn(`Invalid result structure from Helius (attempt ${attempt}/${maxRetries}):`, {
+                  result,
+                  wallet: validWalletAddress.slice(0, 8) + '...',
+                  token: validTokenAddress.slice(0, 8) + '...'
+              });
+              
+              if (attempt === maxRetries) {
+                  return [];
+              }
+              continue;
+          }
+
+          // Enhance the response with better error handling
+          const enhancedAccounts = result.value.map(account => {
+              try {
+                  // Extract token amount safely
+                  const tokenAmount = account.account?.data?.parsed?.info?.tokenAmount || null;
+                  
+                  // Validate token amount structure
+                  if (tokenAmount && typeof tokenAmount.amount === 'string' && tokenAmount.decimals !== undefined) {
+                      return {
+                          ...account,
+                          tokenAmount
+                      };
+                  } else {
+                      logger.debug(`Invalid token amount structure for account:`, {
+                          account: account.pubkey,
+                          tokenAmount
+                      });
+                      return {
+                          ...account,
+                          tokenAmount: {
+                              amount: '0',
+                              decimals: 0,
+                              uiAmount: 0,
+                              uiAmountString: '0'
+                          }
+                      };
+                  }
+              } catch (accountError) {
+                  logger.warn(`Error processing token account:`, {
+                      account: account.pubkey,
+                      error: accountError.message
+                  });
+                  return {
+                      ...account,
+                      tokenAmount: {
+                          amount: '0',
+                          decimals: 0,
+                          uiAmount: 0,
+                          uiAmountString: '0'
+                      }
+                  };
+              }
+          });
+
+          // Success - log only on retry success or if there are results
+          if (attempt > 1 || enhancedAccounts.length > 0) {
+              logger.debug(`Successfully retrieved ${enhancedAccounts.length} token accounts for ${validWalletAddress.slice(0, 8)}... (attempt ${attempt})`);
+          }
+
+          return enhancedAccounts;
+
+      } catch (error) {
+          logger.warn(`Error in getTokenAccountsByOwner attempt ${attempt}/${maxRetries}:`, {
+              wallet: validWalletAddress.slice(0, 8) + '...',
+              token: validTokenAddress.slice(0, 8) + '...',
+              error: error.message,
+              mainContext,
+              subContext
+          });
+
+          // If it's the last attempt, return empty array
+          if (attempt === maxRetries) {
+              logger.error(`All ${maxRetries} attempts failed for getTokenAccountsByOwner:`, {
+                  wallet: validWalletAddress.slice(0, 8) + '...',
+                  error: error.message
+              });
+              return [];
+          }
+      }
+  }
+
+  // Fallback return (should never reach here)
+  return [];
 }
 
   async getTokenLargestAccounts(tokenMint, mainContext = 'default', subContext = null) {

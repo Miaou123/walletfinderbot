@@ -235,73 +235,81 @@ class PumpfunBundleAnalyzer {
         logger.debug(`Total tokens bundled: ${totalTokensBundled}`);
         logger.debug(`Total supply: ${totalSupply}`);
         
-        // Calculate current holdings for each bundle
-        const allBundles = await Promise.all(filteredBundles.map(async (bundle, index) => {
-            try {
-                logger.debug(`\n--- Processing Bundle ${index + 1} (Slot ${bundle.slot}) ---`);
-                logger.debug(`Wallets in bundle: ${Array.from(bundle.uniqueWallets).join(', ')}`);
-                logger.debug(`Tokens bought: ${bundle.tokensBought}`);
+        // Enhanced batch processing to handle Helius timeouts
+        const BATCH_SIZE = 5; // Reduced from larger batches to prevent timeouts
+        const BATCH_DELAY = 2000; // 2 second delay between batches
+        const allBundles = [];
+        
+        for (let i = 0; i < filteredBundles.length; i += BATCH_SIZE) {
+            const batch = filteredBundles.slice(i, i + BATCH_SIZE);
+            
+            logger.debug(`\n--- Processing Bundle Batch ${Math.floor(i/BATCH_SIZE) + 1}/${Math.ceil(filteredBundles.length/BATCH_SIZE)} ---`);
+            
+            // Process batch with timeout and retry
+            const batchResults = await Promise.allSettled(
+                batch.map((bundle, batchIndex) => 
+                    this.processBundleWithRetry(bundle, i + batchIndex, tokenInfo, totalSupply)
+                )
+            );
+            
+            // Process results and handle failures gracefully
+            batchResults.forEach((result, batchIndex) => {
+                const bundleIndex = i + batchIndex;
+                const bundle = batch[batchIndex];
                 
-                const holdingAmounts = await Promise.all(
-                    Array.from(bundle.uniqueWallets).map(async (wallet) => {
-                        try {
-                            const tokenAccounts = await getSolanaApi().getTokenAccountsByOwner(wallet, tokenInfo.address);
-                            
-                            const walletHolding = tokenAccounts.reduce((sum, account) => {
-                                const amount = account.account?.data?.parsed?.info?.tokenAmount?.amount;
-                                if (amount) {
-                                    return sum + BigInt(amount);
-                                }
-                                return sum;
-                            }, BigInt(0));
-                            
-                            const walletHoldingNumber = Number(walletHolding) / Math.pow(10, tokenInfo.decimals);
-                            logger.debug(`  Wallet ${wallet}: ${walletHoldingNumber} tokens`);
-                            
-                            return walletHolding;
-                        } catch (error) {
-                            logger.warn(`Error processing wallet ${wallet}: ${error.message}`);
-                            return BigInt(0);
-                        }
-                    })
-                );
-
-                const totalHolding = holdingAmounts.reduce((sum, amount) => sum + amount, BigInt(0));
-                const totalHoldingNumber = Number(totalHolding) / Math.pow(10, tokenInfo.decimals);
-                const holdingPercentage = (totalHoldingNumber / totalSupply) * 100;
-                
-                logger.debug(`Bundle ${index + 1} total holding: ${totalHoldingNumber} (${holdingPercentage.toFixed(4)}%)`);
-
-                return {
-                    ...bundle,
-                    holdingAmount: totalHoldingNumber,
-                    holdingPercentage: holdingPercentage
-                };
-            } catch (error) {
-                logger.error(`Error processing bundle ${index}: ${error.message}`);
-                return {
-                    ...bundle,
-                    holdingAmount: 0,
-                    holdingPercentage: 0,
-                    error: error.message
-                };
+                if (result.status === 'fulfilled' && result.value) {
+                    allBundles.push(result.value);
+                } else {
+                    // Create fallback bundle data when API calls fail
+                    logger.warn(`Bundle ${bundleIndex + 1} processing failed, using fallback data:`, {
+                        error: result.reason?.message,
+                        slot: bundle.slot
+                    });
+                    
+                    allBundles.push({
+                        ...bundle,
+                        holdingAmount: 0,
+                        holdingPercentage: 0,
+                        error: `API timeout: ${result.reason?.message || 'Unknown error'}`,
+                        fallback: true
+                    });
+                }
+            });
+            
+            // Add delay between batches to prevent overwhelming the API
+            if (i + BATCH_SIZE < filteredBundles.length) {
+                logger.debug(`Waiting ${BATCH_DELAY}ms before next batch...`);
+                await new Promise(resolve => setTimeout(resolve, BATCH_DELAY));
             }
-        }));
-
-        const totalHoldingAmount = allBundles.reduce((sum, bundle) => sum + bundle.holdingAmount, 0);
+        }
+    
+        // Calculate totals from successful bundle data only
+        const successfulBundles = allBundles.filter(b => !b.error && !b.fallback);
+        const failedBundles = allBundles.filter(b => b.error || b.fallback);
+        
+        const totalHoldingAmount = successfulBundles.reduce((sum, bundle) => sum + (bundle.holdingAmount || 0), 0);
         const totalHoldingAmountPercentage = (totalHoldingAmount / totalSupply) * 100;
         
         logger.debug(`\n=== FINAL TOTALS ===`);
         logger.debug(`Total holding amount calculated: ${totalHoldingAmount}`);
         logger.debug(`Total holding percentage: ${totalHoldingAmountPercentage}%`);
+        logger.debug(`Successful bundles: ${successfulBundles.length}/${allBundles.length}`);
+        
+        if (failedBundles.length > 0) {
+            logger.warn(`${failedBundles.length} bundles failed to process due to API timeouts`);
+        }
         
         // Sort by holding amount first, then by tokens bought
         const sortedBundles = allBundles.sort((a, b) => {
+            // Put successful bundles first
+            if (a.error && !b.error) return 1;
+            if (!a.error && b.error) return -1;
+            
             const holdingDiff = (b.holdingAmount || 0) - (a.holdingAmount || 0);
             if (holdingDiff !== 0) return holdingDiff;
             return b.tokensBought - a.tokensBought;
         });
-
+    
         return {
             totalBundles: filteredBundles.length,
             totalTokensBundled,
@@ -311,8 +319,107 @@ class PumpfunBundleAnalyzer {
             totalHoldingAmountPercentage,
             allBundles: sortedBundles,
             tokenInfo,
-            isTeamAnalysis: false
+            isTeamAnalysis: false,
+            // Add metadata about the analysis
+            metadata: {
+                successfulBundles: successfulBundles.length,
+                failedBundles: failedBundles.length,
+                apiTimeouts: failedBundles.filter(b => b.error?.includes('timeout')).length
+            }
         };
+    }
+    
+    // New helper method for processing individual bundles with retry
+    async processBundleWithRetry(bundle, index, tokenInfo, totalSupply, maxRetries = 2) {
+        for (let attempt = 1; attempt <= maxRetries; attempt++) {
+            try {
+                logger.debug(`\n--- Processing Bundle ${index + 1} (Slot ${bundle.slot}), Attempt ${attempt} ---`);
+                
+                const walletAddresses = Array.from(bundle.uniqueWallets);
+                logger.debug(`Wallets in bundle: ${walletAddresses.join(', ')}`);
+                logger.debug(`Tokens bought: ${bundle.tokensBought}`);
+                
+                // Use Promise.allSettled to handle individual wallet failures
+                const holdingPromises = walletAddresses.map(async (wallet) => {
+                    try {
+                        // Add timeout for individual wallet processing
+                        const timeoutPromise = new Promise((_, reject) => {
+                            setTimeout(() => reject(new Error('Wallet processing timeout')), 15000); // 15s timeout per wallet
+                        });
+                        
+                        const walletPromise = this.getWalletTokenHolding(wallet, tokenInfo);
+                        
+                        const result = await Promise.race([walletPromise, timeoutPromise]);
+                        
+                        const walletHoldingNumber = Number(result) / Math.pow(10, tokenInfo.decimals);
+                        logger.debug(`  Wallet ${wallet}: ${walletHoldingNumber} tokens`);
+                        
+                        return result;
+                    } catch (error) {
+                        logger.warn(`Error processing wallet ${wallet}: ${error.message}`);
+                        return BigInt(0);
+                    }
+                });
+    
+                const holdingResults = await Promise.allSettled(holdingPromises);
+                
+                // Extract successful results and log failures
+                const holdingAmounts = holdingResults.map((result, i) => {
+                    if (result.status === 'fulfilled') {
+                        return result.value;
+                    } else {
+                        logger.debug(`Wallet ${walletAddresses[i]} failed: ${result.reason.message}`);
+                        return BigInt(0);
+                    }
+                });
+    
+                const totalHolding = holdingAmounts.reduce((sum, amount) => sum + amount, BigInt(0));
+                const totalHoldingNumber = Number(totalHolding) / Math.pow(10, tokenInfo.decimals);
+                const holdingPercentage = (totalHoldingNumber / totalSupply) * 100;
+                
+                logger.debug(`Bundle ${index + 1} total holding: ${totalHoldingNumber} (${holdingPercentage.toFixed(4)}%)`);
+    
+                return {
+                    ...bundle,
+                    holdingAmount: totalHoldingNumber,
+                    holdingPercentage: holdingPercentage
+                };
+    
+            } catch (error) {
+                logger.warn(`Bundle ${index + 1} processing attempt ${attempt}/${maxRetries} failed:`, error.message);
+                
+                if (attempt === maxRetries) {
+                    throw error; // Final attempt failed
+                }
+                
+                // Wait before retry
+                await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+            }
+        }
+    }
+    
+    // Helper method to get wallet token holding with better error handling
+    async getWalletTokenHolding(wallet, tokenInfo) {
+        const tokenAccounts = await getSolanaApi().getTokenAccountsByOwner(wallet, tokenInfo.address);
+        
+        if (!Array.isArray(tokenAccounts) || tokenAccounts.length === 0) {
+            return BigInt(0);
+        }
+        
+        const walletHolding = tokenAccounts.reduce((sum, account) => {
+            try {
+                const amount = account.account?.data?.parsed?.info?.tokenAmount?.amount;
+                if (amount && typeof amount === 'string') {
+                    return sum + BigInt(amount);
+                }
+                return sum;
+            } catch (error) {
+                logger.debug(`Error processing token account for wallet ${wallet}:`, error.message);
+                return sum;
+            }
+        }, BigInt(0));
+        
+        return walletHolding;
     }
 
     async isTeamWallet(address, funderAddress) {
