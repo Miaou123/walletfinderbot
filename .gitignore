@@ -7,7 +7,6 @@ OpAdressList.txt
 beta_handle.txt
 gmgn_endpoints.txt
 gmgn_endpoints/
-tests/
 src/logs/
 src/config/
 src/data/
