@@ -130,7 +130,7 @@ class PumpfunBundleAnalyzer {
 
         // Filter for actual bundles (2+ wallets in same slot)
         const filteredBundles = Object.entries(bundles)
-            .filter(([_, bundle]) => bundle.uniqueWallets.size >= 2)
+            .filter(([_, bundle]) => bundle.uniqueWallets.size >= 3)
             .map(([slot, bundle]) => ({
                 slot: parseInt(slot),
                 uniqueWallets: bundle.uniqueWallets,
