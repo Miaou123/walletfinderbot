@@ -72,7 +72,6 @@ class PumpFunApi {
             
             // Minimal, stable Chrome configuration for VM
             this.browser = await puppeteer.launch({
-                executablePath: '/usr/bin/google-chrome',
                 headless: true,
                 args: [
                     // Essential VM flags only
