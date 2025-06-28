@@ -248,6 +248,21 @@ Analyze bundled trades where two or more wallets buy on the same block. The "tot
                 `• Requires ${process.env.MIN_TOKEN_THRESHOLD || 1} ${process.env.TOKEN_SYMBOL || 'tokens'} minimum\n\n` +
                 'Once verified, your group will have access to all token-gated features without a subscription.'
 },
+ask: {
+  description: '🤖 AI Assistant - Ask questions about Noesis commands and get smart recommendations',
+  usage: '/ask [your question]',
+  aliases: ['ai', 'assistant'],
+  requiresAuth: true,
+  requiresToken: false,
+  minArgs: 0,
+  maxArgs: 999,
+  category: 'utility',
+  examples: [
+      '/ask How can I find early whales that bought X coin?',
+      '/ask How do I analyze a wallet performance?',
+      '/ask What command shows common holders between tokens?'
+  ]
+},
   'subscribe': {
     aliases: ['sub'],
     minArgs: 0,

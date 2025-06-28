@@ -18,7 +18,7 @@ class HelpHandler {
         const generalHelpMessage = `
 You can use "/help [command]" or "/[command]" for a full detail on how the command works.
 
-<b>🔥 NEW BETA FEATURE 🔥</b>
+<b>🔥 NEW FEATURE 🔥</b>
 /walletsearch (/ws) - Search through our database (more than 100k wallets indexed) for wallets based on criteria like winrate and portfolio value (Subscribers only)
 The /bundle command now supports tracking! Run /bundle and click "Track Bundle Wallet" to get notifications when bundled wallets start selling.
 

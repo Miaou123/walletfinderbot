@@ -26,8 +26,11 @@ const WalletSearcherHandler = require('./walletSearcherHandler');
 const PreviewHandler = require('./previewHandler');
 const TokenVerifyHandler = require('./tokenVerifyHandler');
 const GroupVerifyHandler = require('./groupVerifyHandler');
+const AIAssistantHandler = require('./aiAssistantHandler');
+const ClaudeApiClient = require('../../integrations/claudeApiClient');
 const stateManager = require('../../utils/stateManager');
 const logger = require('../../utils/logger');
+const config = require('../../utils/config');
 
 class CommandHandlers {
     constructor(accessControl, bot, paymentHandler, claimSystem) {
@@ -54,7 +57,7 @@ class CommandHandlers {
 
             this.initializeCommandMapping();
             
-            // Mapping des callbacks par catégorie - ADDED bundle support
+            // Mapping des callbacks par catégorie - ADDED bundle support and AI assistant
             this.callbackHandlers = {
                 'sub': this.subscriptionHandler,
                 'group': this.groupSubscriptionHandler,
@@ -62,7 +65,7 @@ class CommandHandlers {
                 'scan': this.scanHandler,
                 'team': this.teamHandler,
                 'fresh': this.freshHandler,
-                'bundle': this.bundleHandler, // ADD THIS LINE
+                'bundle': this.bundleHandler,
                 'referral': this.referralHandler,
                 'preview': this.previewHandler,
                 'walletsearch': this.walletSearcherHandler,
@@ -71,7 +74,8 @@ class CommandHandlers {
                 'cross': this.crossHandler,
                 'earlybuyers': this.earlyBuyersHandler, 
                 'tokenverify': this.tokenVerifyHandler,
-                'groupverify': this.groupVerifyHandler
+                'groupverify': this.groupVerifyHandler,
+                'ai': this.aiAssistantHandler // Add AI assistant callback support
             };
 
             await this.setupCallbackHandler();
@@ -121,6 +125,9 @@ class CommandHandlers {
         const WalletSearcherHandler = require('./walletSearcherHandler');
         this.walletSearcherHandler = new WalletSearcherHandler(this.accessControl);
 
+        // Initialize AI Assistant Handler
+        this.initializeAIAssistant();
+
         this.supplyTracker = await initializeSupplyTracker(this.bot, this.accessControl);
         this.trackerHandler = new TrackerHandler(this.supplyTracker);
 
@@ -135,6 +142,32 @@ class CommandHandlers {
         });
         
         this.trackingActionHandler = new TrackingActionHandler(this.supplyTracker, this.accessControl);
+    }
+
+    initializeAIAssistant() {
+        try {
+            // Initialize Claude API client only if API key is available
+            if (config.CLAUDE_API_KEY && config.AI_ASSISTANT_ENABLED) {
+                this.claudeClient = new ClaudeApiClient(config.CLAUDE_API_KEY);
+                this.aiAssistantHandler = new AIAssistantHandler(this.claudeClient);
+                logger.info('AI Assistant initialized with Claude API support');
+            } else {
+                // Initialize without Claude API (pattern matching only)
+                this.aiAssistantHandler = new AIAssistantHandler(null);
+                logger.info('AI Assistant initialized in pattern-matching mode (no Claude API)');
+            }
+        } catch (error) {
+            logger.error('Error initializing AI Assistant:', error);
+            // Initialize a fallback handler that shows error messages
+            this.aiAssistantHandler = {
+                handleCommand: async (bot, msg, args, messageThreadId) => {
+                    await bot.sendMessage(msg.chat.id, 
+                        "❌ AI Assistant is currently unavailable. Please use `/help` to see available commands.",
+                        { message_thread_id: messageThreadId }
+                    );
+                }
+            };
+        }
     }
 
     initializeCommandMapping() {
@@ -161,7 +194,6 @@ class CommandHandlers {
             'besttraders': { handler: this.bestTradersHandler.handleCommand, context: this.bestTradersHandler },
             'search': { handler: this.searchHandler.handleCommand, context: this.searchHandler },
             'topholders': { handler: this.topHoldersHandler.handleCommand, context: this.topHoldersHandler },
-            'help': { handler: this.helpHandler.handleCommand, context: this.helpHandler },
             'team': { handler: this.teamHandler.handleCommand, context: this.teamHandler },
             'fresh': { handler: this.freshHandler.handleCommand, context: this.freshHandler },
             'tracker': { handler: this.trackerHandler.handleCommand, context: this.trackerHandler },
@@ -170,6 +202,10 @@ class CommandHandlers {
             'verify': { handler: this.tokenVerifyHandler.handleCommand, context: this.tokenVerifyHandler },
             'verifygroup': { handler: this.groupVerifyHandler.handleCommand, context: this.groupVerifyHandler },
 
+            // AI Assistant commands
+            'ask': { handler: this.aiAssistantHandler.handleCommand, context: this.aiAssistantHandler },
+            'ai': { handler: this.aiAssistantHandler.handleCommand, context: this.aiAssistantHandler },
+            'assistant': { handler: this.aiAssistantHandler.handleCommand, context: this.aiAssistantHandler },
 
             // Admin Commands
             'adduser': { handler: (msg, args) => this.adminCommands.handleCommand('adduser', msg, args) },
@@ -220,7 +256,7 @@ class CommandHandlers {
                 logger.debug('Callback received:', { category, action, params });
                 
                 const handler = this.callbackHandlers[category];
-                if (handler) {
+                if (handler && typeof handler.handleCallback === 'function') {
                     await handler.handleCallback(this.bot, query);
                 } else {
                     throw new Error(`No handler found for category: ${category}`);
@@ -237,6 +273,22 @@ class CommandHandlers {
 
     async initializeSupplyTracker() {
         await this.supplyTracker.init();
+    }
+
+    /**
+     * Get AI Assistant handler for external access (e.g., MessageHandler)
+     */
+    getAIAssistantHandler() {
+        return this.aiAssistantHandler;
+    }
+
+    /**
+     * Check if AI Assistant is available and functional
+     */
+    isAIAssistantAvailable() {
+        return this.aiAssistantHandler && 
+               typeof this.aiAssistantHandler.handleCommand === 'function' &&
+               config.AI_ASSISTANT_ENABLED;
     }
 
     getHandlers() {

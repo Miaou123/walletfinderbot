@@ -234,9 +234,10 @@ class MessageHandler {
     
             await this.handleCommand(msg, isGroup, messageThreadId, username);
         } else {
+            // Handle non-command messages
             await this.handleNonCommand(msg, messageThreadId);
         }
-    }    
+    }
     
     async handleCommand(msg, isGroup, messageThreadId, username) { 
         const { command, args, isAdmin } = this.commandParser.parseCommand(msg.text);
@@ -267,7 +268,8 @@ class MessageHandler {
                 command !== 'help' && command !== 'start' && 
                 command !== 'subscribe' && command !== 'subscribe_group' && command !== 'ping' && 
                 command !== 'cancel' && command !== 'tracker' && command !== 'access' && 
-                command !== 'referral' && command !== 'preview' && command !== 'walletsearch') {
+                command !== 'referral' && command !== 'preview' && command !== 'walletsearch' &&
+                command !== 'ask' && command !== 'ai' && command !== 'assistant') { // Add AI commands to exemption list
                 // Afficher l'aide pour cette commande
                 this.logger.debug(`Showing help for command ${command} due to no arguments`);
                 if (typeof this.commandHandlers['help'] === 'function') {
@@ -359,8 +361,6 @@ class MessageHandler {
             }
         }
     }
-    
-    
 
     async handleNonCommand(msg, messageThreadId) {
         try {

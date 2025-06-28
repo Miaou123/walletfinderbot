@@ -9,6 +9,9 @@ const sensitiveConfig = {
   DEFINED_API_KEY: process.env.DEFINED_API_KEY,
   adminIds: process.env.ADMIN_IDS,
   REWARD_WALLET_PRIVATE_KEY: process.env.REWARD_WALLET_PRIVATE_KEY,
+  CLAUDE_API_KEY: process.env.CLAUDE_API_KEY || '',
+  AI_ASSISTANT_ENABLED: process.env.AI_ASSISTANT_ENABLED === 'true' || true,
+  AI_FALLBACK_ENABLED: process.env.AI_FALLBACK_ENABLED === 'true' || true,
 };
 
 const nonSensitiveConfig = {
