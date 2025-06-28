@@ -325,93 +325,183 @@ class SupplyTracker {
     }));
    }
 
-  /**
-   * Vérifie la supply (team, fresh, bundle, ou top holders) et notifie en cas de changement significatif.
-   */
-  async checkSupply(chatId, trackerId) {
-    logger.debug(`Checking supply for ${chatId}, trackerId: ${trackerId}`);
-    const userTrackers = this.userTrackers.get(chatId);
-    if (!userTrackers) {
-      logger.debug(`No trackers found for user ${chatId}`);
-      return;
-    }
-
-    const tracker = userTrackers.get(trackerId);
-    logger.debug(`Current tracker info:`, tracker);
-    if (!tracker) {
-      logger.debug(`No tracker found for ID ${trackerId} of user ${chatId}`);
-      return;
-    }
-
-    try {
-      await retryWithBackoff(async () => {
-        let newSupplyPercentage;
-
-        if (tracker.trackType === 'team') {
-          // Pour le tracking team, utiliser les wallets
-          newSupplyPercentage = await this.getTeamSupply(
-            tracker.wallets,
-            tracker.tokenAddress,
-            tracker.totalSupply,
-            tracker.decimals,
-            'supply', 
-            'check' 
-          );
-        } else if (tracker.trackType === 'fresh') {
-          // Pour le tracking fresh wallets, utiliser getControlledSupply
-          newSupplyPercentage = await this.getControlledSupply(
-            tracker.wallets,
-            tracker.tokenAddress,
-            tracker.totalSupply,
-            tracker.decimals,
-            'supply',
-            'freshCheck'
-          );
-        } else if (tracker.trackType === 'bundle') {
-          // Pour le tracking bundle wallets, utiliser getControlledSupply
-          newSupplyPercentage = await this.getControlledSupply(
-            tracker.wallets,
-            tracker.tokenAddress,
-            tracker.totalSupply,
-            tracker.decimals,
-            'supply',
-            'bundleCheck'
-          );
-        } else {
-          // Pour le tracking top holders, utiliser scanToken
-          const scanResult = await scanToken(
-            tracker.tokenAddress,
-            20,  // nombre de holders
-            false,
-            'supplyCheck'
-          );
-          if (!scanResult || typeof scanResult.totalSupplyControlled !== 'number') {
-            throw new Error(`Invalid scan result for ${tracker.tokenAddress}`);
-          }
-          newSupplyPercentage = new BigNumber(scanResult.totalSupplyControlled);
-        }
-
-        if (newSupplyPercentage.isNaN() || !newSupplyPercentage.isFinite()) {
-          throw new Error(`Invalid supply percentage calculated for ${tracker.tokenAddress}`);
-        }
-
-        const change = newSupplyPercentage.minus(tracker.initialSupplyPercentage);
-        if (change.abs().isGreaterThanOrEqualTo(tracker.significantChangeThreshold)) {
-          await this.notifyChange(tracker, newSupplyPercentage, change);
-          tracker.initialSupplyPercentage = newSupplyPercentage;
-        }
-
-        tracker.currentSupplyPercentage = newSupplyPercentage;
-      });
-    } catch (error) {
-      logger.error(`Error checking supply for ${tracker.tokenAddress}:`, {
-        error: error.message,
-        stack: error.stack,
-        tokenAddress: tracker.tokenAddress,
-        trackType: tracker.trackType
-      });
-    }
+ /**
+ * Vérifie la supply (team, fresh, bundle, ou top holders) et notifie en cas de changement significatif.
+ * Includes special handling for 0% fresh wallet bug with full analysis retry.
+ */
+async checkSupply(chatId, trackerId) {
+  logger.debug(`Checking supply for ${chatId}, trackerId: ${trackerId}`);
+  const userTrackers = this.userTrackers.get(chatId);
+  if (!userTrackers) {
+    logger.debug(`No trackers found for user ${chatId}`);
+    return;
   }
+
+  const tracker = userTrackers.get(trackerId);
+  logger.debug(`Current tracker info:`, tracker);
+  if (!tracker) {
+    logger.debug(`No tracker found for ID ${trackerId} of user ${chatId}`);
+    return;
+  }
+
+  try {
+    await retryWithBackoff(async () => {
+      let newSupplyPercentage;
+
+      if (tracker.trackType === 'team') {
+        // Pour le tracking team, utiliser les wallets
+        newSupplyPercentage = await this.getTeamSupply(
+          tracker.wallets,
+          tracker.tokenAddress,
+          tracker.totalSupply,
+          tracker.decimals,
+          'supply', 
+          'check' 
+        );
+      } else if (tracker.trackType === 'fresh') {
+        // Special handling for fresh wallets with 0% bug detection and retry
+        newSupplyPercentage = await this.getFreshSupplyWithRetry(
+          tracker.wallets,
+          tracker.tokenAddress,
+          tracker.totalSupply,
+          tracker.decimals,
+          tracker.currentSupplyPercentage,
+          'supply',
+          'freshCheck'
+        );
+      } else if (tracker.trackType === 'bundle') {
+        // Pour le tracking bundle wallets, utiliser getControlledSupply
+        newSupplyPercentage = await this.getControlledSupply(
+          tracker.wallets,
+          tracker.tokenAddress,
+          tracker.totalSupply,
+          tracker.decimals,
+          'supply',
+          'bundleCheck'
+        );
+      } else {
+        // Pour le tracking top holders, utiliser scanToken
+        const scanResult = await scanToken(
+          tracker.tokenAddress,
+          20,  // nombre de holders
+          false,
+          'supplyCheck'
+        );
+        if (!scanResult || typeof scanResult.totalSupplyControlled !== 'number') {
+          throw new Error(`Invalid scan result for ${tracker.tokenAddress}`);
+        }
+        newSupplyPercentage = new BigNumber(scanResult.totalSupplyControlled);
+      }
+
+      if (newSupplyPercentage.isNaN() || !newSupplyPercentage.isFinite()) {
+        throw new Error(`Invalid supply percentage calculated for ${tracker.tokenAddress}`);
+      }
+
+      const change = newSupplyPercentage.minus(tracker.initialSupplyPercentage);
+      if (change.abs().isGreaterThanOrEqualTo(tracker.significantChangeThreshold)) {
+        await this.notifyChange(tracker, newSupplyPercentage, change);
+        tracker.initialSupplyPercentage = newSupplyPercentage;
+      }
+
+      tracker.currentSupplyPercentage = newSupplyPercentage;
+    });
+  } catch (error) {
+    logger.error(`Error checking supply for ${tracker.tokenAddress}:`, {
+      error: error.message,
+      stack: error.stack,
+      tokenAddress: tracker.tokenAddress,
+      trackType: tracker.trackType
+    });
+  }
+}
+
+/**
+ * Special method to handle fresh wallet supply calculation with 0% bug detection and retry.
+ * If 0% is detected, it re-runs the entire fresh wallet analysis up to 3 times with exponential backoff.
+ */
+async getFreshSupplyWithRetry(wallets, tokenAddress, totalSupply, decimals, currentSupplyPercentage, mainContext, subContext) {
+  const MAX_RETRIES = 3;
+  const INITIAL_DELAY = 2000; // 2 seconds
+  
+  logger.debug(`Getting fresh supply for ${tokenAddress}`, {
+    walletsCount: wallets?.length || 0,
+    currentSupplyPercentage: currentSupplyPercentage.toString()
+  });
+
+  // First, try the normal supply calculation
+  let supplyPercentage = await this.getControlledSupply(
+    wallets,
+    tokenAddress,
+    totalSupply,
+    decimals,
+    mainContext,
+    subContext
+  );
+
+  // Check if we got 0% and the previous value was > 0%
+  const isZeroPercent = supplyPercentage.isEqualTo(0);
+  const hadPreviousSupply = currentSupplyPercentage.isGreaterThan(0);
+
+  if (isZeroPercent && hadPreviousSupply) {
+    logger.warn(`Detected 0% fresh supply for ${tokenAddress} (previously ${currentSupplyPercentage.toFixed(2)}%). This is likely a Helius API issue. Starting retry process...`);
+    
+    let retryCount = 0;
+    
+    while (retryCount < MAX_RETRIES) {
+      try {
+        const delay = INITIAL_DELAY * Math.pow(2, retryCount);
+        logger.info(`Retry attempt ${retryCount + 1}/${MAX_RETRIES} for fresh wallet analysis of ${tokenAddress}. Waiting ${delay}ms...`);
+        
+        // Wait with exponential backoff
+        await new Promise(resolve => setTimeout(resolve, delay));
+        
+        // Re-run the entire fresh wallet analysis
+        logger.debug(`Re-running full fresh wallet analysis for ${tokenAddress}...`);
+        const { analyzeFreshWallets } = require('../analysis/freshWallets');
+        const freshAnalysisResult = await analyzeFreshWallets(tokenAddress, mainContext);
+        
+        if (!freshAnalysisResult || !freshAnalysisResult.scanData) {
+          throw new Error('Fresh wallet analysis returned invalid data');
+        }
+        
+        // Recalculate supply percentage from the fresh analysis
+        const freshSupplyPercentage = new BigNumber(freshAnalysisResult.scanData.totalSupplyControlled || 0);
+        
+        logger.info(`Fresh wallet analysis retry ${retryCount + 1} completed. New supply: ${freshSupplyPercentage.toFixed(2)}%`);
+        
+        // If we got a non-zero result, use it
+        if (freshSupplyPercentage.isGreaterThan(0)) {
+          logger.info(`Successfully recovered from 0% bug. Fresh supply is now ${freshSupplyPercentage.toFixed(2)}%`);
+          return freshSupplyPercentage;
+        }
+        
+        // If still 0%, continue to next retry
+        logger.warn(`Retry ${retryCount + 1} still returned 0%. Continuing to next retry...`);
+        
+      } catch (error) {
+        logger.error(`Error during fresh wallet analysis retry ${retryCount + 1}:`, {
+          error: error.message,
+          tokenAddress,
+          retryCount: retryCount + 1
+        });
+        
+        // If this was the last retry, we'll fall through to return the 0%
+        if (retryCount === MAX_RETRIES - 1) {
+          logger.error(`All ${MAX_RETRIES} retries failed for ${tokenAddress}. Will proceed with 0% value.`);
+          break;
+        }
+      }
+      
+      retryCount++;
+    }
+    
+    // If we reach here, all retries failed or still returned 0%
+    logger.warn(`After ${MAX_RETRIES} retries, fresh supply for ${tokenAddress} is still 0%. This will be reported to Telegram.`);
+  }
+
+  return supplyPercentage;
+}
+
 
   /**
    * Récupère le solde d'un wallet pour un token donné, en gérant les retries (backoff).
@@ -520,35 +610,42 @@ class SupplyTracker {
     return supplyPercentage;
   }
 
-  /**
-   * Notifie l'utilisateur d'un changement significatif dans la supply contrôlée.
-   */
-  async notifyChange(tracker, newPercentage, change) {
-    const emoji = change.isGreaterThan(0) ? "📈" : "📉";
-    
-    let holderType;
-    if (tracker.trackType === 'team') {
-      holderType = 'Team';
-    } else if (tracker.trackType === 'fresh') {
-      holderType = 'Fresh wallets';
-    } else if (tracker.trackType === 'bundle') {
-      holderType = 'Bundle wallets';
-    } else {
-      holderType = 'Top holders';
-    }
-    
-    const message =
-      `⚠️ Significant change detected in ${tracker.trackType} supply for ${tracker.ticker}\n\n` +
-      `${holderType} now hold ${newPercentage.toFixed(2)}% ` +
-      `(previously ${tracker.initialSupplyPercentage.toFixed(2)}%)\n\n` +
-      `${emoji} ${change.isGreaterThan(0) ? '+' : ''}${change.toFixed(2)}%`;
-
-    try {
-      await this.bot.sendMessage(tracker.chatId, message);
-    } catch (error) {
-      logger.error(`Failed to send notification for ${tracker.ticker}:`, error);
-    }
+ /**
+ * Enhanced notification method that includes context about retries for 0% values
+ */
+async notifyChange(tracker, newPercentage, change) {
+  const emoji = change.isGreaterThan(0) ? '📈' : '📉';
+  const changeStr = change.isGreaterThan(0) ? `+${change.toFixed(2)}` : change.toFixed(2);
+  
+  let message = `⚠️ Significant change detected in ${tracker.trackType} supply for ${tracker.ticker}\n`;
+  message += `${tracker.trackType.charAt(0).toUpperCase() + tracker.trackType.slice(1)} wallets now hold ${newPercentage.toFixed(2)}% (previously ${tracker.initialSupplyPercentage.toFixed(2)}%)\n`;
+  message += `${emoji} ${changeStr}%`;
+  
+  // Add special note for 0% values that might be due to API issues
+  if (newPercentage.isEqualTo(0) && tracker.trackType === 'fresh') {
+    message += `\n\n⚠️ Note: 0% supply detected. This was verified with multiple retries to account for potential API issues.`;
   }
+  
+  try {
+    await this.bot.sendMessage(tracker.chatId, message, {
+      parse_mode: 'HTML',
+      disable_web_page_preview: true
+    });
+    logger.info(`Notification sent for ${tracker.trackType} supply change:`, {
+      chatId: tracker.chatId,
+      tokenAddress: tracker.tokenAddress,
+      oldPercentage: tracker.initialSupplyPercentage.toFixed(2),
+      newPercentage: newPercentage.toFixed(2),
+      change: changeStr
+    });
+  } catch (error) {
+    logger.error('Error sending supply change notification:', {
+      error: error.message,
+      chatId: tracker.chatId,
+      tokenAddress: tracker.tokenAddress
+    });
+  }
+}
 
   /**
    * Notifie l'utilisateur en cas d'erreur lors du tracking.
