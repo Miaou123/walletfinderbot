@@ -17,20 +17,22 @@ class PumpfunBundleAnalyzer {
         this.TOKEN_FACTOR = Math.pow(10, this.TOKEN_DECIMALS);
         this.SOL_FACTOR = Math.pow(10, this.SOL_DECIMALS);
         
-        // Bonk.fun specific constants - UPDATED
-        this.BONKFUN_AUTHORITY = new PublicKey('WLHv2UAZm6z4KyaaELi5pjdbJh6RESMva1Rnn8pJVVh');
+        // Bonk.fun specific constants
         this.RAYDIUM_API_BASE = 'https://launch-history-v1.raydium.io';
+        this.RAYDIUM_V3_API = 'https://api-v3.raydium.io';
         
-        // LaunchLab Program (bonk.fun uses this)
+        // FIXED: Added missing program constants
         this.LAUNCHLAB_PROGRAM = new PublicKey('LanMV9sAd7wArD4vJFi2qDdfnVhFxYSUg6eADduJ3uj');
-        
-        // Standard Raydium programs
-        this.RAYDIUM_AMM_PROGRAM = new PublicKey('675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8');
         this.RAYDIUM_CPMM_PROGRAM = new PublicKey('CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C');
-        this.RAYDIUM_CONFIG = new PublicKey('E64NGkDLLCdQ2yFNPcavaKptrEgmiQaNykUuLC1Qgwyp');
+        this.RAYDIUM_AMM_PROGRAM = new PublicKey('675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8');
         this.SOL_MINT = new PublicKey('So11111111111111111111111111111111111111112');
+        
+        // Known pool mappings for immediate fixes
+        this.KNOWN_BONKFUN_POOLS = {
+            'CssndHPw8AdKRRpcNowaA8QFcihaf139pRa98oxobonk': '93nDGcvueZzf8N5mP6hJuSUcHja7UAU1zwVd85vCn71R',
+            'HhfyQNANe8DNAgSaMNRAW5GAs6J15PpTNMUpzBbbonk': '4sRW7YEmDXbBZRVGAUBT4RHPWcJ8ALyXmfYbd9dtWNtg'
+        };
     }
-    
 
     async getTokenMetadata(tokenAddress, mainContext, subContext) {
         try {
@@ -57,7 +59,7 @@ class PumpfunBundleAnalyzer {
             const result = {
                 decimals: tokenAsset.decimals || 0,
                 symbol: tokenAsset.symbol || 'Unknown',
-                name: tokenAsset.symbol || 'Unknown', // Use symbol as name
+                name: tokenAsset.symbol || 'Unknown',
                 priceUsd: tokenPrice,
                 solPriceUsd: solPrice,
                 priceInSol: tokenPrice && solPrice ? 
@@ -78,7 +80,6 @@ class PumpfunBundleAnalyzer {
 
     async isPumpfunCoin(address) {
         try {
-            // Quick address pattern check first
             if (!address.toLowerCase().endsWith('pump')) {
                 logger.debug(`Token ${address} doesn't end with 'pump', testing with PumpFun API anyway`);
             }
@@ -99,284 +100,483 @@ class PumpfunBundleAnalyzer {
         }
     }
 
+    // FIXED: Enhanced Bonk.fun detection with proper pool discovery
     async isBonkfunCoin(address) {
         try {
-            // Quick address pattern check first
-            if (!address.toLowerCase().endsWith('bonk')) {
+            // If it ends with 'bonk', be more permissive
+            const endsWithBonk = address.toLowerCase().endsWith('bonk');
+            
+            if (!endsWithBonk) {
                 logger.debug(`Token ${address} doesn't end with 'bonk', likely not bonk.fun`);
                 return false;
             }
-    
-            const tokenMint = new PublicKey(address);
-            
-            // Try all possible pool derivation methods
-            const poolIds = [];
-            
-            // Method 1: LaunchLab derivation
-            try {
-                const launchpadPoolId = await this.deriveLaunchpadPoolId(tokenMint);
-                if (launchpadPoolId) poolIds.push(launchpadPoolId);
-            } catch (e) { /* ignore */ }
-            
-            // Method 2: CPMM derivation
-            try {
-                const cpmmPoolId = await this.deriveCpmmPoolId(tokenMint);
-                if (cpmmPoolId) poolIds.push(cpmmPoolId);
-            } catch (e) { /* ignore */ }
-            
-            // Method 3: Standard AMM derivation
-            try {
-                const seeds = [
-                    Buffer.from('pool'),
-                    this.RAYDIUM_AMM_PROGRAM.toBuffer(),
-                    tokenMint.toBuffer(),
-                    this.SOL_MINT.toBuffer()
-                ];
-                const [poolId] = await PublicKey.findProgramAddress(seeds, this.RAYDIUM_AMM_PROGRAM);
-                poolIds.push(poolId.toBase58());
-            } catch (e) { /* ignore */ }
-    
-            logger.debug(`Testing ${poolIds.length} potential pool IDs for ${address}: ${poolIds.join(', ')}`);
-    
-            // Test each pool ID with the Raydium API
-            for (const poolId of poolIds) {
-                try {
-                    logger.debug(`Testing pool ID ${poolId} with Raydium API`);
-                    const trades = await this.getBonkfunPoolTrades(poolId, 1);
-                    
-                    if (trades && trades.length >= 0) {
-                        logger.debug(`Successfully verified ${address} as bonk.fun token using pool ${poolId} (${trades.length} trades found)`);
-                        // Store the working pool ID for later use
-                        this._cachedPoolId = poolId;
-                        return true;
-                    }
-                } catch (apiError) {
-                    logger.debug(`Pool ID ${poolId} failed API test: ${apiError.message}`);
+
+            // Check known pools first
+            if (this.KNOWN_BONKFUN_POOLS[address]) {
+                const poolId = this.KNOWN_BONKFUN_POOLS[address];
+                if (await this.testBonkfunPoolId(poolId)) {
+                    logger.debug(`Successfully verified ${address} as bonk.fun token using known pool ${poolId}`);
+                    this._cachedPoolId = poolId;
+                    return true;
                 }
             }
-            
-            logger.debug(`No working pool found for ${address}, not confirmed as bonk.fun`);
-            return false;
+
+            // Try API discovery
+            const apiPool = await this.findPoolViaAPI(address);
+            if (apiPool && await this.testBonkfunPoolId(apiPool)) {
+                logger.debug(`Successfully verified ${address} as bonk.fun token using API pool ${apiPool}`);
+                this._cachedPoolId = apiPool;
+                return true;
+            }
+
+            // Try comprehensive pool discovery
+            try {
+                const poolId = await this.getBonkfunPoolId(address);
+                if (poolId) {
+                    logger.debug(`Successfully verified ${address} as bonk.fun token using discovered pool ${poolId}`);
+                    this._cachedPoolId = poolId;
+                    return true;
+                }
+            } catch (error) {
+                logger.debug(`Pool discovery failed for ${address}: ${error.message}`);
+            }
+
+            // If it ends with 'bonk' but we can't find a pool, still treat it as bonk.fun
+            logger.debug(`Token ${address} ends with 'bonk' but no pool found yet - will treat as bonk.fun`);
+            return true;
+
         } catch (error) {
-            logger.debug(`Token ${address} not found as bonk.fun token: ${error.message}`);
+            logger.debug(`Token ${address} bonk.fun detection error: ${error.message}`);
+            
+            // If it ends with 'bonk', still return true even if detection fails
+            if (address.toLowerCase().endsWith('bonk')) {
+                logger.debug(`${address} ends with 'bonk' - treating as bonk.fun despite detection error`);
+                return true;
+            }
+            
             return false;
         }
     }
-    
-    
 
-    async deriveBonkfunPoolId(tokenMint) {
+    // Get known bonk.fun pool ID
+    getKnownBonkfunPoolId(tokenAddress) {
+        if (this.KNOWN_BONKFUN_POOLS[tokenAddress]) {
+            logger.debug(`Using known pool mapping: ${tokenAddress} -> ${this.KNOWN_BONKFUN_POOLS[tokenAddress]}`);
+            return this.KNOWN_BONKFUN_POOLS[tokenAddress];
+        }
+        return null;
+    }
+
+    // API-based pool discovery
+    async findPoolViaAPI(tokenAddress) {
         try {
-            logger.debug(`Starting pool derivation for bonk.fun token: ${tokenMint.toBase58()}`);
+            logger.debug(`Searching for pool via Raydium V3 API...`);
             
-            // Method 1: Try LaunchLab pool derivation first (bonk.fun specific)
-            try {
-                const launchpadPoolId = await this.deriveLaunchpadPoolId(tokenMint);
-                if (launchpadPoolId) {
-                    logger.debug(`Derived LaunchLab pool ID: ${launchpadPoolId}`);
-                    return launchpadPoolId;
+            const url = `${this.RAYDIUM_V3_API}/pools/info/mint?mint1=${tokenAddress}&poolType=cpmm&poolSortField=liquidity&sortType=desc&pageSize=10&page=1`;
+            
+            const response = await fetch(url);
+            if (response.ok) {
+                const data = await response.json();
+                if (data.success && data.data && data.data.data && data.data.data.length > 0) {
+                    const pool = data.data.data[0];
+                    logger.debug(`Found pool via API: ${pool.id}`);
+                    return pool.id;
                 }
-            } catch (launchpadError) {
-                logger.debug(`LaunchLab derivation failed: ${launchpadError.message}`);
             }
-    
-            // Method 2: Try with Raydium SDK (if available)
-            try {
-                const { getPdaPoolId } = require('@raydium-io/raydium-sdk');
-                const { publicKey: poolId } = await getPdaPoolId(
-                    this.RAYDIUM_AMM_PROGRAM,
-                    this.RAYDIUM_CONFIG,
-                    tokenMint,
-                    this.SOL_MINT
-                );
-                logger.debug(`Derived standard AMM pool ID: ${poolId.toBase58()}`);
-                return poolId.toBase58();
-            } catch (sdkError) {
-                logger.debug('Raydium SDK not available or failed, trying other methods');
-            }
-    
-            // Method 3: Try CPMM derivation
-            try {
-                const cpmmPoolId = await this.deriveCpmmPoolId(tokenMint);
-                if (cpmmPoolId) {
-                    logger.debug(`Derived CPMM pool ID: ${cpmmPoolId}`);
-                    return cpmmPoolId;
-                }
-            } catch (cpmmError) {
-                logger.debug(`CPMM derivation failed: ${cpmmError.message}`);
-            }
-    
-            // Method 4: Manual PDA derivation for legacy AMM
-            try {
-                const seeds = [
-                    Buffer.from('pool'),
-                    this.RAYDIUM_AMM_PROGRAM.toBuffer(),
-                    tokenMint.toBuffer(),
-                    this.SOL_MINT.toBuffer()
-                ];
-                
-                const [poolId] = await PublicKey.findProgramAddress(
-                    seeds,
-                    this.RAYDIUM_AMM_PROGRAM
-                );
-                
-                logger.debug(`Derived manual AMM pool ID: ${poolId.toBase58()}`);
-                return poolId.toBase58();
-            } catch (manualError) {
-                logger.debug(`Manual derivation failed: ${manualError.message}`);
-            }
-    
-            logger.error('All pool derivation methods failed');
-            return null;
         } catch (error) {
-            logger.error('Error in pool derivation:', error);
-            return null;
+            logger.debug(`API pool discovery failed: ${error.message}`);
+        }
+        return null;
+    }
+
+    // Test if pool ID works
+    async testBonkfunPoolId(poolId) {
+        try {
+            const result = await this.getBonkfunPoolTrades(poolId, 1);
+            if (result && result.trades) {
+                return Array.isArray(result.trades);
+            }
+            return Array.isArray(result);
+        } catch (error) {
+            return false;
         }
     }
 
-    async deriveLaunchpadPoolId(tokenMint) {
+    // ENHANCED: Comprehensive pool discovery for bonk.fun tokens
+    async getBonkfunPoolId(tokenAddress) {
         try {
-            // Try with Raydium SDK first (most accurate)
-            try {
-                const { getPdaLaunchpadPoolId } = require('@raydium-io/raydium-sdk-v2');
-                const poolPda = await getPdaLaunchpadPoolId(
-                    this.LAUNCHLAB_PROGRAM,
-                    tokenMint
-                );
-                return poolPda.publicKey.toBase58();
-            } catch (sdkError) {
-                logger.debug('Raydium SDK v2 not available, using manual LaunchLab derivation');
+            // Step 1: Check known mappings first (immediate fix)
+            const knownPool = this.getKnownBonkfunPoolId(tokenAddress);
+            if (knownPool) {
+                if (await this.testBonkfunPoolId(knownPool)) {
+                    logger.debug(`Using known pool mapping: ${knownPool}`);
+                    return knownPool;
+                }
             }
-    
-            // Manual LaunchLab pool derivation
-            const seeds = [
-                Buffer.from('pool'),
-                tokenMint.toBuffer()
-            ];
             
-            const [poolId] = await PublicKey.findProgramAddress(
-                seeds,
-                this.LAUNCHLAB_PROGRAM
-            );
+            // Step 2: Try API discovery (bonk.fun website data)
+            const apiPool = await this.findPoolViaAPI(tokenAddress);
+            if (apiPool) {
+                if (await this.testBonkfunPoolId(apiPool)) {
+                    logger.debug(`Found pool via API: ${apiPool}`);
+                    return apiPool;
+                }
+            }
             
-            return poolId.toBase58();
+            // Step 3: Multi-pool derivation and testing
+            const candidatePools = await this.deriveAllBonkfunPools(tokenAddress);
+            
+            logger.debug(`Found ${candidatePools.length} candidate pools for ${tokenAddress}`);
+            
+            // Test all pools and find the one with trades
+            for (const pool of candidatePools) {
+                const testResult = await this.testBonkfunPoolWithTrades(pool.poolId);
+                
+                logger.debug(`Testing ${pool.name}: ${pool.poolId} - ${testResult.tradeCount} trades`);
+                
+                if (testResult.valid && testResult.tradeCount > 0) {
+                    logger.debug(`✅ Found active pool: ${pool.poolId} (${pool.name}) with ${testResult.tradeCount} trades`);
+                    return pool.poolId;
+                }
+            }
+            
+            // If no pool has trades, return the first valid one (bonding curve)
+            for (const pool of candidatePools) {
+                const testResult = await this.testBonkfunPoolWithTrades(pool.poolId);
+                if (testResult.valid) {
+                    logger.debug(`⚠️ Using valid pool without trades: ${pool.poolId} (${pool.name})`);
+                    return pool.poolId;
+                }
+            }
+            
+            throw new Error(`No valid pools found for bonk.fun token ${tokenAddress}`);
+            
         } catch (error) {
-            logger.debug(`LaunchLab pool derivation failed: ${error.message}`);
-            throw error;
-        }
-    }
-    
-    // NEW: CPMM pool derivation (alternative method)
-    async deriveCpmmPoolId(tokenMint) {
-        try {
-            // CPMM uses different seed structure
-            const seeds = [
-                Buffer.from('cp_pool'),
-                tokenMint.toBuffer(),
-                this.SOL_MINT.toBuffer()
-            ];
-            
-            const [poolId] = await PublicKey.findProgramAddress(
-                seeds,
-                this.RAYDIUM_CPMM_PROGRAM
-            );
-            
-            return poolId.toBase58();
-        } catch (error) {
-            logger.debug(`CPMM pool derivation failed: ${error.message}`);
+            logger.error(`Error finding bonk.fun pool for ${tokenAddress}: ${error.message}`);
             throw error;
         }
     }
 
-    async getBonkfunAllTrades(tokenAddress, limit = 200, offset = 0) {
-        try {
-            const tokenMint = new PublicKey(tokenAddress);
+    // Derive all possible bonk.fun pools
+    async deriveAllBonkfunPools(tokenAddress) {
+        const tokenMint = new PublicKey(tokenAddress);
+        const pools = [];
+        
+        const derivationMethods = [
+            // LaunchLab patterns (bonding curve)
+            {
+                name: 'LaunchLab Standard',
+                program: this.LAUNCHLAB_PROGRAM,
+                seeds: () => [Buffer.from('pool'), tokenMint.toBuffer()]
+            },
+            {
+                name: 'LaunchLab with SOL',
+                program: this.LAUNCHLAB_PROGRAM,
+                seeds: () => [Buffer.from('pool'), tokenMint.toBuffer(), this.SOL_MINT.toBuffer()]
+            },
             
-            let poolId = this._cachedPoolId; // Use cached pool ID if available
+            // CPMM patterns (migrated pools)
+            {
+                name: 'CPMM Standard',
+                program: this.RAYDIUM_CPMM_PROGRAM,
+                seeds: () => [Buffer.from('cp_pool'), tokenMint.toBuffer(), this.SOL_MINT.toBuffer()]
+            },
+            {
+                name: 'CPMM Reverse',
+                program: this.RAYDIUM_CPMM_PROGRAM,
+                seeds: () => [Buffer.from('cp_pool'), this.SOL_MINT.toBuffer(), tokenMint.toBuffer()]
+            },
+            {
+                name: 'CPMM Alternative',
+                program: this.RAYDIUM_CPMM_PROGRAM,
+                seeds: () => [Buffer.from('pool'), tokenMint.toBuffer(), this.SOL_MINT.toBuffer()]
+            },
             
-            if (!poolId) {
-                // Derive the pool ID if not cached
-                poolId = await this.deriveBonkfunPoolId(tokenMint);
-                if (!poolId) {
-                    throw new Error('Could not derive pool ID for bonk.fun token');
-                }
+            // AMM patterns (legacy)
+            {
+                name: 'AMM Legacy',
+                program: this.RAYDIUM_AMM_PROGRAM,
+                seeds: () => [Buffer.from('pool'), this.RAYDIUM_AMM_PROGRAM.toBuffer(), tokenMint.toBuffer(), this.SOL_MINT.toBuffer()]
+            },
+            {
+                name: 'AMM Simple',
+                program: this.RAYDIUM_AMM_PROGRAM,
+                seeds: () => [Buffer.from('pool'), tokenMint.toBuffer(), this.SOL_MINT.toBuffer()]
             }
-    
-            logger.debug(`Using pool ID ${poolId} for bonk.fun token ${tokenAddress}`);
-    
-            // Fetch trades from Raydium API
-            const trades = await this.getBonkfunPoolTrades(poolId, limit);
-            
-            if (!trades || trades.length === 0) {
-                return [];
-            }
-    
-            // Transform Raydium trade data to match PumpFun format
-            return trades.map(trade => {
-                const isBuy = trade.side === 'buy';
+        ];
+        
+        for (const method of derivationMethods) {
+            try {
+                const seeds = method.seeds();
+                const [poolId] = await PublicKey.findProgramAddress(seeds, method.program);
                 
+                pools.push({
+                    name: method.name,
+                    poolId: poolId.toBase58(),
+                    program: method.program.toBase58()
+                });
+            } catch (error) {
+                logger.debug(`${method.name} derivation failed: ${error.message}`);
+            }
+        }
+        
+        return pools;
+    }
+
+    // Enhanced: Test pool and get trade count
+    async testBonkfunPoolWithTrades(poolId) {
+        try {
+            const result = await this.getBonkfunPoolTrades(poolId, 1);
+            
+            if (result && result.trades) {
                 return {
-                    is_buy: isBuy,
-                    user: trade.owner,
-                    slot: this.estimateSlotFromTimestamp(trade.blockTime),
-                    signature: trade.txid,
-                    token_amount: isBuy ? (trade.amountA * Math.pow(10, 6)) : (trade.amountB * Math.pow(10, 6)),
-                    sol_amount: isBuy ? (trade.amountB * Math.pow(10, 9)) : (trade.amountA * Math.pow(10, 9)),
-                    timestamp: trade.blockTime,
-                    block_time: trade.blockTime
+                    valid: true,
+                    tradeCount: result.trades.length,
+                    hasData: result.trades.length > 0
                 };
-            });
-    
+            }
+            
+            // Fallback for old format
+            if (Array.isArray(result)) {
+                return {
+                    valid: true,
+                    tradeCount: result.length,
+                    hasData: result.length > 0
+                };
+            }
+            
+            return {
+                valid: false,
+                tradeCount: 0,
+                hasData: false
+            };
         } catch (error) {
-            logger.error(`Error fetching bonk.fun trades for ${tokenAddress}:`, error);
-            throw error;
+            return {
+                valid: false,
+                tradeCount: 0,
+                hasData: false,
+                error: error.message
+            };
         }
     }
-    
-    // IMPROVED: Better error handling for pool trades
-    async getBonkfunPoolTrades(poolId, limit = 200) {
+
+    // FIXED: Proper Raydium API pagination using nextPageKey
+    async getBonkfunPoolTrades(poolId, limit = 100, nextPageKey = null) {
         try {
-            const url = `${this.RAYDIUM_API_BASE}/trade?poolId=${poolId}&limit=${limit}`;
+            const effectiveLimit = Math.min(limit, 100);
+            
+            // Build URL with nextPageKey if provided
+            let url = `${this.RAYDIUM_API_BASE}/trade?poolId=${poolId}&limit=${effectiveLimit}`;
+            if (nextPageKey) {
+                url += `&nextPageKey=${nextPageKey}`;
+            }
             
             logger.debug(`Fetching trades from Raydium API: ${url}`);
             
-            const response = await fetch(url);
+            const response = await fetch(url, {
+                method: 'GET',
+                headers: {
+                    'Accept': 'application/json',
+                    'Content-Type': 'application/json'
+                }
+            });
             
             if (!response.ok) {
+                const errorText = await response.text();
+                logger.error(`API Error Details: Status ${response.status}, Response: ${errorText}`);
+                
+                if (response.status === 400) {
+                    logger.warn(`Pool ${poolId} returned 400 - possibly no trades or invalid pool format`);
+                    return { trades: [], nextPageKey: null };
+                }
+                
                 throw new Error(`HTTP ${response.status}: ${response.statusText}`);
             }
             
             const data = await response.json();
             
-            if (data.success && data.data && data.data.rows) {
-                logger.debug(`Successfully fetched ${data.data.rows.length} trades from pool ${poolId}`);
-                return data.data.rows;
+            // Handle different possible response formats
+            if (data && data.success === true && data.data) {
+                const trades = data.data.rows || [];
+                const nextKey = data.data.nextPageKey || null;
+                
+                logger.debug(`Successfully fetched ${trades.length} trades from pool ${poolId}`);
+                if (nextKey) {
+                    logger.debug(`Next page key available: ${nextKey.substring(0, 10)}...`);
+                } else {
+                    logger.debug(`No more pages available`);
+                }
+                
+                return { trades, nextPageKey: nextKey };
             }
             
-            if (data.error) {
-                throw new Error(`API Error: ${data.error}`);
+            // Handle direct array response (fallback)
+            if (Array.isArray(data)) {
+                logger.debug(`Successfully fetched ${data.length} trades from pool ${poolId} (direct array)`);
+                return { trades: data, nextPageKey: null };
+            }
+            
+            // Handle simple data object (fallback)
+            if (data && Array.isArray(data.data)) {
+                logger.debug(`Successfully fetched ${data.data.length} trades from pool ${poolId} (data array)`);
+                return { trades: data.data, nextPageKey: null };
+            }
+            
+            // Handle error response
+            if (data && data.error) {
+                logger.warn(`API returned error for pool ${poolId}: ${data.error}`);
+                return { trades: [], nextPageKey: null };
             }
             
             logger.debug(`No trades found for pool ${poolId}`);
-            return [];
+            return { trades: [], nextPageKey: null };
+            
         } catch (error) {
+            if (error.name === 'TypeError' && error.message.includes('fetch')) {
+                logger.error(`Network error fetching trades for pool ${poolId}: ${error.message}`);
+                throw new Error('Network error - please check your internet connection');
+            }
+            
             logger.error(`Error fetching bonk.fun pool trades for ${poolId}: ${error.message}`);
+            
+            if (error.message.includes('400') || error.message.includes('Bad Request')) {
+                logger.warn(`Returning empty trades due to 400 error for pool ${poolId}`);
+                return { trades: [], nextPageKey: null };
+            }
+            
+            throw error;
+        }
+    }
+
+    // UPDATED: getBonkfunAllTrades with proper pagination
+    async getBonkfunAllTrades(tokenAddress, limit = 200, offset = 0) {
+        try {
+            let poolId = this._cachedPoolId;
+            
+            if (!poolId) {
+                poolId = await this.getBonkfunPoolId(tokenAddress);
+                this._cachedPoolId = poolId;
+            }
+
+            logger.debug(`Using pool ID ${poolId} for bonk.fun token ${tokenAddress}`);
+
+            const allTrades = [];
+            let nextPageKey = null;
+            const pageSize = 100; // Raydium API max per request
+
+            do {
+                const result = await this.getBonkfunPoolTrades(poolId, pageSize, nextPageKey);
+                
+                if (result.trades && result.trades.length > 0) {
+                    allTrades.push(...result.trades);
+                    logger.debug(`Total trades fetched so far: ${allTrades.length}`);
+                    
+                    // Check if we've reached the requested limit
+                    if (allTrades.length >= limit) {
+                        logger.debug(`Reached specified limit of ${limit} trades. Stopping pagination.`);
+                        break;
+                    }
+                    
+                    // Update nextPageKey for next iteration
+                    nextPageKey = result.nextPageKey;
+                    
+                    if (!nextPageKey) {
+                        logger.debug(`No more pages available. Stopping pagination.`);
+                        break;
+                    }
+                } else {
+                    logger.debug(`No trades in this page. Stopping pagination.`);
+                    break;
+                }
+            } while (nextPageKey && allTrades.length < limit);
+
+            logger.debug(`Found ${allTrades.length} total trades for bonk.fun token ${tokenAddress}`);
+
+            // Transform Raydium trade data to match PumpFun format
+            return allTrades.slice(0, limit).map(trade => {
+                const isBuy = trade.side === 'buy' || trade.type === 'buy';
+                
+                return {
+                    is_buy: isBuy,
+                    user: trade.owner || trade.user,
+                    slot: this.estimateSlotFromTimestamp(trade.blockTime || trade.block_time),
+                    signature: trade.txid || trade.signature,
+                    token_amount: isBuy ? 
+                        (trade.amountA * Math.pow(10, 6)) : 
+                        (trade.amountB * Math.pow(10, 6)),
+                    sol_amount: isBuy ? 
+                        (trade.amountB * Math.pow(10, 9)) : 
+                        (trade.amountA * Math.pow(10, 9)),
+                    timestamp: trade.blockTime || trade.block_time,
+                    block_time: trade.blockTime || trade.block_time
+                };
+            });
+
+        } catch (error) {
+            logger.error(`Error fetching bonk.fun trades for ${tokenAddress}:`, error);
             throw error;
         }
     }
 
     estimateSlotFromTimestamp(timestamp) {
-        // Convert timestamp to approximate slot number
-        const SOLANA_GENESIS_TIMESTAMP = 1609459200; // Approximate
+        const SOLANA_GENESIS_TIMESTAMP = 1609459200;
         const SLOTS_PER_SECOND = 2.2;
-        
         return Math.floor((timestamp - SOLANA_GENESIS_TIMESTAMP) * SLOTS_PER_SECOND);
+    }
+
+    // FIXED: Platform detection with proper prioritization
+    async detectTokenPlatform(address) {
+        // PRIORITY 1: Address pattern check (most reliable for initial detection)
+        if (address.toLowerCase().endsWith('bonk')) {
+            logger.debug(`Token ${address} detected as Bonk.fun based on address pattern`);
+            
+            // Try bonk.fun detection first
+            const isBonkfun = await this.isBonkfunCoin(address);
+            if (isBonkfun) {
+                logger.debug(`Confirmed ${address} as Bonk.fun token`);
+                return 'bonkfun';
+            }
+            
+            // IMPORTANT: If it ends with 'bonk' but bonk.fun detection fails,
+            // still return 'bonkfun' instead of falling back to PumpFun
+            logger.debug(`${address} ends with 'bonk' but pool detection failed - treating as Bonk.fun anyway`);
+            return 'bonkfun';
+        }
+        
+        if (address.toLowerCase().endsWith('pump')) {
+            logger.debug(`Token ${address} detected as PumpFun based on address pattern`);
+            
+            // Verify with API
+            const isPumpfun = await this.isPumpfunCoin(address);
+            if (isPumpfun) {
+                logger.debug(`Confirmed ${address} as PumpFun token`);
+                return 'pumpfun';
+            }
+        }
+        
+        // PRIORITY 2: API-based detection for tokens without clear patterns
+        logger.debug(`Checking ${address} with API-based detection`);
+        
+        // Try PumpFun first (more common)
+        const isPumpfun = await this.isPumpfunCoin(address);
+        if (isPumpfun) {
+            logger.debug(`API confirmed ${address} as PumpFun token`);
+            return 'pumpfun';
+        }
+        
+        // Try Bonk.fun as fallback
+        const isBonkfun = await this.isBonkfunCoin(address);
+        if (isBonkfun) {
+            logger.debug(`API confirmed ${address} as Bonk.fun token`);
+            return 'bonkfun';
+        }
+        
+        return null;
     }
 
     async analyzeBundle(address, limit = 50000, isTeamAnalysis = false) {
         logger.debug(`Starting bundle analysis for ${address}`);
         
-        // Use improved platform detection
         const platform = await this.detectTokenPlatform(address);
         
         if (platform === 'pumpfun') {
@@ -393,17 +593,16 @@ class PumpfunBundleAnalyzer {
             return result;
         }
         
-        // If neither platform is detected
         throw new Error(`This token is not supported. Bundle analysis only works with PumpFun (.../pump) and Bonk.fun (.../bonk) tokens. Token ${address} was not detected as either platform.`);
     }
 
+    // UNCHANGED: Keep all existing PumpFun code exactly as is
     async analyzePumpfunBundle(address, limit, isTeamAnalysis) {
         let offset = 0;
         const pageLimit = 200;
         let hasMoreTransactions = true;
         const allTrades = [];
 
-        // Fetch all trades from Pumpfun API
         while (hasMoreTransactions) {
             logger.debug(`Fetching trades from Pumpfun API. Offset: ${offset}, Limit: ${pageLimit}`);
             const trades = await pumpfunApi.getAllTrades(address, pageLimit, offset);
@@ -446,7 +645,6 @@ class PumpfunBundleAnalyzer {
             }
         });
 
-        // Filter for actual bundles (2+ wallets in same slot)
         const filteredBundles = Object.entries(bundles)
             .filter(([_, bundle]) => bundle.uniqueWallets.size >= 2)
             .map(([slot, bundle]) => ({
@@ -473,42 +671,22 @@ class PumpfunBundleAnalyzer {
         }
     }
 
-    // NEW: Bonk.fun bundle analysis method
+    // FIXED: Simplified bonk.fun bundle analysis
     async analyzeBonkfunBundle(address, limit, isTeamAnalysis) {
-        let offset = 0;
-        const pageLimit = 200;
-        let hasMoreTransactions = true;
-        const allTrades = [];
-
-        // Fetch all trades from Bonk.fun (via Raydium API)
-        while (hasMoreTransactions) {
-            logger.debug(`Fetching trades from Bonk.fun/Raydium API. Offset: ${offset}, Limit: ${pageLimit}`);
-            const trades = await this.getBonkfunAllTrades(address, pageLimit, offset);
-
-            if (trades && trades.length > 0) {
-                allTrades.push(...trades);
-                logger.debug(`Total trades fetched so far: ${allTrades.length}`);
-                offset += pageLimit;
-
-                if (allTrades.length >= limit) {
-                    logger.debug(`Reached specified limit of ${limit} trades. Stopping pagination.`);
-                    hasMoreTransactions = false;
-                }
-            } else {
-                hasMoreTransactions = false;
-                logger.debug('No more trades found from Bonk.fun/Raydium API');
-            }
-        }
-
+        logger.debug(`Fetching trades from Bonk.fun/Raydium API for ${address}`);
+        
+        // Fetch all trades using proper pagination
+        const allTrades = await this.getBonkfunAllTrades(address, limit);
+        
         logger.debug(`Total trades fetched: ${allTrades.length}`);
-
-        // Group trades by time window (since Raydium API doesn't give exact slots)
+    
+        // Group trades by time window (since Raydium doesn't give exact slots)
         const timeWindowBundles = this.groupTradesByTimeWindow(allTrades.filter(t => t.is_buy));
-
+    
         const filteredBundles = Object.entries(timeWindowBundles)
             .filter(([_, bundle]) => bundle.uniqueWallets.size >= 2)
             .map(([timeWindow, bundle]) => ({
-                slot: parseInt(timeWindow), // Using time window as slot approximation
+                slot: parseInt(timeWindow),
                 uniqueWallets: bundle.uniqueWallets,
                 uniqueWalletsCount: bundle.uniqueWallets.size,
                 tokensBought: bundle.tokensBought,
@@ -516,10 +694,10 @@ class PumpfunBundleAnalyzer {
                 transactions: bundle.transactions
             }))
             .sort((a, b) => b.tokensBought - a.tokensBought);
-
+    
         const tokenInfo = await this.getTokenMetadata(address, 'bundle', 'getTokenInfo');
         const totalSupply = parseFloat(tokenInfo.total_supply);
-
+    
         if (isTeamAnalysis) {
             const result = await this.performTeamAnalysis(filteredBundles, tokenInfo, totalSupply);
             result.platform = 'Bonk.fun';
@@ -535,7 +713,6 @@ class PumpfunBundleAnalyzer {
         const timeWindows = {};
 
         buyTrades.forEach(trade => {
-            // Group trades within 10-second windows
             const timeWindow = Math.floor(trade.timestamp / windowSeconds);
             
             if (!timeWindows[timeWindow]) {
@@ -556,7 +733,7 @@ class PumpfunBundleAnalyzer {
         return timeWindows;
     }
 
-    // Keep all your existing methods below (performTeamAnalysis, performRegularAnalysis, etc.)
+    // UNCHANGED: Keep all existing analysis methods exactly as they are
     async performTeamAnalysis(filteredBundles, tokenInfo, totalSupply) {
         const teamWallets = new Set();
         const allWallets = new Set(filteredBundles.flatMap(bundle => Array.from(bundle.uniqueWallets)));
@@ -564,7 +741,6 @@ class PumpfunBundleAnalyzer {
         logger.debug(`\n=== TEAM ANALYSIS DEBUG ===`);
         logger.debug(`Total unique wallets in bundles: ${allWallets.size}`);
 
-        // Step 1: Find wallets that appear in 2+ bundles
         const walletBundleCount = {};
         filteredBundles.forEach(bundle => {
             Array.from(bundle.uniqueWallets).forEach(wallet => {
@@ -580,7 +756,6 @@ class PumpfunBundleAnalyzer {
 
         logger.debug(`Wallets appearing in 2+ bundles: ${teamWallets.size}`);
 
-        // Filter bundles to only include team wallets
         const teamBundles = filteredBundles.map(bundle => {
             const teamWalletsInBundle = new Set(
                 Array.from(bundle.uniqueWallets).filter(wallet => teamWallets.has(wallet))
@@ -598,7 +773,6 @@ class PumpfunBundleAnalyzer {
 
         logger.debug(`Team bundles found: ${teamBundles.length}`);
 
-        // Calculate team totals
         let totalTeamTokens = 0;
         let totalTeamSol = 0;
 
@@ -609,14 +783,12 @@ class PumpfunBundleAnalyzer {
 
         const percentageBundled = totalSupply > 0 ? (totalTeamTokens / totalSupply) * 100 : 0;
 
-        // Get current holdings for team wallets
         const teamWalletsArray = Array.from(teamWallets);
         logger.debug(`Analyzing holdings for ${teamWalletsArray.length} team wallets`);
 
         let totalHoldingAmount = 0;
         const solanaApi = getSolanaApi();
 
-        // Process wallets in batches
         const batchSize = 10;
         for (let i = 0; i < teamWalletsArray.length; i += batchSize) {
             const batch = teamWalletsArray.slice(i, i + batchSize);
@@ -668,43 +840,6 @@ class PumpfunBundleAnalyzer {
         };
     }
 
-    // Add this method to improve platform detection in your bundle.js constructor:
-    async detectTokenPlatform(address) {
-        // First check by address pattern (more reliable for initial detection)
-        if (address.toLowerCase().endsWith('pump')) {
-            logger.debug(`Token ${address} detected as PumpFun based on address pattern`);
-            // Verify with API
-            const isPumpfun = await this.isPumpfunCoin(address);
-            if (isPumpfun) {
-                return 'pumpfun';
-            }
-        }
-        
-        if (address.toLowerCase().endsWith('bonk')) {
-            logger.debug(`Token ${address} detected as Bonk.fun based on address pattern`);
-            // Verify with API
-            const isBonkfun = await this.isBonkfunCoin(address);
-            if (isBonkfun) {
-                return 'bonkfun';
-            }
-        }
-        
-        // Fallback to API-based detection if address pattern doesn't match
-        logger.debug(`Checking ${address} with API-based detection`);
-        
-        const isPumpfun = await this.isPumpfunCoin(address);
-        if (isPumpfun) {
-            return 'pumpfun';
-        }
-        
-        const isBonkfun = await this.isBonkfunCoin(address);
-        if (isBonkfun) {
-            return 'bonkfun';
-        }
-        
-        return null;
-    }
-
     async performRegularAnalysis(filteredBundles, tokenInfo, totalSupply) {
         let totalTokensBundled = 0;
         let totalSolSpent = 0;
@@ -716,7 +851,6 @@ class PumpfunBundleAnalyzer {
 
         const percentageBundled = totalSupply > 0 ? (totalTokensBundled / totalSupply) * 100 : 0;
 
-        // Get current holdings for all bundle participants
         const allWallets = new Set();
         filteredBundles.forEach(bundle => {
             Array.from(bundle.uniqueWallets).forEach(wallet => allWallets.add(wallet));
@@ -728,7 +862,6 @@ class PumpfunBundleAnalyzer {
         let totalHoldingAmount = 0;
         const solanaApi = getSolanaApi();
 
-        // Process wallets in batches
         const batchSize = 10;
         for (let i = 0; i < walletsArray.length; i += batchSize) {
             const batch = walletsArray.slice(i, i + batchSize);
@@ -759,7 +892,6 @@ class PumpfunBundleAnalyzer {
             }
         }
 
-        // Add holding amounts to individual bundles
         const bundlesWithHoldings = await Promise.all(
             filteredBundles.slice(0, 20).map(async (bundle) => {
                 let bundleHoldingAmount = 0;
