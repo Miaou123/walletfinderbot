@@ -99,15 +99,17 @@ const commandConfigs = {
     description: 'Analyze bundled trades', 
     usage: '/bundle [contract_address]',
     helpMessage: `
-<b>⚠️ Pumpfun tokens only!</b> This command only works on pump.fun coins.
-
-Analyze bundled trades where two or more wallets buy on the same block. The "total holding amount" shows if bundlers still hold their tokens - if close to 0%, they've likely sold everything.
-
-<b>Key points:</b>
-- Bundles don't have to be first block
-- Total bundled can exceed 100% (multiple bundle rounds)
-- Multi-wallet tools may also appear as bundles`
-  },
+    <b>✅ Supports PumpFun and Bonk.fun tokens!</b>
+    
+    Analyze bundled trades where 3+ wallets buy in the same block. The "total holding amount" shows if bundlers still hold their tokens - if close to 0%, they've likely sold (or transfered) everything.
+    
+    <b>Key points:</b>
+    - Bundles are detected when 3+ wallets buy in the same block
+    - Bundles don't have to be first block and can occur at any time
+    - Bundles are sorted by current holding amount (highest first)
+    - Multi-wallet tools may also appear as bundles
+    - Works with both PumpFun and Bonk.fun tokens`
+    },
   'walletchecker': { 
     aliases: ['wc'],
     minArgs: 2,

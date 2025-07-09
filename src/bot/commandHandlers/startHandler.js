@@ -36,7 +36,7 @@ class StartHandler {
 <b>Welcome to Noesis! 👁️</b>
 
 <b>🔍 Track and analyze Solana tokens and wallets with powerful tools:</b>
-- /scan, /bundle, /dexpaid and /walletchecker - Free for everyone
+- /scan, /bundle (supports PumpFun & Bonk.fun), /dexpaid and /walletchecker - Free for everyone
 - Advanced features are available with subscription (use /help to see a list of all the advanced features)
 
 Try it now: /scan [token_address] to analyze any token

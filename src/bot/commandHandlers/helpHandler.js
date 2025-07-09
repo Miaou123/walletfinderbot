@@ -19,8 +19,9 @@ class HelpHandler {
 You can use "/help [command]" or "/[command]" for a full detail on how the command works.
 
 <b>🔥 NEW FEATURE 🔥</b>
-/walletsearch (/ws) - Search through our database (more than 100k wallets indexed) for wallets based on criteria like winrate and portfolio value (Subscribers only)
-The /bundle command now supports tracking! Run /bundle and click "Track Bundle Wallet" to get notifications when bundled wallets start selling.
+The /bundle command now supports bonk.fun!
+/walletsearch (/ws) - Search through our database (more than 100k high quality wallets indexed) for wallets based on criteria like winrate and portfolio value (Subscribers only)
+
 
 <b>Available commands:</b>
 
@@ -35,7 +36,7 @@ The /bundle command now supports tracking! Run /bundle and click "Track Bundle W
 <b>🆓 Free commands:</b>
 /scan (/s) - Scan a token for a top holders analysis (Supply tracking: enabled).
 /topholders (/th) - Analyze top holders
-/bundle (/bd) - Analyze bundle
+/bundle (/bd) - Analyze bundle (supports PumpFun & Bonk.fun)
 /walletchecker (/wc) - In depth analysis of a Solana wallet
 /dexpaid (/dp) - Show if dexscreener is paid for a token, also shows adds/boosts.
 
