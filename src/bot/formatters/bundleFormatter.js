@@ -13,10 +13,12 @@ function formatMainMessage(results) {
         teamBundles,
         tokenInfo,
         isTeamAnalysis,
-        totalTeamWallets
+        totalTeamWallets,
+        platform
     } = results;
 
     logger.debug(`\n=== FORMATTER DEBUG ===`);
+    logger.debug(`Platform: ${platform}`);
     logger.debug(`Total holding amount received: ${totalHoldingAmount}`);
     logger.debug(`Total holding percentage: ${totalHoldingAmountPercentage}%`);
     logger.debug(`Number of bundles to format: ${allBundles?.length || 0}`);
@@ -40,10 +42,22 @@ function formatMainMessage(results) {
     }
 
     const analysisType = isTeamAnalysis ? "Team" : "Total";
+    const platformDisplay = platform || 'Unknown';
 
-    // Add Pumpfun notice at the top
-    let output = `<b>💊 Pumpfun Bundle Analysis</b>\n`;
-    output += `<i>⚠️ This analysis only works for Pumpfun tokens</i>\n\n`;
+    // Platform-specific header with emojis
+    let platformEmoji = '💊'; // Default
+    let platformName = platformDisplay;
+    
+    if (platform === 'PumpFun') {
+        platformEmoji = '💊';
+        platformName = 'PumpFun';
+    } else if (platform === 'Bonk.fun') {
+        platformEmoji = '🐶';
+        platformName = 'Bonk.fun';
+    }
+
+    let output = `<b>${platformEmoji} ${platformName} Bundle Analysis</b>\n`;
+    output += `<i>⚠️ This analysis works for ${platformName} tokens</i>\n\n`;
     
     output += `<b>${analysisType} ${isTeamAnalysis ? 'Analysis' : 'Bundles'}</b> for <a href="https://solscan.io/token/${tokenInfo.address}">${tokenInfo.name}</a> (${tokenInfo.symbol}) <a href="https://dexscreener.com/solana/${tokenInfo.address}">📈</a>\n\n`;
     
@@ -57,30 +71,43 @@ function formatMainMessage(results) {
     output += `<b>💰 Total SOL Spent:</b> ${formatNumber(totalSolSpent)} SOL\n`;
     output += `<b>🔒 ${analysisType} Holding Amount:</b> ${formatNumber(totalHoldingAmount)} ${tokenInfo.symbol} (${formatNumber(totalHoldingAmountPercentage, 2, true)})\n\n`;
 
-    output += `<b>Top 5 ${isTeamAnalysis ? 'team bundles' : 'bundles'}:</b>\n`;
-    const bundlesToDisplay = isTeamAnalysis ? teamBundles : allBundles;
+    output += `<b>Top 5 ${isTeamAnalysis ? 'team bundles' : 'bundles'}:</b>\n\n`;
+
+    const bundlesToShow = isTeamAnalysis ? teamBundles : allBundles;
     
-    if (bundlesToDisplay && bundlesToDisplay.length > 0) {
-        bundlesToDisplay.slice(0, 5).forEach((bundle, index) => {
-            const walletLinks = Array.from(bundle.uniqueWallets).map(wallet => {
+    if (!bundlesToShow || bundlesToShow.length === 0) {
+        output += `No bundles to display.\n\n`;
+    } else {
+        bundlesToShow.slice(0, 5).forEach((bundle, index) => {
+            const walletLinks = Array.from(bundle.uniqueWallets).slice(0, 5).map(wallet => {
                 const truncated = truncateAddress(wallet);
-                return `<a href="https://solscan.io/address/${wallet}">${truncated}</a>`;
+                return `<a href="https://solscan.io/account/${wallet}">${truncated}</a>`;
             }).join(', ');
 
-            output += `<b>${isTeamAnalysis ? 'Buy' : 'Bundle'} ${index + 1} (Slot ${bundle.slot}):</b>\n`;
-            output += `  <b>💼 Wallets:</b> ${walletLinks}\n`;
-            output += `  <b>🪙 Tokens Bought:</b> ${formatNumber(bundle.tokensBought)} ${tokenInfo.symbol} (${formatNumber((bundle.tokensBought / tokenInfo.total_supply) * 100, 2, true)})\n`;
-            output += `  <b>💰 SOL Spent:</b> ${formatNumber(bundle.solSpent)} SOL\n`;
+            const moreWallets = bundle.uniqueWallets.size > 5 ? ` (+${bundle.uniqueWallets.size - 5} more)` : '';
+
+            output += `<b>Bundle ${index + 1} (Slot ${bundle.slot}):</b>\n`;
+            output += `  <b>💼 Wallets:</b> ${walletLinks}${moreWallets}\n`;
+            output += `  <b>🪙 Tokens Bought:</b> <code>${formatNumber(bundle.tokensBought)}</code> ${tokenInfo.symbol} (<code>${formatNumber((bundle.tokensBought / tokenInfo.total_supply) * 100, 2, true)}</code>)\n`;
+            output += `  <b>💰 SOL Spent:</b> <code>${formatNumber(bundle.solSpent)}</code> SOL\n`;
+            
             if (bundle.holdingAmount !== undefined) {
-                output += `  <b>🔒 Holding Amount:</b> ${formatNumber(bundle.holdingAmount)} ${tokenInfo.symbol} (${formatNumber(bundle.holdingPercentage, 2, true)})\n`;
+                const holdingPercentage = bundle.holdingPercentage || ((bundle.holdingAmount / tokenInfo.total_supply) * 100);
+                output += `  <b>🔒 Holding Amount:</b> <code>${formatNumber(bundle.holdingAmount)}</code> ${tokenInfo.symbol} (<code>${formatNumber(holdingPercentage, 2, true)}</code>)\n`;
             }
-            output += '\n';
+            
+            output += `\n`;
         });
-    } else {
-        output += "No bundles to display.\n";
     }
 
-    output += "⚠️ Bundles shown aren't necessarily block 0 bundles. For more information on how the /bundle command works please use /help bundle in private.";
+    // Platform-specific footer message
+    if (platform === 'PumpFun') {
+        output += `⚠️Bundles shown for pump.fun coins aren't necessarily block 0 bundles. For more information on how the /bundle command works please use /help /bundle in private.`;
+    } else if (platform === 'Bonk.fun') {
+        output += `⚠️Bundles shown for bonk.fun coins are grouped by time windows (±10 seconds). For more information on how the /bundle command works please use /help /bundle in private.`;
+    } else {
+        output += `⚠️For more information on how the /bundle command works please use /help /bundle in private.`;
+    }
 
     return output;
 }

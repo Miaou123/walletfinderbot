@@ -1,4 +1,4 @@
-const UnifiedBundleAnalyzer = require('../../analysis/bundle');
+const bundleAnalyzer = require('../../analysis/bundle'); // Changed from UnifiedBundleAnalyzer
 const { formatMainMessage, formatNonPumpfunBundleResponse } = require('../formatters/bundleFormatter');
 const logger = require('../../utils/logger');
 const { validateSolanaAddress } = require('./helpers');
@@ -6,7 +6,7 @@ const stateManager = require('../../utils/stateManager');
 
 class BundleHandler {
     constructor(accessControl = null) {
-        this.bundleAnalyzer = new UnifiedBundleAnalyzer();
+        this.bundleAnalyzer = bundleAnalyzer; // Use the exported instance directly
         this.COMMAND_NAME = 'bundle';
         this.accessControl = accessControl;
     }
@@ -56,10 +56,15 @@ class BundleHandler {
             const results = await this.bundleAnalyzer.analyzeBundle(address, 50000, isTeamAnalysis);
             
             let formattedMessage;
-            if (this.bundleAnalyzer.isPumpfunCoin(address)) {
+            
+            // Check platform from results (will be added by our modified bundle.js)
+            const platform = results.platform || 'PumpFun';
+            
+            if (platform === 'PumpFun') {
                 formattedMessage = formatMainMessage(results);
             } else {
-                formattedMessage = formatNonPumpfunBundleResponse(results, results.tokenInfo);
+                // For Bonk.fun or other platforms, you might want to modify the formatter
+                formattedMessage = formatMainMessage(results); // Use same formatter for now
             }
     
             // Always prepare tracking data for potential use
