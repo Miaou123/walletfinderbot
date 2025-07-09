@@ -250,7 +250,7 @@ const commandConfigs = {
                 `• Requires ${process.env.MIN_TOKEN_THRESHOLD || 1} ${process.env.TOKEN_SYMBOL || 'tokens'} minimum\n\n` +
                 'Once verified, your group will have access to all token-gated features without a subscription.'
 },
-ask: {
+/*ask: {
   description: '🤖 AI Assistant - Ask questions about Noesis commands and get smart recommendations',
   usage: '/ask [your question]',
   aliases: ['ai', 'assistant'],
@@ -264,7 +264,7 @@ ask: {
       '/ask How do I analyze a wallet performance?',
       '/ask What command shows common holders between tokens?'
   ]
-},
+},*/
   'subscribe': {
     aliases: ['sub'],
     minArgs: 0,
