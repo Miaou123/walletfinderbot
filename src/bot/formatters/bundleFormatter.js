@@ -100,14 +100,7 @@ function formatMainMessage(results) {
         });
     }
 
-    // Platform-specific footer message
-    if (platform === 'PumpFun') {
-        output += `⚠️Bundles shown for pump.fun coins aren't necessarily block 0 bundles. For more information on how the /bundle command works please use /help /bundle in private.`;
-    } else if (platform === 'Bonk.fun') {
-        output += `⚠️Bundles shown for bonk.fun coins are grouped by time windows (±10 seconds). For more information on how the /bundle command works please use /help /bundle in private.`;
-    } else {
-        output += `⚠️For more information on how the /bundle command works please use /help /bundle in private.`;
-    }
+    output += `⚠️Bundles aren't necessarily block 0 and may occur at any time. For more information on how the /bundle command works please use /help /bundle in private.`;
 
     return output;
 }
