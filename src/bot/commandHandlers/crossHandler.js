@@ -20,8 +20,23 @@ class CrossHandler {
         logger.info(`Cross command called by ${msg.from.username || msg.from.id}`);
         
         try {
-            // Parse contract addresses from args
-            const contractAddresses = args;
+            // FIXED: Parse arguments to separate token addresses from value threshold
+            let contractAddresses = [];
+            let minCombinedValue = 10000; // Default value
+            
+            // Process each argument
+            args.forEach(arg => {
+                // Check if argument is a value threshold
+                if (arg.startsWith('$') && !isNaN(parseFloat(arg.substring(1)))) {
+                    minCombinedValue = parseFloat(arg.substring(1));
+                } else if (!isNaN(parseFloat(arg)) && parseFloat(arg) >= 1000) {
+                    // Also accept numeric values >= 1000 as thresholds
+                    minCombinedValue = parseFloat(arg);
+                } else {
+                    // Otherwise treat as token address
+                    contractAddresses.push(arg);
+                }
+            });
             
             if (!contractAddresses || contractAddresses.length < 2) {
                 await bot.sendMessage(
@@ -32,25 +47,22 @@ class CrossHandler {
                 return;
             }
             
-            if (contractAddresses.length > 4) {
+            if (contractAddresses.length > 5) {
                 await bot.sendMessage(
                     chatId,
-                    "Too many contract addresses. Please limit to 4 addresses maximum.",
+                    "Too many contract addresses. Please limit to 5 addresses maximum.",
                     { message_thread_id: messageThreadId }
                 );
                 return;
             }
             
-            // Parse options
-            const options = {
-                minTokenThreshold: 10000,
-                minCombinedValue: 1000
-            };
-
+            // Update the CrossAnalyzer with the parsed minCombinedValue
+            this.crossAnalyzer.minCombinedValue = minCombinedValue;
+            
             // Send loading message
             const loadingMsg = await bot.sendMessage(
                 chatId,
-                `Analyzing cross-holdings for ${contractAddresses.length} tokens...`,
+                `Analyzing cross-holdings for ${contractAddresses.length} tokens with minimum value $${minCombinedValue.toLocaleString()}...`,
                 { message_thread_id: messageThreadId }
             );
             
